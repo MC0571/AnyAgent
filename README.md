@@ -1,6 +1,6 @@
 # AnyAgent
 
-AnyAgent 基于 [ZCode](https://github.com/zai-org/ZCode) 二次开发，致力于构建一个开源、本地优先的通用 Agent 桌面工作台。
+AnyAgent 致力于构建一个开源、本地优先的通用 Agent 桌面工作台。
 首个场景是 Coding Agent：让项目、任务、历史、浏览器、权限和工具等工作资产留在用户的工作环境里，Agent 可以更换。
 
 > Your workspace, any agent.
@@ -36,6 +36,6 @@ Workspace 与 Engine 是两条独立轴线，目标环境可以是 Local、SSH�
 
 AnyAgent 使用 [Apache-2.0](LICENSE) 许可。
 
----
+## 致谢
 
-[ZCode](https://github.com/zai-org/ZCode)
+本项目基于 [ZCode](https://github.com/zai-org/ZCode) 二次开发，感谢 ZCode 的开源贡献。
