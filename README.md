@@ -28,6 +28,10 @@ AgentEngine 管理自身的 loop、context、原生工具和私有运行状态�
 
 Workspace 与 Engine 是两条独立轴线，目标环境可以是 Local、SSH、WSL 或 Docker；组合是否可用需要实际验证。Session 绑定原 Engine，跨引擎迁移使用显式 Handoff，统一交互不绕过宿主或引擎的权限边界。
 
+## 决策记录
+
+已确定的长期取舍见 [决策索引](docs/decisions/index.md)，维护规则见 [决策记录规则](docs/decisions/AGENTS.md)。
+
 ## 社区参与
 
 项目暂不开放社区参与，不接受外部 Pull Request。待项目稳定后，再考虑开放。
