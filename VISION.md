@@ -27,7 +27,7 @@ AnyAgent 保持独立的项目身份、版本和产品边界。它是 Harness �
 
 ### Engine 与 Model 分开
 
-Model 是 Engine 使用的模型；Engine 还拥有推理循环、上下文、工具调用和运行状态。产品围绕 Engine 提供共同契约，同时保留每个 Engine 的能力差异与高级扩展。
+Model 是 Engine 使用的模型；Engine 还拥有自身的推理循环、上下文、原生工具和私有运行状态。产品围绕 Engine 提供共同契约，同时保留每个 Engine 的能力差异与高级扩展。
 
 Codex、Claude Code、ZCode、OpenCode、支持 ACP 的 Agent、DeepSeek Harness 和自研 Harness 都可以作为同级 Engine 接入。任何一个 Harness 都不需要统领其他引擎，UI 也不把某个引擎的能力假定为所有引擎都支持。
 
@@ -51,10 +51,13 @@ flowchart TD
     Runtime --> Contract[AgentEngine / AgentEvent Contract]
     Contract --> Adapter[Adapters]
     Adapter --> Engine[Agent Engines]
-    Runtime --> Shared[Workspace / Session / Browser / Permission / Tools / Jobs]
+    Runtime --> Shared[Shared Workspace / Session / Browser / Permissions / MCP / Tools / Jobs]
+    Shared --> Adapter
 ```
 
-Desktop Shell 负责窗口、导航、任务和产品交互。Runtime Host 负责工作区、会话、历史持久化、浏览器、权限、扩展和自动化等产品级共享能力。AgentEngine 负责自身的推理循环、上下文和工具运行，并通过产品契约向 UI 表达事件与能力。
+Desktop Shell 负责窗口、导航、任务和产品交互。Runtime Host 负责工作区、会话、历史持久化、浏览器、权限、扩展和自动化等产品级共享能力。AgentEngine 管理自身的推理循环、上下文、原生工具和私有运行状态，并通过产品契约向 UI 表达事件与能力。
+
+Engine 原生工具（Engine-native tools）由各 Engine 管理；产品共享工具（Product-shared tools）及共享 Browser、MCP、Workspace、Permissions 由 AnyAgent 产品层提供，可跨 Engine 复用。Adapter 连接两侧，将共享能力映射到具体 Engine 支持的接口，同时保留各自的归属与权限边界。
 
 共同契约能够表达文本、推理、工具、Shell、文件与 Diff、审批与用户输入、计划、子代理、用量、生命周期和错误等事件。能力声明让 UI 展示真实可用的操作，同时保留不同 Engine 的高级能力，不把差异压缩成最低公分母。
 
@@ -72,7 +75,7 @@ Browser 与 Computer Use 分开建模。Computer Use 面向截图、无障碍信
 
 ### MCP、Skills 与 Plugins
 
-MCP、Skills、Plugins、Tools、Hooks 和 UI 扩展由产品层管理，再通过 Adapter 映射到具体 Engine。产品提供统一的发现、配置和权限体验，但不同 Engine 的兼容能力仍由各自契约表达。
+产品共享的 MCP、Skills、Plugins、Tools、Hooks 和 UI 扩展由产品层管理，再通过 Adapter 映射到具体 Engine。产品提供统一的发现、配置和权限体验，但不同 Engine 的兼容能力仍由各自契约表达，其原生工具与内部扩展仍由自身管理。
 
 ### 知识与资料
 

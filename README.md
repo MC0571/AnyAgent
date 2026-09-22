@@ -24,7 +24,7 @@ AnyAgent 同时面向两层目标：
 
 ## 设计方向
 
-产品服务层管理 Workspace、Session、Persistence、Browser、Permission、MCP、Skills、plugins、Tools、Hooks 与 Jobs 等共享能力；AgentEngine 管理自身的 loop、context 与 tools，并通过产品契约提供事件和能力声明。
+AgentEngine 管理自身的 loop、context、原生工具和私有运行状态；产品层提供可跨 Engine 复用的共享能力，并通过 Adapter 映射到具体 Engine。共享能力包括 Workspace、Session、Persistence、Browser、Permissions、MCP、Skills、Plugins、Tools、Hooks 与 Jobs；事件和能力声明通过产品契约表达。
 
 Workspace 与 Engine 是两条独立轴线，目标环境可以是 Local、SSH、WSL 或 Docker；组合是否可用需要实际验证。Session 绑定原 Engine，跨引擎迁移使用显式 Handoff，统一交互不绕过宿主或引擎的权限边界。
 
