@@ -5,7 +5,7 @@ AnyAgent 致力于构建一个开源、本地优先的通用 Agent 桌面工作�
 
 > Your workspace, any agent.
 
-项目目前处于早期开发阶段。长期目标与设计方向见 [VISION.md](VISION.md)。
+项目目前处于早期开发阶段。长期目标与设计方向见 [VISION.md](VISION.md)，工程设计与评审入口见 [docs/README.md](docs/README.md)。
 
 ## 长期定位
 
