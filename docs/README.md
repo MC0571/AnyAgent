@@ -2,7 +2,7 @@
 
 目的与范围：连接产品意图、领域定义、行为承诺、实现方案和决策依据，供后续实现与评审使用。本轮只建立文档基线，不实施业务、导入源码、安装 Runtime 或重构架构。
 
-设计状态：新增设计均为 **Proposed（提案）**；已确认产品原则以 [README](../README.md)、[VISION](../VISION.md) 为准，已接受取舍以 [决策索引](decisions/index.md) 为准。实现与验证状态：截至 2026-09-22，无业务实现可验证；下列验收场景是未来检查要求，不能读成测试已通过。关联文档见阅读路径和追踪表；未决问题集中见文末。
+设计状态：具体工程设计默认保持 **Proposed（提案）**；已明确批准的取舍以 ADR 为准，批准某项取舍不等于批准全部状态词或接口。已确认产品原则以 [README](../README.md)、[VISION](../VISION.md) 为准，已接受取舍以 [决策索引](decisions/index.md) 为准。实现与验证状态：截至 2026-09-22，无业务实现可验证；下列验收场景是未来检查要求，不能读成测试已通过。关联文档见阅读路径和追踪表；未决问题集中见文末。
 
 ## 阅读路径与权威位置
 
@@ -36,7 +36,7 @@
 <a id="baseline"></a>
 ## 仓库事实与资料缺口
 
-核查日期：2026-09-22；起始分支：`intial`；AnyAgent 基线提交：`2b2c3b55ffcea62cd75e4bff9bafe9f55482523f`；起始 `git status --short` 为空。本节是本轮证据快照，不作为长期进度台账。
+首次编写核查日期：2026-09-22；起始分支：`intial`；AnyAgent 基线提交：`2b2c3b55ffcea62cd75e4bff9bafe9f55482523f`；起始 `git status --short` 为空。本节保留首次编写时的证据快照，不描述后续文档提交后的文件树，也不作为长期进度台账。
 
 | 核查对象 | 观察结果及证据 |
 | --- | --- |
@@ -49,9 +49,11 @@
 存在两项需要显式处理的差异：
 
 - **来源声明与实现进度不同。** README/VISION 的 ZCode 来源说明不构成源码已经导入的证据。本轮保留产品文档原意，在过渡文档中列出导入基线缺口；禁止据此描述 AnyAgent 已支持上游能力。
-- **提案与 ADR 存储规则不同。** 本轮要求未批准方案保持 Proposed，而 [现有决策规则](decisions/AGENTS.md) 只接收 Accepted，并要求同主题原文件维护，不采用替代链。本轮无需调整任何已接受结论，因此不改规则、不新建 ADR，提案保留在其设计权威位置。若未来确需改变已接受结论，应先提出并评审替代建议，未获维护者批准不得改写当前决定；本轮不预先决定该情形的记录流程。
+- **提案与 ADR 存储规则不同。** 本轮要求未批准方案保持 Proposed，而 [现有决策规则](decisions/AGENTS.md) 只接收 Accepted，并要求同主题原文件维护，不采用替代链。首版无需调整任何已接受结论，因此未改规则、未新建 ADR，提案保留在其设计权威位置。后续经用户明确批准的独立取舍按该规则新增 Accepted 记录，不回写或覆盖原有三条决策。若未来确需改变已接受结论，应先提出并评审替代建议，未获维护者批准不得改写当前决定；本轮不预先决定该情形的记录流程。
 
 未发现 0001—0003 与本轮产品边界的实质冲突。参与者和 Session 基数是 0003 明确留白的细化提案，不能以“已接受跨 Engine 协作”为由当作已批准。
+
+经用户明确批准，[ADR 0004](decisions/0004-task-closure-is-distinct-from-execution-state.md) 接受业务收尾与执行事实分离；具体生命周期见 [LIFE-03](domain/lifecycle-and-ownership.md#LIFE-03)。Session 是否仅服务单一 Task 继续保留 Proposed，尚未批准。
 
 ## 产品原则到验收的轻量追踪
 
@@ -64,6 +66,7 @@
 | [工作区与权限](../VISION.md#工作区与权限有真实边界) | [Workspace 与授权资产](domain/README.md) | [共享能力](specs/shared-capabilities.md) | [信任边界](architecture/runtime-and-trust-boundaries.md) | [0002](decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)、[0003](decisions/0003-cross-engine-collaboration-is-task-scoped.md) | AC-04、06、07、09 |
 | [双重产品定位](../VISION.md#产品定位)、[领域扩展](../VISION.md#领域工具与插件) | [工具和扩展归属](domain/README.md) | [公共能力与扩展](specs/shared-capabilities.md) | [Core 与 Reference App](architecture/README.md) | [0001](decisions/0001-domain-tools-are-optional-plugins.md)、[0002](decisions/0002-engine-native-and-product-shared-tools-are-distinct.md) | AC-09—11 |
 | [独立产品与本地优先](../VISION.md#本地优先与产品独立) | [状态所有权](domain/lifecycle-and-ownership.md) | [能力和兼容边界](specs/engine-adapter.md) | [ZCode 过渡](architecture/zcode-transition.md) | 0001—0003 约束过渡；尚无第三方选型 ADR | AC-07、10、11 |
+| [用户观察和中止](../VISION.md#跨-engine-协作) | [业务接纳及收尾](domain/lifecycle-and-ownership.md) | [接入](specs/engine-adapter.md)、[协作](specs/cross-engine-collaboration.md) | [持久化与恢复](architecture/runtime-and-trust-boundaries.md) | [0004](decisions/0004-task-closure-is-distinct-from-execution-state.md) | AC-12、13 |
 
 ## 集成验收场景
 
@@ -82,12 +85,15 @@
 | <a id="AC-09"></a>AC-09 | 只授予一个浏览器标签的操作权，再尝试使用其他标签、导出 cookie 或远程访问凭据 | [共享能力](specs/shared-capabilities.md) 与 [信任边界](architecture/runtime-and-trust-boundaries.md)：按范围拒绝或明确无法强制的边界，不复制全部登录状态 |
 | <a id="AC-10"></a>AC-10 | 以第二个最小应用组装 Core、假 Adapter 和一个可选领域插件；不提供参考产品账户或云服务 | [架构边界](architecture/README.md)：公共契约可完成任务路径，Core 无 Reference App 内部导入，禁用 Repo Wiki 不影响基本接入 |
 | <a id="AC-11"></a>AC-11 | 替换某候选协议库/接入库，保持同一组产品契约轨迹并禁用库专属扩展 | [架构](architecture/README.md) 与 [过渡边界](architecture/zcode-transition.md)：变更集中于适配和组装边界，公共状态不依赖供应商类型，扩展差异如实表达 |
+| <a id="AC-12"></a>AC-12 | Task 已终态，Session 仍打开或恢复成功；提交新输入、委派和共享工具请求，再读取历史与核对迟到证据 | [业务接纳门槛](domain/lifecycle-and-ownership.md)、[EA-08](specs/engine-adapter.md#EA-08)：拒绝旧 Task 的新业务派发，不因恢复重授执行资格；仍可读取与对账，旧 Session 归属不变 |
+| <a id="AC-13"></a>AC-13 | 远程执行永久未知；用户明确放弃协调并归档，随后重启 Host、申请原资源写权，再收到迟到证据 | [LIFE-03](domain/lifecycle-and-ownership.md#LIFE-03)、[CO-09](specs/cross-engine-collaboration.md#CO-09)：允许管理收尾，未知和占用风险仍可查；冻结后续业务，不自动重授写权或恢复授权；迟到证据只对账，不重开任务 |
 
 ## 评审待决与验证缺口
 
 | 事项 | 首选提案和决定的权威位置 | 何时必须解决 |
 | --- | --- | --- |
-| Agent Instance / Session 关联及执行并发 | [领域模型](domain/README.md)、[生命周期](domain/lifecycle-and-ownership.md) | 首个持久身份和调度实现前评审基数及并发约束 |
+| Agent Instance / Session 关联及执行并发 | [领域模型](domain/README.md#DOM-02)、[生命周期](domain/lifecycle-and-ownership.md)；跨 Task 复用尚未批准 | 首个持久身份和调度实现前，确认任务内续聊、任务后新目标、常驻 Agent 连续处理独立任务三个场景 |
+| 已批准的业务收尾语义如何落入状态机 | [ADR 0004](decisions/0004-task-closure-is-distinct-from-execution-state.md)、[生命周期](domain/lifecycle-and-ownership.md#LIFE-03) | 原则不再待决；具体状态词、风险记录保留和资源解除限制的证据需在实现前落实 |
 | 最小接入能力、投递和终态证据 | [Engine 契约](specs/engine-adapter.md) | 首个 Adapter 按固定版本验证，不以 SDK 名称作能力依据 |
 | 协作失败策略、预算和共享写入控制 | [协作](specs/cross-engine-collaboration.md)、[共享能力](specs/shared-capabilities.md) | 首个多参与者实现前选择可执行策略并验证冲突场景 |
 | Host 生存期、持久化、远程恢复及隔离 | [运行边界](architecture/runtime-and-trust-boundaries.md) | 首个宿主实现前确认平台行为和无法强制的路径 |
