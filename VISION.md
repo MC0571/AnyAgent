@@ -117,7 +117,7 @@ Handoff 不承诺无损热切换，也不隐式搬运原引擎的上下文压缩
 
 ## 参考来源与项目边界
 
-AnyAgent 是独立项目，有自己的身份和版本。计划参考 [ZCode](https://github.com/zai-org/ZCode) 的 Shell 方向，可能借鉴 Electron、React、UI、workspace、browser 和 remote 相关部分；该链接仅标记参考来源，不代表官方关联或能力背书。
+AnyAgent 基于 [ZCode](https://github.com/zai-org/ZCode) 二次开发，维护独立的项目身份和版本。桌面 Shell 将复用和演进 ZCode 的相关实现，具体包括 Electron、React、UI、workspace、browser 和 remote 等方向，不代表与 ZCode 官方存在关联。
 
 当前 AnyAgent 尚未导入 ZCode；复用方式、具体基线、Protocol v4 是否作为过渡，以及许可和 NOTICE 的处理，都需要在实际切片中确认。项目许可见 [LICENSE](LICENSE)。
 
