@@ -1,8 +1,8 @@
 # 领域模型：概念、身份与关系
 
 - 目的与范围：定义产品概念及不变量；状态见[生命周期与归属](lifecycle-and-ownership.md)，不规定 SDK、IPC 或数据库结构。
-- 设计状态：产品原则来自 [VISION](../../VISION.md)；工具分属与协作边界分别遵循 [ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)、[ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。ADR 0003 与 ADR 0004 的已接受语义不因本轮改变；下文具体身份、关系基数、首版策略及未来复用条件均为 Proposed，尚未获架构批准。
-- 实现与验证状态：2026-09-22 检查当前仓库，尚无业务代码或领域行为测试；下文不是现有 API，也不是已验证能力。
+- 设计状态：产品原则来自 [VISION](../../VISION.md)；工具分属与协作边界分别遵循 [ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)、[ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。ADR 0003 与 ADR 0004 的已接受语义不因本轮改变。D-101 已批准 DOM-02 中明确标出的 M1 单参与者语义；长期关系模型、超出 M1 的协作策略及未来复用条件仍为 Proposed。
+- 实现与验证范围以当前代码、测试和运行记录为准；下文定义领域语义，不单独证明能力已实现。
 - 关联文档：[文档入口](../README.md)、[Engine 契约](../specs/engine-adapter.md)、[协作契约](../specs/cross-engine-collaboration.md)、[共享能力](../specs/shared-capabilities.md)、[架构](../architecture/README.md)。
 
 ## DOM-01 概念及权威边界
@@ -31,9 +31,15 @@ README 中的 Jobs 与 VISION 中的 Automation 表达长期自动化能力；�
 
 这是产品侧契约：Host 和 Adapter 负责可靠建立、校验和保存这些业务关联及来源证据，不要求原生 Engine 直接识别全部产品 Task、参与者或请求标识；产品仍须如实表达 Engine 的能力边界。
 
-首版运行策略（Proposed）保持保守：同一 Task 内可以围绕同一目标继续多轮实现、评审和修复；同一 Task 可以有多个参与者和多个 Session，支持跨 Harness 协作；一个参与者可以按需要使用多个同 Engine Session，用于分支、会话重建或有序替换；新的独立 Task 首次需要业务会话时，默认创建新的参与者和 Session。首版不提供把既有 Session 用于另一个 Task 的功能；同一 Session 只允许一个明确参与者驱动业务执行，并沿用单 Session 串行 Execution 策略。更换 Engine 必须使用新 Session，并按显式 Handoff 规则传递获准材料。新 Task 新 Session 不等于每条用户消息都新建 Task，同一目标的后续工作仍可继续原 Task 与原 Session。
+### M1 单参与者语义（D-101 已批准）
 
-这里的“首版”描述这些关系及协作能力实施时的拟议规则，不指定近期 Milestone 必须交付全部协作功能；交付范围以 GitHub Milestone／Issue 为准。先实施单参与者路径时，仍须明确 Task、参与者、Session 与输入／Execution 的关联和业务接纳资格。
+M1 只交付单参与者路径。同一 Task 的多轮工作继续使用同一产品 Session；新独立 Task 使用新参与者和新 Session，必须拒绝将旧 Task 的 Session 直接用于新 Task。一个 Session 同时只允许一个明确参与者驱动，且最多有一个进行中的 Execution；运行中介入关联现有 Execution，不能另建并发 Execution。每次业务请求均按 [LIFE-ADMISSION](lifecycle-and-ownership.md#life-admission-业务接纳资格proposed) 重新核验；输入、Execution 及迟到事件保留原 Task／参与者／Session 归属，不能从当前 UI 任务或 Session 最近使用者推导。
+
+用户可见的对话入口对应产品 Session；Engine 原生会话 ID 是产品 Session 的外部映射信息，不能替代产品身份。该语义不要求新增 Conversation 实体，也不要求实现同一对话中的 Engine 热切换。
+
+超出 M1 的协作策略仍为 Proposed：同一 Task 可有多个参与者和多个 Session，一个参与者可按需要使用多个同 Engine Session；不同 Session 可独立协作或并行。跨 Engine Handoff 使用新 Session，并按显式规则传递获准材料。未来关系和协作的交付范围以对应 Milestone／Issue 为准。
+
+“首版”中超出上述 M1 单参与者语义的关系及协作能力仍是提案；不表示近期 Milestone 必须交付全部协作功能，交付范围以 GitHub Milestone／Issue 为准。
 
 多个 Session 不自动复制原生上下文。每次输入必须选定目标 Session 和本次业务使用关联，禁止默认广播；独立 Session 可并行，但须分别获得共享资源访问范围。更换 Engine 创建新参与者及新 Session，以交接关联保留责任链；相同 Engine 新建 Session 则可保留当前 Task 内参与者身份。参与者尚未启动时允许零 Session，创建失败不会抹掉其分工记录。
 
@@ -50,11 +56,11 @@ flowchart LR
     Execution -->|可产生| Artifact[Artifact 版本]
 ```
 
-图示描述进入协作后的 Task；草稿 Task 可尚无参与者。Task 管理参与者，Session 固定 Engine，业务使用关联和 Execution 分别记录本次使用及不可变历史归属，不能用一个 `owns` 关系混合这些职责。首版一个 Session 同时最多一个进行中的 Execution，由一个明确参与者驱动，只有前次终结后才接纳下一次执行；产品队列中的输入不是已接纳执行。支持运行中介入的 Engine 可把消息加入当前 Execution，接纳该介入只更新独立输入／消息记录并关联当前执行，不创建第二个 Execution；若选择下一轮投递，则待当前执行终结并接纳新执行输入后才创建新 Execution。介入能力与可观察证据按[接入规格](../specs/engine-adapter.md)声明，不能据此隐式开启并发执行。该限制简化顺序及恢复，不限制不同 Session 并行；未来放宽需先定义关联和冲突语义。
+图示描述完整协作模型中的 Task；草稿 Task 可尚无参与者。Task 管理参与者，Session 固定 Engine，业务使用关联和 Execution 分别记录本次使用及不可变历史归属，不能用一个 `owns` 关系混合这些职责。M1 已批准的单 Session 规则是：一个 Session 同时最多一个进行中的 Execution，由一个明确参与者驱动，只有前次终结后才接纳下一次执行；产品队列中的输入不是已接纳执行。支持运行中介入的 Engine 可把消息加入当前 Execution，接纳该介入只更新独立输入／消息记录并关联当前执行，不创建第二个 Execution；若选择下一轮投递，则待当前执行终结并接纳新执行输入后才创建新 Execution。介入能力与可观察证据按[接入规格](../specs/engine-adapter.md)声明，不能据此隐式开启并发执行。不同 Session 并行及冲突处理不属于 M1，仍属 Proposed。
 
-Session 是否可以接纳业务由 [LIFE-ADMISSION](lifecycle-and-ownership.md#life-admission-业务接纳资格proposed) 决定，必须同时校验本次请求的 Task、参与者、Session 使用关联、Engine／Adapter 能力、授权及执行环境。按首版策略，终态后的新目标创建关联的新 Task、新参与者和新 Session；Task B 请求使用 Task A 的既有 Session 时明确拒绝，不重绑旧记录或伪造恢复，可改走新 Session 与获准材料交接。原生 Session 恢复成功也不改变历史归属或自动授予业务执行权。
+Session 是否可以接纳业务由 [LIFE-ADMISSION](lifecycle-and-ownership.md#life-admission-业务接纳资格proposed) 决定，必须同时校验本次请求的 Task、参与者、Session 使用关联、Engine／Adapter 能力、授权及执行环境。按已批准的 M1 策略，终态后的新目标创建关联的新 Task、新参与者和新 Session；Task B 请求使用 Task A 的既有 Session 时明确拒绝，不重绑旧记录或伪造恢复，可改走新 Session 与获准材料交接。原生 Session 恢复成功也不改变历史归属或自动授予业务执行权。
 
-这组长期关系、首版运行策略和单 Session 串行限制都是 Proposed，不是 ADR 0003 的既定结论。替代方案是把参与者与 Session 固定为一对一，结构较小但会把恢复失败后重建会话误写成换人；或让参与者跨 Task 常驻，便于持续角色但增加授权和职责混用。当前提案保留 Task 范围参与者身份，代价是需要明确每次 Session 使用资格、历史关联和上下文披露边界。未来是否允许同一 Engine Session 在多个 Task 之间显式串行使用，仅按 [DOM-05](#dom-05-未来跨-task-串行复用条件proposed) 的准入方向继续评估，不在首版承诺。
+长期关系模型与超出 M1 的运行策略仍为 Proposed，不是 ADR 0003 的既定结论。M1 已批准规则仅约束单参与者交付路径，不固定 Agent Instance 与 Session 的长期基数，也不决定参与者跨 Task 常驻。其他关系方案及其授权、历史和上下文披露取舍仍待评审。未来是否允许同一 Engine Session 在多个 Task 之间显式串行使用，仅按 [DOM-05](#dom-05-未来跨-task-串行复用条件proposed) 的准入方向继续评估，不在 M1 承诺。
 
 ## DOM-03 产品参与者与原生子 Agent
 
@@ -70,11 +76,11 @@ Browser 是产品共享资源，以浏览器上下文、标签等可授权资源
 
 ## 未决问题与验证入口
 
-维护者需评审 DOM-02 的长期关系方向、首版新 Task 新 Session 策略、单 Session 串行执行提案，以及 Workflow 当前修订模型。验收时构造同 Engine 重建 Session、跨 Engine Handoff、两 Session 并行三个案例，检查身份、授权、上下文和责任链是否仍唯一可解释；另向一个运行中的 Session 投递获接纳的介入消息，断言仍只有一个 Execution、消息独立可追踪，随后下一轮输入获接纳时才新增执行；对缺失原生子 Agent 控制能力的 Engine 验证 DOM-03 的降级。状态判定按[生命周期规则](lifecycle-and-ownership.md)验证，不在此另设状态表。
+维护者仍需评审 DOM-02 的长期关系方向、超出 M1 的多参与者和多 Session 协作，以及 Workflow 当前修订模型；M1 新 Task 新 Session 和单 Session 串行规则已获批准。后续协作验收可构造同 Engine 重建 Session、跨 Engine Handoff、两 Session 并行等案例，检查身份、授权、上下文和责任链是否仍唯一可解释。若未来接入声明支持运行中介入的 Engine，应验证介入消息独立可追踪且不创建第二个并发 Execution，下一轮输入获接纳时才新增执行；缺失原生子 Agent 控制能力的 Engine 按 DOM-03 验证降级。状态判定按[生命周期规则](lifecycle-and-ownership.md)验证，不在此另设状态表。
 
-Session 跨 Task 连续性仍是长期 Proposed 方向，不将首版新 Task 新 Session 限制写成永久不变量，也不把它视为批准结果。跨 Task 复用 Session 的备选若被选择，必须按 [DOM-05](#dom-05-未来跨-task-串行复用条件proposed) 验证任务授权隔离、旧上下文披露、并发归属及历史验收边界，不能只改一个关联字段。维护者可用以下三种连续性场景比较首版策略与未来串行复用：
+Session 跨 Task 连续性仍是长期 Proposed 方向。M1 的新 Task 新参与者／新 Session 是已批准的当前策略，不是永久不变量；跨 Task 复用若未来被选择，必须按 [DOM-05](#dom-05-未来跨-task-串行复用条件proposed) 验证任务授权隔离、旧上下文披露、并发归属及历史验收边界，不能只改一个关联字段。以下场景用于比较当前策略与未来串行复用：
 
-| 连续性场景 | 当前提案的结果 | 跨 Task 复用方案需要回答的问题 |
+| 连续性场景 | 当前策略的结果 | 跨 Task 复用方案需要回答的问题 |
 | --- | --- | --- |
 | 同 Task 内多轮实现、评审与修复 | 继续原 Task 与原 Session；每次输入重新核对业务资格，不因一次 Execution 完成就新建 Task | 未来仍需确认同一 Session 的串行控制、迟到证据和参与者责任是否可持续 |
 | Task 已验收，用户沿用同一 Engine 做后续目标 | 创建新 Task、新参与者和新 Session；旧 Session 与原 Task 历史保留，后续只能经授权引用旧目标、摘要和产物 | 是否满足 DOM-05 的全部条件，以及旧原生上下文能否向新 Task 及其模型接收方披露 |

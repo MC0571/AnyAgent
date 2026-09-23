@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import {
   AppErrorBoundary,
   Root,
+  AnyAgentEngineWorkbench,
   GlobalDatabaseStartupLoading,
   UpdateStatusWindowRoot,
   ZCodeIntlProvider,
@@ -132,6 +133,7 @@ const initialWorkspaceAbsPath = readStringFlag("initialWorkspacePath");
 const initialWorkspacePurpose = readStringFlag("initialWorkspacePurpose");
 const unavailableWorkspacePath = readStringFlag("unavailableWorkspacePath");
 const windowKind = readStringFlag("windowKind");
+const anyagentWorkbench = readBooleanFlag("anyagentWorkbench", false);
 const initialLocaleFlag = readStringFlag("locale");
 const initialLocale: Locale =
   initialLocaleFlag === "zh-CN" || initialLocaleFlag === "en-US"
@@ -331,21 +333,25 @@ function initializeBusinessRoot(port: MessagePort): void {
         resolveSystemLocale={desktopPlatform.getSystemLocale}
       >
         <StartupReadyNotifier />
-        <Root
-          services={services}
-          platform={desktopPlatform}
-          isDesktop
-          assistantCodeCommentCardsEnabled
-          isMacDesktop={isMacDesktop}
-          isWindowsDesktop={isWindowsDesktop}
-          restoreSession={restoreSession}
-          supportsSettings={supportsSettings}
-          initialWorkspaceAbsPath={initialWorkspaceAbsPath}
-          initialWorkspacePurpose={
-            initialWorkspacePurpose === "conversation" ? "conversation" : "project"
-          }
-          unavailableWorkspacePath={unavailableWorkspacePath}
-        />
+        {anyagentWorkbench && services.anyAgentService ? (
+          <AnyAgentEngineWorkbench service={services.anyAgentService} />
+        ) : (
+          <Root
+            services={services}
+            platform={desktopPlatform}
+            isDesktop
+            assistantCodeCommentCardsEnabled
+            isMacDesktop={isMacDesktop}
+            isWindowsDesktop={isWindowsDesktop}
+            restoreSession={restoreSession}
+            supportsSettings={supportsSettings}
+            initialWorkspaceAbsPath={initialWorkspaceAbsPath}
+            initialWorkspacePurpose={
+              initialWorkspacePurpose === "conversation" ? "conversation" : "project"
+            }
+            unavailableWorkspacePath={unavailableWorkspacePath}
+          />
+        )}
       </ZCodeIntlProvider>
     </AppErrorBoundary>,
   );

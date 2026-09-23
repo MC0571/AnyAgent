@@ -1,0 +1,13 @@
+{
+  "name": "@anyagent/engine-contract",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "lint": "oxlint src tests"
+  }
+}

@@ -1,8 +1,8 @@
 # 工程设计入口
 
-目的与范围：连接产品意图、领域定义、行为承诺、实现方案和决策依据，供后续实现与评审使用。原有 Session 与 Task 关系仍为设计提案；当前 M0 的固定来源和整体 bootstrap 过渡基线见 [ZCode 过渡](architecture/zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线)。
+目的与范围：连接产品意图、领域定义、行为承诺、实现方案和决策依据，供后续实现与评审使用。Session 与 Task 的长期关系仍为设计提案；D-101 已批准的 M1 单参与者语义见 [DOM-02](domain/README.md#dom-02-关联基数与身份连续性proposed)。当前 M0 的固定来源和整体 bootstrap 过渡基线见 [ZCode 过渡](architecture/zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线)。
 
-设计状态：具体工程设计默认保持 **Proposed（提案）**；已明确批准的取舍以 ADR 为准，批准某项取舍不等于批准全部状态词或接口。已确认产品原则以 [README](../README.md)、[VISION](../VISION.md) 为准，已接受取舍以 [决策索引](decisions/index.md) 为准。本轮推荐“长期关系解耦＋首版默认新建”：Session 长期不锁定为单一 Task 的永久附属对象，但新的独立 Task 首次需要业务会话时默认创建新的参与者和 Session，首版不开放跨 Task 复用；该关系模型、首版策略及资格规则均仍为 Proposed。实现与验证状态：截至 2026-09-22，无业务实现可验证；下列验收场景是未来检查要求，不能读成测试已通过。关联文档见阅读路径和追踪表；未决问题集中见文末。
+设计状态：具体工程设计默认保持 **Proposed（提案）**；批准某项语义不等于批准全部状态词、接口或实现。已确认产品原则以 [README](../README.md)、[VISION](../VISION.md) 为准，已接受取舍以 [决策索引](decisions/index.md) 为准。D-101 已批准 M1 单参与者路径：同 Task 同 Session 多轮、新独立 Task 新参与者和 Session、拒绝跨 Task 复用、逐次资格核验、单 Session 单驱动及迟到事件原归属；其权威位置见 [DOM-02](domain/README.md#dom-02-关联基数与身份连续性proposed)、[LIFE-ADMISSION](domain/lifecycle-and-ownership.md#life-admission-业务接纳资格proposed) 和 [Engine 契约](specs/engine-adapter.md)。长期关系模型、多参与者协作、未来跨 Task 复用及其余实现细节仍为 Proposed。当前实现与验证范围以代码、测试和运行记录为准；下列验收场景是检查要求，不能单凭场景标识视为通过。关联文档见阅读路径和追踪表；未决问题集中见文末。
 
 ## 阅读路径与权威位置
 
@@ -50,11 +50,11 @@
 存在两项需要显式处理的差异：
 
 - **来源声明与实现进度不同。** README/VISION 的 ZCode 来源说明不构成源码已经导入的证据。本轮保留产品文档原意，在过渡文档中列出导入基线缺口；禁止据此描述 AnyAgent 已支持上游能力。
-- **提案与 ADR 存储规则不同。** 本轮要求未批准方案保持 Proposed，而 [现有决策规则](decisions/AGENTS.md) 只接收 Accepted，并要求同主题原文件维护，不采用替代链。首版无需调整任何已接受结论，因此未改规则、未新建 ADR，提案保留在其设计权威位置。后续经用户明确批准的独立取舍按该规则新增 Accepted 记录，不回写或覆盖既有决策。若未来确需改变已接受结论，应先提出并评审替代建议，未获维护者批准不得改写当前决定；本轮不预先决定该情形的记录流程。
+- **提案与 ADR 存储规则不同。** 未批准方案保持 Proposed，而 [现有决策规则](decisions/AGENTS.md) 只接收 Accepted，并要求同主题原文件维护，不采用替代链。D-101 已批准的语义限定在 M1 单参与者路径，记录于对应领域、生命周期和 Engine 契约；不改写 ADR 0001–0004，也不将其扩大为长期关系决定。未来其他经明确批准的长期取舍按该规则维护。
 
-未发现 ADR 0001—0004 与本轮产品边界的实质冲突。ADR 0003 已接受每个 Session 绑定单一 Engine 及以 Task/Workflow 协调跨 Engine 协作，同时明确不固定 Agent Instance 与 Session 的基数；本轮对参与者、业务使用关联和首版策略的细化仍是 Proposed，不能以“已接受跨 Engine 协作”为由当作已批准。ADR 0004 的业务收尾与执行事实分离完整保留，本轮不改写其语义。
+未发现 ADR 0001—0004 与本轮产品边界的实质冲突。ADR 0003 已接受每个 Session 绑定单一 Engine 及以 Task/Workflow 协调跨 Engine 协作，同时明确不固定 Agent Instance 与 Session 的基数；D-101 批准的是 M1 单参与者使用规则，不改变这一长期关系取舍。ADR 0004 的业务收尾与执行事实分离完整保留，本轮不改写其语义。
 
-经用户明确批准，[ADR 0004](decisions/0004-task-closure-is-distinct-from-execution-state.md) 接受业务收尾与执行事实分离；具体生命周期见 [LIFE-03](domain/lifecycle-and-ownership.md#life-03-取消停止与副作用)。Session 是否仅服务单一 Task 的长期模型不再作为永久绑定提案；本轮推荐的关系解耦、首版新建策略、单 Session 单驱动者串行规则及未来复用条件仍未批准。
+经用户明确批准，[ADR 0004](decisions/0004-task-closure-is-distinct-from-execution-state.md) 接受业务收尾与执行事实分离；具体生命周期见 [LIFE-03](domain/lifecycle-and-ownership.md#life-03-取消停止与副作用)。D-101 已批准 M1 的新 Task 新 Session 与单 Session 单驱动者策略；这些是当前单参与者交付规则，不表示 Session 永久属于 Task。长期关系解耦、多参与者协作及未来复用仍为 Proposed。
 
 ## 产品原则到验收的轻量追踪
 
@@ -71,7 +71,7 @@
 
 ## 集成验收场景
 
-以下检查的是设计必须能回答的问题，也是后续测试的输入。测试夹具可以使用确定性假 Engine/Adapter 和临时文件；真实 Engine 的不可替代边界另需固定版本实测。**本轮只做文档走查，未执行这些产品测试。**
+以下检查的是设计必须能回答的问题，也是测试的输入。测试夹具可以使用确定性假 Engine/Adapter 和临时文件；真实 Engine 的不可替代边界另需固定版本实测。各场景的实际覆盖与结果须从当前测试和运行记录核对。
 
 | 标识 | 固定情境与检查方式 | 预期可观察结果的权威位置 |
 | --- | --- | --- |
@@ -91,7 +91,7 @@
 
 ## Session 与 Task 专项验收映射
 
-以下场景由对应规格维护详细输入与断言；本入口只做导航，不重复建立第三套场景编号。所有场景仍是未来检查要求，本轮未执行。
+以下场景由对应规格维护详细输入与断言；本入口只做导航，不重复建立第三套场景编号。实际覆盖和结果须从当前测试与运行记录核对。
 
 | 范围 | 规格编号 | 入口与状态 |
 | --- | --- | --- |
@@ -105,7 +105,7 @@
 
 | 事项 | 首选提案和决定的权威位置 | 何时必须解决 |
 | --- | --- | --- |
-| Task／参与者／Session／Execution 关联、首版业务资格与执行并发 | [领域模型](domain/README.md#dom-02-关联基数与身份连续性proposed)、[生命周期](domain/lifecycle-and-ownership.md)、[架构边界](architecture/README.md)；长期关系解耦、首版新建策略及跨 Task 复用均尚未批准 | 实现持久化、调度和稳定公共接口前，批准逐请求资格校验、单 Session 单驱动者串行规则，并确认任务内续聊、新 Task 新会话和跨 Task 拒绝三个首版场景 |
+| Task／参与者／Session／Execution 关联、首版业务资格与执行并发 | [领域模型](domain/README.md#dom-02-关联基数与身份连续性proposed)、[生命周期](domain/lifecycle-and-ownership.md)、[架构边界](architecture/README.md)；D-101 已批准 M1 单参与者语义，长期关系、多参与者协作及跨 Task 复用仍为 Proposed | M1 行为语义不再待批准；实现时按权威文档确定所需存储和接口表达。超出已批准范围的关系或行为变更须另行评审 |
 | 未来跨 Task 串行复用条件 | [DOM-05](domain/README.md#dom-05-未来跨-task-串行复用条件proposed)；完整机制、关联表和公共 API 均未实现或批准 | 不阻塞当前新 Task 新 Session、同 Task 多轮和多 Harness 协作；未来若启动复用实现，再按 DOM-05 完成独立准入验证 |
 | 已批准的业务收尾语义如何落入状态机 | [ADR 0004](decisions/0004-task-closure-is-distinct-from-execution-state.md)、[生命周期](domain/lifecycle-and-ownership.md#life-03-取消停止与副作用) | 原则不再待决；具体状态词、风险记录保留和资源解除限制的证据需在实现前落实 |
 | 最小接入能力、投递和终态证据 | [Engine 契约](specs/engine-adapter.md) | 首个 Adapter 按固定版本验证，不以 SDK 名称作能力依据 |
@@ -113,6 +113,6 @@
 | Host 生存期、持久化、远程恢复及隔离 | [运行边界](architecture/runtime-and-trust-boundaries.md) | 首个宿主实现前确认平台行为和无法强制的路径 |
 | 上游固定基线与第三方采用范围 | [ZCode 过渡](architecture/zcode-transition.md)、[架构总览](architecture/README.md) | 任何导入或选型实施前核验来源、授权范围、兼容与退出条件 |
 
-本轮未批准新的技术选型，未确定首发 Engine × Workspace 支持矩阵，也未执行真实 Runtime、浏览器或远程恢复验证。已接受原则保持不变；本轮推荐的长期关系解耦＋首版默认新建方案、首版资格规则和未来复用条件均为 Proposed。持久化、调度和稳定公共接口实现前需要维护者批准首版关联与资格规则，但 ZCode 复用调查、Engine 原生能力验证和临时原型不必等待所有未来关系定稿，也不能把未决定的未来能力扩大解释为不能开始任何不依赖它们的开发。Automation/Jobs 的定时触发、完整 Computer Use 和知识索引/检索仍属于长期方向，本轮只设计它们需要遵守的共享边界，不编写其完整行为规格；不因此视为被排除的产品能力。
+本轮未批准新的技术选型，未确定首发 Engine × Workspace 支持矩阵，也未执行真实 Runtime、浏览器或远程恢复验证。D-101 已批准的 M1 单参与者语义可用于持久化、派发与接口实现；长期关系模型、多参与者协作及未来复用条件仍为 Proposed。ZCode 复用调查、Engine 原生能力验证和临时原型不必等待这些未来关系定稿。Automation/Jobs 的定时触发、完整 Computer Use 和知识索引/检索仍属于长期方向，本轮只设计它们需要遵守的共享边界，不编写其完整行为规格；不因此视为被排除的产品能力。
 
 文档检查应使用现有 [索引校验](decisions/generate-index.sh)、相对链接与锚点检查、Markdown 基本结构检查及 `git diff --check`；不为这次文档工作安装依赖。没有业务实现时不得把脚本通过写成产品验收通过。

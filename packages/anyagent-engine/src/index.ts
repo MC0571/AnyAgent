@@ -1,0 +1,30 @@
+export type {
+  CapabilityAvailability,
+  CapabilityStatus,
+  CapabilitySupport,
+  EngineAdapter,
+  EngineApprovalOption,
+  EngineApprovalReceipt,
+  EngineApprovalRef,
+  EngineCapability,
+  EngineCapabilitySnapshot,
+  EngineCommandReceipt,
+  EngineEvent,
+  EngineEventBase,
+  EngineEventInput,
+  EngineEventPayload,
+  EngineExecutionRef,
+  EngineFailure,
+  EngineFailureKind,
+  EngineOperation,
+  EngineRun,
+  EngineSessionRef,
+  EngineUserInputOption,
+  EngineUserInputReceipt,
+  EngineUserInputRef,
+  EvidenceSource,
+  SideEffectKnowledge,
+} from "./types.js";
+export { EngineContractError } from "./types.js";
+export { FakeEngine } from "./fake-engine.js";
+export type { FakeEngineOptions, FakeEngineStep } from "./fake-engine.js";

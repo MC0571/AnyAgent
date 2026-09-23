@@ -2,7 +2,7 @@
 
 目的与范围：说明 Core + Reference App 的组织、依赖和替换边界；运行与安全细节见[运行与信任边界](runtime-and-trust-boundaries.md)，导入设计见 [ZCode 过渡](zcode-transition.md)。
 
-设计状态：Proposed；遵循已接受的 [ADR 0001](../decisions/0001-domain-tools-are-optional-plugins.md)、[ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md) 和 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。本轮关于 Session 与 Task 关系的长期方向及首版策略仍是 Proposed，不新增 Accepted ADR，也不批准新的技术选型。
+设计状态：实现方案整体为 Proposed；遵循已接受的 [ADR 0001](../decisions/0001-domain-tools-are-optional-plugins.md)、[ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md) 和 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。D-101 已批准 M1 单参与者语义，见[领域模型](../domain/README.md#dom-02-关联基数与身份连续性proposed)；长期关系模型、超出 M1 的协作策略及具体实现方案仍为 Proposed。本次不扩大 ADR 0001–0003，也不批准新的技术选型。
 
 实现与验证状态：历史核查快照为 2026-09-22 的 AnyAgent `intial` 分支、提交 `2b2c3b55ffcea62cd75e4bff9bafe9f55482523f`；该日期与提交保留。本轮定向复核于 2026-09-22、`intial` 分支 HEAD `73520d02bca217472c61fa62d5940eee37645a78` 完成，当时未发现应用源码、依赖声明、Runtime 或业务测试。M0 当前已导入上游过渡源码，来源与范围见 [ZC-04](zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线)；以下 Core 模块和流程仍为待实现设计，不能以源码导入宣称已支持。
 
@@ -45,7 +45,7 @@ Agent Instance 本轮继续使用 Task 范围内的参与者身份；本轮不�
 
 每个输入（包括尚未接纳的输入）及其 Execution 都必须保存 Task、参与者、Session、产品请求、原生执行和来源证据的可靠关联；历史归属不可由 Session 的当前使用者动态推导，也不能被后续业务使用覆盖。持久化需要能够表达这种不可变业务归属，但本轮不决定表结构。历史读取、会话恢复、业务接纳、任务收尾和资源释放是不同责任；恢复成功或 Session 连接可用都不授予业务执行资格。
 
-首版策略为：同一 Task 的多轮工作可以继续使用原 Session；同一 Task 可以由多个参与者和多个独立 Session 协作；同一参与者可按需使用多个同 Engine Session；新的独立 Task 首次需要业务会话时默认创建新的参与者和 Session；首版不支持把既有 Session 用于另一 Task；同一 Session 只允许一个明确参与者驱动业务执行，并按单 Session 串行策略处理。这里的“新 Task 新 Session”不表示每条用户消息都创建新 Task。未来跨 Task 串行复用的准入方向集中见 [DOM-05](../domain/README.md#dom-05-未来跨-task-串行复用条件proposed)，本文件不复制其条件，也不为此引入 Session Pool、分布式锁或新的中间件。
+M1 已批准单参与者路径：同一 Task 的多轮工作可以继续使用原 Session；新的独立 Task 使用新的参与者和 Session，拒绝将既有 Session 用于另一 Task；一个 Session 只允许一个明确参与者驱动，并按单 Session 单 Execution 串行策略处理。这里的“新 Task 新 Session”不表示每条用户消息都创建新 Task。多参与者／多 Session 协作及未来跨 Task 串行复用仍是 Proposed；其准入方向集中见 [DOM-05](../domain/README.md#dom-05-未来跨-task-串行复用条件proposed)，本文件不复制其条件，也不为此引入 Session Pool、分布式锁或新的中间件。
 
 ## ARC-02：三层契约
 
@@ -96,8 +96,8 @@ flowchart LR
 
 ## 评审与未决问题
 
-先批准模块职责与公共边界，再根据首次真实接入选择部署与存储。实现持久化、调度和稳定公共接口前，需要维护者批准本轮首版的 Task／参与者／Session 使用关联、逐请求资格校验及单 Session 串行规则；这些关系与策略仍是 Proposed，不是新的 Accepted 决定。首版明确不实现跨 Task Session 复用，未来准入条件见 [DOM-05](../domain/README.md#dom-05-未来跨-task-串行复用条件proposed)。
+M1 的 Task／参与者／Session 使用关联、逐请求资格校验及单 Session 串行规则已由 D-101 批准，可据此实现单参与者路径。实现仍需选择并验证具体持久化与接口表达；这些工程细节不改变已批准语义。长期关系模型、多参与者协作及跨 Task Session 复用仍为 Proposed，未来准入条件见 [DOM-05](../domain/README.md#dom-05-未来跨-task-串行复用条件proposed)。
 
-待维护者评审：Host 的独立进程生命周期、首个 Engine/Workspace 验证组合、公共协议兼容期限、采用哪些候选接入层，以及上述首版资格规则的具体落地。现在不决定具体 SDK、IPC、数据库或远程传输，也不为保留未来扩展空间提前引入会话池、分布式锁或中间件。ZCode 复用调查、Engine 原生能力验证和临时原型可以在完整未来关系定稿前继续，不因本轮未决定全部未来能力而阻塞其他不依赖它们的开发。
+仍待维护者评审：Host 的独立进程生命周期、首个 Engine／Workspace 验证组合、公共协议兼容期限及候选接入层。具体 SDK、IPC、数据库或远程传输仍由实现方案决定；不为未来扩展预先引入会话池、分布式锁或中间件。ZCode 复用调查、Engine 原生能力验证和临时原型可以在完整未来关系定稿前继续，不因未决定未来能力而阻塞不依赖它们的开发。
 
 验证方案：用无 Reference App 依赖的第二个最小客户端驱动同一 Core 契约；检查其创建任务、观察事件、审批和取消无需品牌账户。换一个 Adapter 或移除候选库后重放相同契约测试，产品身份与状态语义保持一致。这些是后续验收要求，本轮未执行应用验证。

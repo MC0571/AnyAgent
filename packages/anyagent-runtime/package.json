@@ -1,0 +1,22 @@
+{
+  "name": "@anyagent/runtime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "lint": "oxlint src tests"
+  },
+  "dependencies": {
+    "@anyagent/engine-contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.19.4",
+    "typescript": "^6.0.2"
+  }
+}
