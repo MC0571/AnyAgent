@@ -33,6 +33,8 @@ README 中的 Jobs 与 VISION 中的 Automation 表达长期自动化能力；�
 
 首版运行策略（Proposed）保持保守：同一 Task 内可以围绕同一目标继续多轮实现、评审和修复；同一 Task 可以有多个参与者和多个 Session，支持跨 Harness 协作；一个参与者可以按需要使用多个同 Engine Session，用于分支、会话重建或有序替换；新的独立 Task 首次需要业务会话时，默认创建新的参与者和 Session。首版不提供把既有 Session 用于另一个 Task 的功能；同一 Session 只允许一个明确参与者驱动业务执行，并沿用单 Session 串行 Execution 策略。更换 Engine 必须使用新 Session，并按显式 Handoff 规则传递获准材料。新 Task 新 Session 不等于每条用户消息都新建 Task，同一目标的后续工作仍可继续原 Task 与原 Session。
 
+这里的“首版”描述这些关系及协作能力实施时的拟议规则，不指定近期 Milestone 必须交付全部协作功能；交付范围以 GitHub Milestone／Issue 为准。先实施单参与者路径时，仍须明确 Task、参与者、Session 与输入／Execution 的关联和业务接纳资格。
+
 多个 Session 不自动复制原生上下文。每次输入必须选定目标 Session 和本次业务使用关联，禁止默认广播；独立 Session 可并行，但须分别获得共享资源访问范围。更换 Engine 创建新参与者及新 Session，以交接关联保留责任链；相同 Engine 新建 Session 则可保留当前 Task 内参与者身份。参与者尚未启动时允许零 Session，创建失败不会抹掉其分工记录。
 
 ```mermaid
