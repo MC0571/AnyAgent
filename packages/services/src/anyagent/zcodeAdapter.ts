@@ -23,7 +23,7 @@ import type { IZCodeAgentService, ZCodeAgentServiceEvent } from "../zcode-agent/
 
 type AgentPort = Pick<
   IZCodeAgentService,
-  "initialize" | "sendConversationCommandV4" | "onDynamicSessionEvent"
+  "initialize" | "sendConversationCommandV4" | "onDynamicSessionEvent" | "onAgentRuntimeLifecycle"
 >;
 
 interface PendingRun {
@@ -222,7 +222,25 @@ export function createZCodeAdapter(options: {
     }
   }
 
+  const lifecycle = options.agent.onAgentRuntimeLifecycle?.((event) => {
+    if (event.workspaceKey !== nativeWorkspaceId || event.state !== "unavailable") return;
+    availability = "temporarily-unavailable";
+    availabilityReason = "ZCode Runtime 已断开";
+    for (const run of allRuns) {
+      if (run.finished) continue;
+      if (run.acknowledged && runs.get(run.session) === run)
+        publish(run, {
+          type: "execution.unknown",
+          reason: "ZCode Runtime 在终态证据到达前断开",
+        });
+      run.finished = true;
+      if (runs.get(run.session) === run) runs.delete(run.session);
+      run.wake?.();
+    }
+  });
+
   function receive(run: PendingRun, incoming: ZCodeAgentServiceEvent): void {
+    if (run.finished) return;
     if (!run.acknowledged) {
       run.pendingEvents.push(incoming);
       return;
@@ -377,14 +395,15 @@ export function createZCodeAdapter(options: {
         const decision =
           nativeDecision === "deny" ? "reject" : nativeDecision === "allow" ? "approve" : "other";
         const option =
-          options.find((candidate) => candidate.id === selected) ??
-          options.find((candidate) => candidate.decision === decision);
+          options.find(
+            (candidate) => candidate.id === selected && candidate.decision === decision,
+          ) ?? options.find((candidate) => candidate.decision === decision);
         publish(
           run,
           {
             type: "approval.response",
             approvalId: requestId as EngineApprovalRef,
-            optionId: option?.id ?? selected ?? nativeDecision ?? "unknown",
+            optionId: option?.id ?? nativeDecision ?? "unknown",
             decision,
             status:
               decision === "reject" ? "rejected" : decision === "approve" ? "forwarded" : "unknown",
@@ -444,6 +463,7 @@ export function createZCodeAdapter(options: {
 
   return {
     dispose() {
+      lifecycle?.dispose();
       for (const run of allRuns) {
         run.finished = true;
         run.dispose();
@@ -551,6 +571,14 @@ export function createZCodeAdapter(options: {
         throw operationError(
           "execution.run",
           error instanceof Error ? error.message : String(error),
+          "result-unknown",
+        );
+      }
+      if (run.finished) {
+        run.dispose();
+        throw operationError(
+          "execution.run",
+          "ZCode Runtime 在输入回执到达前断开",
           "result-unknown",
         );
       }

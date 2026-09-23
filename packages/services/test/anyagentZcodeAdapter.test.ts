@@ -5,18 +5,28 @@ import { createZCodeAdapter } from "../src/anyagent/zcodeAdapter.js";
 
 type AgentPort = Parameters<typeof createZCodeAdapter>[0]["agent"];
 
-function harness({ earlyStart = false }: { earlyStart?: boolean } = {}) {
-  let listener: ((event: unknown) => void) | undefined;
+function harness({
+  earlyStart = false,
+  delayedAck = false,
+}: { earlyStart?: boolean; delayedAck?: boolean } = {}) {
+  const listeners = new Set<(event: unknown) => void>();
+  let lifecycleListener: ((event: unknown) => void) | undefined;
+  let releaseSendText: (() => void) | undefined;
+  let inputNumber = 0;
   const commands: Array<{ type: string; commandId: string; payload: unknown }> = [];
   const agent = {
     initialize: async () => ({ available: true, workspaceKey: "/tmp/workspace" }),
     onDynamicSessionEvent: () => (receive: (event: unknown) => void) => {
-      listener = receive;
+      listeners.add(receive);
       return {
         dispose() {
-          listener = undefined;
+          listeners.delete(receive);
         },
       };
+    },
+    onAgentRuntimeLifecycle: (receive: (event: unknown) => void) => {
+      lifecycleListener = receive;
+      return { dispose: () => (lifecycleListener = undefined) };
     },
     sendConversationCommandV4: async ({
       envelope,
@@ -32,23 +42,29 @@ function harness({ earlyStart = false }: { earlyStart?: boolean } = {}) {
         };
       }
       if (envelope.type === "sendText") {
-        if (earlyStart)
-          listener?.({
-            type: "session.event",
-            event: {
-              eventId: "early-start",
-              seq: 1,
-              sessionId: "native-session",
-              turnId: "early-turn",
-              timestamp: 1,
-              type: "turn.started",
-              payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
-            },
+        const inputId = ++inputNumber === 1 ? "native-input" : `native-input-${inputNumber}`;
+        if (delayedAck)
+          await new Promise<void>((resolve) => {
+            releaseSendText = resolve;
           });
+        if (earlyStart)
+          for (const listener of listeners)
+            listener({
+              type: "session.event",
+              event: {
+                eventId: "early-start",
+                seq: 1,
+                sessionId: "native-session",
+                turnId: "early-turn",
+                timestamp: 1,
+                type: "turn.started",
+                payload: { inputId, foregroundExecutionId: "native-work" },
+              },
+            });
         return {
           status: "accepted",
           commandId: envelope.commandId,
-          result: { type: "inputAccepted", inputId: "native-input", delivery: "startNow" },
+          result: { type: "inputAccepted", inputId, delivery: "startNow" },
         };
       }
       return { status: "accepted", commandId: envelope.commandId };
@@ -58,10 +74,137 @@ function harness({ earlyStart = false }: { earlyStart?: boolean } = {}) {
     adapter: createZCodeAdapter({ agent, workspacePath: "/tmp/workspace" }),
     commands,
     emit(event: unknown) {
-      listener?.(event);
+      for (const listener of listeners) listener(event);
+    },
+    disconnect() {
+      lifecycleListener?.({ workspaceKey: "/tmp/workspace", state: "unavailable" });
+    },
+    releaseSendText() {
+      releaseSendText?.();
     },
   };
 }
+
+test("CLI loss before sendText ACK leaves the command outcome unknown", async () => {
+  const fixture = harness({ delayedAck: true });
+  const session = await fixture.adapter.createSession();
+  const pending = fixture.adapter.run({ session, input: "work" });
+  fixture.disconnect();
+  fixture.releaseSendText();
+  await assert.rejects(pending, (error: unknown) => {
+    assert.equal((error as EngineContractError).kind, "result-unknown");
+    return true;
+  });
+  fixture.adapter.dispose();
+});
+
+test("late native event stays with its completed run until CLI loss", async () => {
+  const fixture = harness();
+  const session = await fixture.adapter.createSession();
+  const run = await fixture.adapter.run({ session, input: "work" });
+  const events = [];
+  const reading = (async () => {
+    for await (const event of run.events) events.push(event);
+  })();
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "completed-start",
+      seq: 1,
+      sessionId: "native-session",
+      turnId: "turn-done",
+      timestamp: 1,
+      type: "turn.started",
+      payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+    },
+  });
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "completed-end",
+      seq: 2,
+      sessionId: "native-session",
+      turnId: "turn-done",
+      timestamp: 2,
+      type: "turn.completed",
+      payload: { inputId: "native-input", resultType: "success", response: "done" },
+    },
+  });
+  const nextRun = await fixture.adapter.run({ session, input: "next" });
+  const nextEvents = [];
+  const nextReading = (async () => {
+    for await (const event of nextRun.events) nextEvents.push(event);
+  })();
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "next-start",
+      seq: 3,
+      sessionId: "native-session",
+      turnId: "turn-next",
+      timestamp: 3,
+      type: "turn.started",
+      payload: { inputId: "native-input-2", foregroundExecutionId: "native-work-2" },
+    },
+  });
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "late-tool",
+      seq: 4,
+      sessionId: "native-session",
+      turnId: "turn-done",
+      timestamp: 4,
+      type: "tool.updated",
+      payload: { kind: "started", toolCallId: "late-tool-1", toolName: "read" },
+    },
+  });
+  fixture.disconnect();
+  await reading;
+  await nextReading;
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["input.accepted", "execution.started", "execution.completed", "tool.started"],
+  );
+  assert.deepEqual(
+    nextEvents.map((event) => event.type),
+    ["input.accepted", "execution.started", "execution.unknown"],
+  );
+  fixture.adapter.dispose();
+});
+
+test("CLI lifecycle loss ends an acknowledged run with unknown evidence", async () => {
+  const fixture = harness();
+  const session = await fixture.adapter.createSession();
+  const run = await fixture.adapter.run({ session, input: "work" });
+  const events = [];
+  const reading = (async () => {
+    for await (const event of run.events) events.push(event);
+  })();
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "started-before-disconnect",
+      seq: 1,
+      sessionId: "native-session",
+      turnId: "turn-loss",
+      timestamp: 1,
+      type: "turn.started",
+      payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+    },
+  });
+  fixture.disconnect();
+  await reading;
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["input.accepted", "execution.started", "execution.unknown"],
+  );
+  assert.equal(
+    fixture.adapter.getCapabilities().capabilities["execution.run"].availability,
+    "temporarily-unavailable",
+  );
+  fixture.adapter.dispose();
+});
 
 test("native start before sendText ACK uses the acknowledged input ID", async () => {
   const fixture = harness({ earlyStart: true });
@@ -341,8 +484,20 @@ test("native permission denial wins over local answer and user-input marker is n
       decision: "deny",
     }),
   );
+  fixture.emit(envelope("request-opposite", 6, "permission.requested", request("opposite")));
+  await fixture.adapter.replyToApproval({
+    session,
+    approvalId: "opposite" as never,
+    optionId: "deny",
+  });
   fixture.emit(
-    envelope("question-marker", 6, "permission.requested", {
+    envelope("resolved-opposite", 7, "permission.resolved", {
+      requestId: "opposite",
+      decision: "allow",
+    }),
+  );
+  fixture.emit(
+    envelope("question-marker", 8, "permission.requested", {
       requestId: "marker",
       toolName: "AskUserQuestion",
     }),
@@ -359,8 +514,14 @@ test("native permission denial wins over local answer and user-input marker is n
   fixture.adapter.dispose();
   await reading;
   const responses = events.filter((event) => event.type === "approval.response");
-  assert.equal(responses.length, 2);
-  assert.ok(responses.every((event) => event.status === "rejected" && event.decision === "reject"));
+  assert.deepEqual(
+    responses.map((event) => [event.optionId, event.decision, event.status]),
+    [
+      ["deny", "reject", "rejected"],
+      ["deny", "reject", "rejected"],
+      ["allow", "approve", "forwarded"],
+    ],
+  );
   const userInputs = events.filter((event) => event.type === "user-input.requested");
   assert.equal(userInputs.length, 1);
   assert.equal(

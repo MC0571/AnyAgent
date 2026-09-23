@@ -496,6 +496,7 @@ test("interruption request is not stop confirmation; only execution.stopped is t
     });
     await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "stopped");
     assert.equal(runtime.getHistory(task.id)!.inputs[0]!.id, input.id);
+    assert.equal(runtime.getHistory(task.id)!.stopRequests[0]!.status, "temporarily-unavailable");
     assert.equal(runtime.getHistory(task.id)!.stopRequests[1]!.status, "confirmed");
     const closed = runtime.closeTask({
       taskId: task.id,
@@ -505,6 +506,102 @@ test("interruption request is not stop confirmation; only execution.stopped is t
       outcome: "stopped",
     });
     assert.equal(closed.status, "stopped");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("native stop evidence before interrupt ACK keeps one confirmed StopRequest", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      text: "stop",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    let releaseInterrupt: ((receipt: EngineCommandReceipt) => void) | undefined;
+    engine.interrupt = () => new Promise((resolve) => (releaseInterrupt = resolve));
+    const stopPromise = runtime.requestStop({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      executionId,
+    });
+    await until(() => !!releaseInterrupt && runtime.getHistory(task.id)!.stopRequests.length === 1);
+    engine.emit(0, {
+      type: "execution.stopped",
+      evidence: { source: "engine", evidenceId: "stopped" },
+    });
+    await until(() => runtime.getHistory(task.id)!.stopRequests[0]!.status === "confirmed");
+    releaseInterrupt!({ status: "requested" });
+    assert.equal((await stopPromise).status, "confirmed");
+    assert.deepEqual(
+      runtime.getHistory(task.id)!.stopRequests.map((request) => request.status),
+      ["confirmed"],
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Execution completing during capability refresh is not interrupted", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      text: "finish",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    let releaseCapabilities: (() => void) | undefined;
+    engine.refreshCapabilities = () =>
+      new Promise((resolve) => {
+        releaseCapabilities = () => resolve(engine.getCapabilities());
+      });
+    const stopPromise = runtime.requestStop({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      executionId,
+    });
+    await until(() => !!releaseCapabilities);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "done",
+      evidence: { source: "engine", evidenceId: "completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    releaseCapabilities!();
+    await assert.rejects(stopPromise, /already completed/);
+    assert.equal(engine.interrupts, 0);
+    assert.equal(runtime.getHistory(task.id)!.stopRequests.length, 0);
   } finally {
     runtime.close();
   }

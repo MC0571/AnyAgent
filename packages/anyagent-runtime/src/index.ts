@@ -769,19 +769,20 @@ export class TaskRuntime {
         "execution.interrupt",
         true,
       );
-      const receipt = await engine.interrupt({
-        session: nativeSession,
-        executionId: execution.data.nativeExecutionId as EngineExecutionRef,
-      });
-      const request: RuntimeStopRequest = {
+      const currentExecution = this.#require<ExecutionData>("execution", execution.id);
+      if (TERMINAL_EXECUTION_STATUSES.has(currentExecution.data.status))
+        throw new RuntimeEligibilityError(
+          `Execution ${execution.id} is already ${currentExecution.data.status}.`,
+        );
+      let request: RuntimeStopRequest = {
         id,
         taskId: task.id,
         participantId: input.participantId,
         sessionId: session.id,
         executionId: execution.id,
         requestedAt,
-        status: mapStopStatus(receipt.status),
-        reason: receipt.reason ?? null,
+        status: "requested",
+        reason: null,
       };
       this.#store.insert(
         this.#record(
@@ -794,6 +795,39 @@ export class TaskRuntime {
           request.status,
           requestedAt,
         ),
+      );
+      this.#publish(task.id, "stop-request", id);
+      try {
+        const receipt = await engine.interrupt({
+          session: nativeSession,
+          executionId: currentExecution.data.nativeExecutionId as EngineExecutionRef,
+        });
+        const current = this.#require<RuntimeStopRequest>("stop-request", id);
+        if (current.data.status === "confirmed") return current.data;
+        request = {
+          ...request,
+          status: mapStopStatus(receipt.status),
+          reason: receipt.reason ?? null,
+        };
+      } catch (error) {
+        const current = this.#require<RuntimeStopRequest>("stop-request", id);
+        if (current.data.status === "confirmed") return current.data;
+        request = {
+          ...request,
+          status: error instanceof EngineContractError ? mapStopStatus(error.kind) : "unknown",
+          reason: errorMessage(error),
+        };
+      }
+      this.#save(
+        "stop-request",
+        id,
+        task.id,
+        session.id,
+        execution.id,
+        request,
+        request.status,
+        requestedAt,
+        this.#now(),
       );
       this.#publish(task.id, "stop-request", id);
       return request;
@@ -1495,8 +1529,13 @@ export class TaskRuntime {
     const allRequests = this.#store
       .list<StopRequestData>("stop-request", taskId)
       .filter((record) => record.data.executionId === executionId);
-    const requests = allRequests.filter((record) => record.data.status !== "confirmed");
-    if (allRequests.length === 0) {
+    const requests = allRequests.filter((record) =>
+      ["requested", "unknown"].includes(record.data.status),
+    );
+    if (
+      requests.length === 0 &&
+      !allRequests.some((record) => record.data.status === "confirmed")
+    ) {
       const execution = this.#require<ExecutionData>("execution", executionId);
       const id = this.#newId("stop");
       const confirmed: RuntimeStopRequest = {
