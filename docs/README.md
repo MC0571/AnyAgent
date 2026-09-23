@@ -113,6 +113,6 @@
 | Host 生存期、持久化、远程恢复及隔离 | [运行边界](architecture/runtime-and-trust-boundaries.md) | 首个宿主实现前确认平台行为和无法强制的路径 |
 | 上游固定基线与第三方采用范围 | [ZCode 过渡](architecture/zcode-transition.md)、[架构总览](architecture/README.md) | 任何导入或选型实施前核验来源、授权范围、兼容与退出条件 |
 
-本轮未批准新的技术选型，未确定首发 Engine × Workspace 支持矩阵，也未执行真实 Runtime、浏览器或远程恢复验证。D-101 已批准的 M1 单参与者语义可用于持久化、派发与接口实现；长期关系模型、多参与者协作及未来复用条件仍为 Proposed。ZCode 复用调查、Engine 原生能力验证和临时原型不必等待这些未来关系定稿。Automation/Jobs 的定时触发、完整 Computer Use 和知识索引/检索仍属于长期方向，本轮只设计它们需要遵守的共享边界，不编写其完整行为规格；不因此视为被排除的产品能力。
+2026-09-22 的设计轮次未批准新的技术选型，未确定首发 Engine × Workspace 支持矩阵，当时也未执行真实 Runtime、浏览器或远程恢复验证；这段历史记录不描述后续 M1 的实现或验证状态。D-101 已批准的 M1 单参与者语义可用于持久化、派发与接口实现；长期关系模型、多参与者协作及未来复用条件仍为 Proposed。ZCode 复用调查、Engine 原生能力验证和临时原型不必等待这些未来关系定稿。Automation/Jobs 的定时触发、完整 Computer Use 和知识索引/检索仍属于长期方向，该设计轮次只规定它们需要遵守的共享边界，未编写其完整行为规格；不因此视为被排除的产品能力。
 
 文档检查应使用现有 [索引校验](decisions/generate-index.sh)、相对链接与锚点检查、Markdown 基本结构检查及 `git diff --check`；不为这次文档工作安装依赖。没有业务实现时不得把脚本通过写成产品验收通过。

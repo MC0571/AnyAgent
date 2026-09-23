@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- M1 Workbench keeps its event projection and controls in one view. */
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { IAnyAgentService } from "@zcode/services";
+import { SettingsBreadcrumbReporter } from "./settings/SettingsHeaderBreadcrumb.js";
 import { runtimeErrorNotice, type WorkbenchNotice } from "./AnyAgentEngineWorkbenchErrors.js";
 import { AnyAgentEngineWorkbenchInspector } from "./AnyAgentEngineWorkbenchInspector.js";
 import { AnyAgentEngineWorkbenchNavigation } from "./AnyAgentEngineWorkbenchNavigation.js";
@@ -256,6 +257,9 @@ export function AnyAgentEngineWorkbench({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground">
+      <SettingsBreadcrumbReporter
+        items={[{ label: task ? `Task ${shortId(task.id)}` : "Tasks" }]}
+      />
       <div className="flex shrink-0 items-center justify-end border-b border-border bg-card px-5 py-2">
         <div className="max-w-full text-right text-xs text-foreground-subtle">
           <div>

@@ -2398,7 +2398,7 @@ const enUS: Record<string, string> = {
     "Disabled {plugin} in this workspace (overriding User default)",
   "settings.plugins.toggle.failed": "Couldn't update {plugin}. Try again.",
   "settings.modelProviderDescription":
-    "Manage model providers and inspect the capabilities of local harnesses.",
+    "Manage custom model providers. Once configured, they can be selected during chat.",
   "settings.modelProvider.harnessTitle": "Harness",
   "settings.modelProvider.harnessNav": "Agent Engines",
   "settings.modelProvider.harnessDescription":

@@ -2248,7 +2248,7 @@ const zhCN: Record<string, string> = {
   "settings.plugins.toggle.workspaceEnabled": "已在当前工作区启用 {plugin}（覆盖 User 默认）",
   "settings.plugins.toggle.workspaceDisabled": "已在当前工作区停用 {plugin}（覆盖 User 默认）",
   "settings.plugins.toggle.failed": "无法更新 {plugin}，请重试。",
-  "settings.modelProviderDescription": "管理模型供应商，并查看本机 Harness 的能力。",
+  "settings.modelProviderDescription": "管理自定义模型供应商，配置后可在聊天时选择使用。",
   "settings.modelProvider.harnessTitle": "Harness",
   "settings.modelProvider.harnessNav": "Agent Engines",
   "settings.modelProvider.harnessDescription":
