@@ -1,6 +1,4 @@
 export { App } from "./App.js";
-export { AnyAgentEngineWorkbench } from "./AnyAgentEngineWorkbench.js";
-export type { AnyAgentEngineWorkbenchProps } from "./AnyAgentEngineWorkbench.js";
 export { AppErrorBoundary, ScopedErrorBoundary } from "./ErrorBoundary.js";
 export type { ScopedErrorBoundaryVariant } from "./ErrorBoundary.js";
 export { Button, buttonVariants } from "./components/ui/button.js";

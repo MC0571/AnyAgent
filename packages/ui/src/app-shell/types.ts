@@ -117,7 +117,7 @@ export interface GitChangeSummary {
   removed: number;
 }
 
-export type WorkspaceMainView = "chat" | "automations" | "plugin-store";
+export type WorkspaceMainView = "chat" | "automations" | "plugin-store" | "engine";
 
 export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackService"> {
   workspaceReadOnlyReason?: string;
@@ -129,6 +129,9 @@ export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackS
   onOpenAutomationConsumed: () => void;
   handleOpenAutomations: OpenAutomationsMain;
   handleOpenPluginStore: () => void;
+  handleOpenEngine: () => void;
+  engineSelectedTaskId: string | null;
+  onEngineSelectedTaskIdChange: (taskId: string | null) => void;
   handleManageInstalledPlugins: () => void;
   workspaceShellZCodeState: WorkspaceShellZCodeState;
   theme: Theme;

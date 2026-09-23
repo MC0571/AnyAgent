@@ -223,14 +223,13 @@ export function capabilityBlockReason(status: CapabilityStatus | undefined): str
 
 export function capabilityPillClass(status: CapabilityStatus | undefined): string {
   if (!status || status.support === "unknown" || status.availability === "unknown") {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-800";
+    return "border-warning/30 bg-warning/10 text-warning";
   }
-  if (status.support === "unsupported") return "border-slate-500/30 bg-slate-500/10 text-slate-600";
-  if (status.availability === "available")
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-800";
+  if (status.support === "unsupported") return "border-border bg-surface text-foreground-subtle";
+  if (status.availability === "available") return "border-success/30 bg-success/10 text-success";
   if (status.availability === "authorization-required")
-    return "border-orange-500/30 bg-orange-500/10 text-orange-800";
-  return "border-amber-500/30 bg-amber-500/10 text-amber-800";
+    return "border-warning/30 bg-warning/10 text-warning";
+  return "border-warning/30 bg-warning/10 text-warning";
 }
 
 export function WorkbenchCapabilityList({
@@ -251,7 +250,7 @@ export function WorkbenchCapabilityList({
               compact ? "flex flex-col gap-0.5 text-[11px]" : "flex flex-col gap-1 text-xs"
             }
           >
-            <span className="flex items-center justify-between gap-2 text-slate-700">
+            <span className="flex items-center justify-between gap-2 text-foreground">
               {label}
               <span
                 className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${capabilityPillClass(capability)}`}
@@ -260,7 +259,7 @@ export function WorkbenchCapabilityList({
               </span>
             </span>
             {capability?.reason ? (
-              <span className="text-slate-500">{capability.reason}</span>
+              <span className="text-foreground-subtle">{capability.reason}</span>
             ) : null}
           </li>
         );
@@ -310,7 +309,7 @@ export function WorkbenchHistory({
 }) {
   if (!history) {
     return (
-      <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+      <p className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
         {isLoading
           ? "正在读取历史…"
           : "此 Task 的历史当前不可用；不会根据 UI 当前选择推断事件归属。"}
@@ -323,60 +322,62 @@ export function WorkbenchHistory({
         {history.inputs.map((input) => (
           <article
             key={`input:${input.id}`}
-            className="ml-auto max-w-[85%] rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+            className="ml-auto max-w-[85%] rounded-lg border border-border bg-card p-3 shadow-sm"
           >
-            <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-foreground-subtle">
               <span>输入 · {recordStatusLabel(input.status)}</span>
               <time>{timeLabel(input.receivedAt)}</time>
             </div>
             <p className="whitespace-pre-wrap text-sm">{input.text}</p>
-            <div className="mt-2 text-[11px] text-slate-500">Input {shortId(input.id)}</div>
-            {input.error ? <p className="mt-1 text-xs text-red-700">{input.error}</p> : null}
+            <div className="mt-2 text-[11px] text-foreground-subtle">Input {shortId(input.id)}</div>
+            {input.error ? <p className="mt-1 text-xs text-destructive">{input.error}</p> : null}
           </article>
         ))}
         {history.executions.map((execution) => (
           <article
             key={`execution:${execution.id}`}
-            className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+            className="rounded-lg border border-border bg-card p-3 shadow-sm"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-foreground-subtle">
               <span>Execution · {recordStatusLabel(execution.status)}</span>
               <time>{timeLabel(execution.startedAt ?? execution.acceptedAt)}</time>
             </div>
-            <div className="mt-1 text-xs text-slate-500">
+            <div className="mt-1 text-xs text-foreground-subtle">
               {shortId(execution.id)} · 来源输入 {shortId(execution.inputId)}
             </div>
             {execution.result ? (
               <p className="mt-2 whitespace-pre-wrap text-sm">{execution.result}</p>
             ) : null}
             {execution.error ? (
-              <p className="mt-2 whitespace-pre-wrap text-sm text-red-700">{execution.error}</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-destructive">{execution.error}</p>
             ) : null}
           </article>
         ))}
         {!history.inputs.length && !history.executions.length ? (
-          <p className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+          <p className="rounded-md border border-dashed border-input-border p-4 text-sm text-foreground-subtle">
             此 Task 尚无输入或 Execution 记录。
           </p>
         ) : null}
       </div>
 
-      <section className="border-t border-slate-200 pt-4">
+      <section className="border-t border-border pt-4">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h4 className="text-sm font-semibold">公开 Engine 事件</h4>
-          <span className="text-xs text-slate-500">{history.events.length} 条</span>
+          <span className="text-xs text-foreground-subtle">{history.events.length} 条</span>
         </div>
         <div className="space-y-2">
           {[...history.events]
             .sort((a, b) => a.observedAt - b.observedAt)
             .map((event) => (
-              <details key={event.id} className="rounded-md border border-slate-200 bg-white p-3">
+              <details key={event.id} className="rounded-md border border-border bg-card p-3">
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-medium">{eventTitle(event)}</span>
-                    <time className="text-xs text-slate-500">{timeLabel(event.observedAt)}</time>
+                    <time className="text-xs text-foreground-subtle">
+                      {timeLabel(event.observedAt)}
+                    </time>
                   </div>
-                  <div className="mt-1 break-all text-[11px] text-slate-500">
+                  <div className="mt-1 break-all text-[11px] text-foreground-subtle">
                     {event.source} · sequence {event.sourceSequence ?? "未知"} · Task{" "}
                     {shortId(event.taskId)} · Participant {shortId(event.participantId)} · Session{" "}
                     {shortId(event.sessionId)}
@@ -384,12 +385,14 @@ export function WorkbenchHistory({
                     {event.duplicateOf ? ` · 重复事件，原记录 ${shortId(event.duplicateOf)}` : ""}
                   </div>
                 </summary>
-                <pre className="mt-3 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs text-slate-700">
+                <pre className="mt-3 max-h-72 overflow-auto rounded bg-surface p-2 text-xs text-foreground">
                   {jsonLabel(event.payload)}
                 </pre>
               </details>
             ))}
-          {!history.events.length ? <p className="text-sm text-slate-500">尚无公开事件。</p> : null}
+          {!history.events.length ? (
+            <p className="text-sm text-foreground-subtle">尚无公开事件。</p>
+          ) : null}
         </div>
       </section>
     </>

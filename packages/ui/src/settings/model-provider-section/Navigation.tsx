@@ -17,8 +17,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Loader2Icon } from "lucide-react";
+import { CpuIcon, Loader2Icon } from "lucide-react";
 import { ProviderStatusIndicator } from "./ProviderStatusIndicator.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 import {
   resolveModelProviderFamilySpecByProviderId,
@@ -86,12 +87,14 @@ function ModelProviderNavigationButton({
   label,
   selectedNodeKey,
   onSelectNavItem,
+  onOpenHarness,
   showIcon = true,
 }: {
-  item: ModelProviderNavItem;
+  item: ModelProviderNavItem | { key: "harness"; type: "harness" };
   label: string;
   selectedNodeKey: string | null;
   onSelectNavItem: (item: ModelProviderNavItem) => void;
+  onOpenHarness?: () => void;
   showIcon?: boolean;
 }) {
   const isSelected = item.key === selectedNodeKey;
@@ -111,7 +114,8 @@ function ModelProviderNavigationButton({
           if (isLoadingItem) {
             return;
           }
-          onSelectNavItem(item);
+          if (item.type === "harness") onOpenHarness?.();
+          else onSelectNavItem(item);
         }}
         className={`relative box-border flex h-8 w-full items-center gap-2 rounded-lg border px-2 py-1 text-left text-ui-base font-medium transition-colors max-md:size-8 max-md:justify-center max-md:gap-0 max-md:px-0 ${
           isSelected
@@ -121,6 +125,8 @@ function ModelProviderNavigationButton({
       >
         {isLoadingItem ? (
           <Loader2Icon className="size-4 shrink-0 animate-spin text-foreground-subtlest" />
+        ) : item.type === "harness" ? (
+          <CpuIcon className="size-4 shrink-0" />
         ) : showIcon ? (
           <span className="shrink-0 text-current">{renderModelProviderNavIcon(item)}</span>
         ) : null}
@@ -365,6 +371,8 @@ export function ModelProviderSectionNavigation({
   presetLoading,
   customLoading,
   onSelectNavItem,
+  onOpenHarness,
+  harnessActive = false,
   onReorderProviderIds,
   reorderableProviderIds,
 }: {
@@ -373,9 +381,12 @@ export function ModelProviderSectionNavigation({
   presetLoading: boolean;
   customLoading: boolean;
   onSelectNavItem: (item: ModelProviderNavItem) => void;
+  onOpenHarness?: () => void;
+  harnessActive?: boolean;
   onReorderProviderIds?: (providerIds: string[]) => Promise<void>;
   reorderableProviderIds?: ReadonlySet<string>;
 }) {
+  const { intl } = useZCodeIntl();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -419,6 +430,22 @@ export function ModelProviderSectionNavigation({
               )}
             </div>
           ))}
+        {onOpenHarness ? (
+          <div className="flex flex-col gap-2 max-md:gap-1">
+            <div className="flex h-7 items-center px-2 py-1 max-md:hidden">
+              <h3 className="text-ui-sm font-semibold text-foreground-subtlest">
+                {intl.formatMessage({ id: "settings.modelProvider.harnessTitle" })}
+              </h3>
+            </div>
+            <ModelProviderNavigationButton
+              item={{ key: "harness", type: "harness" }}
+              label={intl.formatMessage({ id: "settings.modelProvider.harnessNav" })}
+              selectedNodeKey={harnessActive ? "harness" : selectedNodeKey}
+              onSelectNavItem={onSelectNavItem}
+              onOpenHarness={onOpenHarness}
+            />
+          </div>
+        ) : null}
       </div>
     </aside>
   );

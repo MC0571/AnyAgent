@@ -35,7 +35,7 @@ export function AnyAgentEngineWorkbenchInspector({
 }) {
   const latestExecution = history?.executions[history.executions.length - 1];
   return (
-    <aside className="min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4">
+    <aside className="min-h-0 overflow-y-auto border-l border-border bg-card p-4">
       <section>
         <h3 className="mb-2 text-sm font-semibold">产品归属</h3>
         <dl className="space-y-2 text-xs">
@@ -70,21 +70,21 @@ export function AnyAgentEngineWorkbenchInspector({
         </dl>
       </section>
 
-      <section className="mt-5 border-t border-slate-200 pt-4">
+      <section className="mt-5 border-t border-border pt-4">
         <h3 className="mb-2 text-sm font-semibold">Engine 能力</h3>
         <WorkbenchCapabilityList engine={task.engine} />
       </section>
 
-      <section className="mt-5 border-t border-slate-200 pt-4">
+      <section className="mt-5 border-t border-border pt-4">
         <h3 className="mb-2 text-sm font-semibold">审批答复</h3>
         <div className="space-y-2">
           {(history?.approvals ?? []).map((approval) => (
-            <div key={approval.id} className="rounded-md border border-slate-200 p-2">
+            <div key={approval.id} className="rounded-md border border-border p-2">
               <div className="text-xs font-medium">
                 {approval.operation} · {recordStatusLabel(approval.status)}
               </div>
               {approval.scope ? (
-                <div className="mt-1 text-xs text-slate-500">范围：{approval.scope}</div>
+                <div className="mt-1 text-xs text-foreground-subtle">范围：{approval.scope}</div>
               ) : null}
               <div className="mt-2 flex flex-wrap gap-1">
                 {approval.status === "pending" ? (
@@ -92,7 +92,7 @@ export function AnyAgentEngineWorkbenchInspector({
                     <button
                       key={option.id}
                       type="button"
-                      className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-40"
+                      className="rounded border border-input-border px-2 py-1 text-xs hover:bg-surface disabled:opacity-40"
                       disabled={!!approvalBlock || busyAction !== null}
                       title={approvalBlock ?? undefined}
                       onClick={() => onReplyApproval(approval, option.id)}
@@ -101,7 +101,7 @@ export function AnyAgentEngineWorkbenchInspector({
                     </button>
                   ))
                 ) : (
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-foreground-subtle">
                     {approval.repliedOptionId
                       ? `答复选项：${approval.repliedOptionId}`
                       : "无待处理答复"}
@@ -111,19 +111,19 @@ export function AnyAgentEngineWorkbenchInspector({
             </div>
           ))}
           {!history?.approvals.length ? (
-            <p className="text-xs text-slate-500">无审批请求。</p>
+            <p className="text-xs text-foreground-subtle">无审批请求。</p>
           ) : null}
           {approvalBlock && history?.approvals.some((item) => item.status === "pending") ? (
-            <p className="text-xs text-amber-800">{approvalBlock}</p>
+            <p className="text-xs text-warning">{approvalBlock}</p>
           ) : null}
         </div>
       </section>
 
-      <section className="mt-5 border-t border-slate-200 pt-4">
+      <section className="mt-5 border-t border-border pt-4">
         <h3 className="mb-2 text-sm font-semibold">独立用户输入</h3>
         <div className="space-y-2">
           {(history?.userInputs ?? []).map((request) => (
-            <div key={request.id} className="rounded-md border border-slate-200 p-2">
+            <div key={request.id} className="rounded-md border border-border p-2">
               <div className="text-xs font-medium">
                 {request.inputKind} · {recordStatusLabel(request.status)}
               </div>
@@ -136,7 +136,7 @@ export function AnyAgentEngineWorkbenchInspector({
                         <button
                           key={option.id}
                           type="button"
-                          className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-40"
+                          className="rounded border border-input-border px-2 py-1 text-xs hover:bg-surface disabled:opacity-40"
                           disabled={!!userInputBlock || busyAction !== null}
                           title={userInputBlock ?? undefined}
                           onClick={() => onReplyUserInput(request, option.id)}
@@ -156,43 +156,41 @@ export function AnyAgentEngineWorkbenchInspector({
                     >
                       <textarea
                         aria-label="用户输入答复"
-                        className="min-h-16 w-full resize-y rounded border border-slate-300 px-2 py-1 text-sm"
+                        className="min-h-16 w-full resize-y rounded border border-input-border px-2 py-1 text-sm"
                         value={userInputDrafts[request.id] ?? ""}
                         onChange={(event) => onUserInputDraftChange(request.id, event.target.value)}
                       />
                       <button
                         type="submit"
-                        className="rounded bg-slate-800 px-2 py-1 text-xs text-white disabled:opacity-40"
+                        className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-40"
                         disabled={!!userInputBlock || busyAction !== null}
                       >
                         提交用户输入
                       </button>
                     </form>
                   )}
-                  {userInputBlock ? (
-                    <p className="text-xs text-amber-800">{userInputBlock}</p>
-                  ) : null}
+                  {userInputBlock ? <p className="text-xs text-warning">{userInputBlock}</p> : null}
                 </div>
               ) : request.response != null ? (
-                <pre className="mt-2 overflow-auto rounded bg-slate-50 p-2 text-xs">
+                <pre className="mt-2 overflow-auto rounded bg-surface p-2 text-xs">
                   {jsonLabel(request.response)}
                 </pre>
               ) : null}
             </div>
           ))}
           {!history?.userInputs.length ? (
-            <p className="text-xs text-slate-500">无用户输入请求。</p>
+            <p className="text-xs text-foreground-subtle">无用户输入请求。</p>
           ) : null}
         </div>
       </section>
 
-      <section className="mt-5 border-t border-slate-200 pt-4">
+      <section className="mt-5 border-t border-border pt-4">
         <h3 className="mb-2 text-sm font-semibold">停止与核对</h3>
         <div className="space-y-2">
           {(history?.stopRequests ?? []).map((stop) => (
             <div
               key={stop.id}
-              className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs"
+              className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs"
             >
               {recordStatusLabel(stop.status)} · Execution {shortId(stop.executionId)} ·{" "}
               {timeLabel(stop.requestedAt)}
@@ -202,14 +200,14 @@ export function AnyAgentEngineWorkbenchInspector({
           {(history?.integrityIssues ?? []).map((issue) => (
             <div
               key={issue.id}
-              className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-900"
+              className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive"
             >
               {issue.type} · {timeLabel(issue.occurredAt)}
               <div className="mt-1">{issue.detail}</div>
             </div>
           ))}
           {!history?.stopRequests.length && !history?.integrityIssues.length ? (
-            <p className="text-xs text-slate-500">无停止请求或待核对事项。</p>
+            <p className="text-xs text-foreground-subtle">无停止请求或待核对事项。</p>
           ) : null}
         </div>
       </section>
@@ -220,8 +218,8 @@ export function AnyAgentEngineWorkbenchInspector({
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="mt-0.5 break-all font-medium text-slate-800">{value}</dd>
+      <dt className="text-foreground-subtle">{label}</dt>
+      <dd className="mt-0.5 break-all font-medium text-foreground">{value}</dd>
     </div>
   );
 }

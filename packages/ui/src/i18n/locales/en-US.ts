@@ -61,7 +61,8 @@ const enUS: Record<string, string> = {
   "occupationOnboarding.migration": "Migrate conversations",
   "occupationOnboarding.migrationDescription": "Migrate conversation history from Claude Code",
   "occupationOnboarding.memory": "Enable Workspace Memory",
-  "occupationOnboarding.memoryDescription": "Let AnyAgent remember your preferences and work context.",
+  "occupationOnboarding.memoryDescription":
+    "Let AnyAgent remember your preferences and work context.",
   "occupationOnboarding.suggestions": "Enable proactive task suggestions",
   "occupationOnboarding.suggestionsDescription":
     "Show suggestions in new conversations. Click to fill the composer.",
@@ -2397,7 +2398,14 @@ const enUS: Record<string, string> = {
     "Disabled {plugin} in this workspace (overriding User default)",
   "settings.plugins.toggle.failed": "Couldn't update {plugin}. Try again.",
   "settings.modelProviderDescription":
-    "Manage custom model providers. Once configured, they can be selected during chat.",
+    "Manage model providers and inspect the capabilities of local harnesses.",
+  "settings.modelProvider.harnessTitle": "Harness",
+  "settings.modelProvider.harnessNav": "Agent Engines",
+  "settings.modelProvider.harnessDescription":
+    "Inspect Engines registered with the local Host and their current capabilities. Model credentials remain in the model provider entries.",
+  "settings.modelProvider.harnessWorkDirectory": "Working directory",
+  "settings.modelProvider.harnessUnknownVersion": "version unknown",
+  "settings.modelProvider.harnessEmpty": "No Engines are registered.",
   "settings.modelProvider.add": "Add provider",
   "settings.modelProvider.createCustomProvider": "Create custom provider",
   "settings.modelProvider.templateCreateFailed":

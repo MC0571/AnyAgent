@@ -46,6 +46,7 @@ import type {
 } from "@/settings/saved-workflows/SavedWorkflowsSection.js";
 import { AutomationsMainBreadcrumbFrame } from "@/settings/AutomationsMainBreadcrumbFrame.js";
 import { PluginStorePage } from "@/settings/PluginStorePage.js";
+import { AnyAgentEngineWorkbench } from "@/AnyAgentEngineWorkbench.js";
 import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WorkspaceHeader } from "@/WorkspaceHeader.js";
 import { WorkspaceSidebar, type SidebarFileTreeOpenRequest } from "@/WorkspaceSidebar.js";
@@ -198,6 +199,9 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   onOpenAutomationConsumed,
   handleOpenAutomations,
   handleOpenPluginStore,
+  handleOpenEngine,
+  engineSelectedTaskId,
+  onEngineSelectedTaskIdChange,
   handleManageInstalledPlugins,
   onConnectRemote,
   onSelectRemoteProject,
@@ -336,6 +340,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   const { intl } = useZCodeIntl();
   const isOfficeMode = useIsOfficeMode();
   const baseServices = useBaseWorkspaceServices();
+  const engineService =
+    isDesktop && !workspaceRemoteSessionId && !workspaceIdentity
+      ? baseServices.anyAgentService
+      : undefined;
   const tabStoreApi = useTabStoreApi();
   const isLinuxDesktop = Boolean(isDesktop && !isMacDesktop && !isWindowsDesktop);
   // Windows/Linux 也需要外层留白，避免独立面板贴住窗口边缘；桌面统一使用 4px 间距。
@@ -1491,8 +1499,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   // Draft 之前维护一套独立轻量 header，导致 side pane、caption 安全区和拖拽入口
   // 与 Task Header 分叉。桌面端统一复用 WorkspaceHeader，只由 variant 裁剪 task 专属内容；
   // 手机远控无 active task 时仍不渲染桌面 chrome，继续遵守 replayable overlay 边界。
-  const shouldRenderMainViewHeader =
-    workspaceMainView !== "automations" && workspaceMainView !== "plugin-store";
+  const shouldRenderMainViewHeader = workspaceMainView === "chat";
   const shouldRenderWorkspaceHeader =
     shouldRenderMainViewHeader && (activeTaskId !== null || isDesktop);
   // ErrorBoundary resetKeys 的数组如果每次 render 都重新创建，
@@ -1600,6 +1607,8 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     automationsActive={workspaceMainView === "automations"}
                     onOpenPluginStore={handleOpenPluginStore}
                     pluginStoreActive={workspaceMainView === "plugin-store"}
+                    onOpenEngine={engineService ? handleOpenEngine : undefined}
+                    engineActive={workspaceMainView === "engine"}
                     onFileTreeOpenChange={setIsSidebarFileTreeOpen}
                   />
                 </WorkflowRunOpenProvider>
@@ -1821,6 +1830,27 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                             </div>
                           </AutomationsMainBreadcrumbFrame>
                         </main>
+                      ) : workspaceMainView === "engine" && engineService ? (
+                        <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
+                          <AutomationsMainBreadcrumbFrame
+                            isDesktop={Boolean(isDesktop)}
+                            sectionLabel="Engine"
+                            ariaLabel="Engine"
+                          >
+                            <ScopedErrorBoundary
+                              scope="engine-main"
+                              resetKeys={workspaceOnlyResetKeys}
+                              variant="panel"
+                              className="min-h-0 flex-1"
+                            >
+                              <AnyAgentEngineWorkbench
+                                service={engineService}
+                                selectedTaskId={engineSelectedTaskId}
+                                onSelectTask={onEngineSelectedTaskIdChange}
+                              />
+                            </ScopedErrorBoundary>
+                          </AutomationsMainBreadcrumbFrame>
+                        </main>
                       ) : (
                         <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                           {renderChatFindDialog()}
@@ -1899,7 +1929,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     </div>
                   </section>
                 </ResizablePanel>
-                {workspaceMainView !== "automations" && workspaceMainView !== "plugin-store" ? (
+                {workspaceMainView === "chat" ? (
                   <AnimatedTerminalPanel
                     frameClassName={cn(
                       isSidePaneVisible

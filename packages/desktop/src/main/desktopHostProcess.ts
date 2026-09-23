@@ -121,12 +121,6 @@ export function loadWindow(
       initialWorkspacePurpose: bootstrap?.initialWorkspacePurpose,
       unavailableWorkspacePath: bootstrap?.unavailableWorkspacePath,
       windowKind: bootstrap?.windowKind,
-      anyagentWorkbench:
-        page === "index" &&
-        bootstrap?.windowKind !== "update-status" &&
-        process.env.ANYAGENT_M1_WORKBENCH === "1"
-          ? "1"
-          : undefined,
       locale: bootstrap?.locale,
     }).filter((entry): entry is [string, string] => entry[1] != null),
   );

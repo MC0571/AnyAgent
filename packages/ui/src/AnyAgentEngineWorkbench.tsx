@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
+/* eslint-disable max-lines -- M1 Workbench keeps its event projection and controls in one view. */
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { IAnyAgentService } from "@zcode/services";
 import { runtimeErrorNotice, type WorkbenchNotice } from "./AnyAgentEngineWorkbenchErrors.js";
 import { AnyAgentEngineWorkbenchInspector } from "./AnyAgentEngineWorkbenchInspector.js";
@@ -21,7 +22,11 @@ import type {
   WorkbenchUserInput,
 } from "./AnyAgentEngineWorkbenchParts.js";
 
-export type AnyAgentEngineWorkbenchProps = { service: IAnyAgentService };
+export type AnyAgentEngineWorkbenchProps = {
+  service: IAnyAgentService;
+  selectedTaskId: string | null;
+  onSelectTask: (taskId: string | null) => void;
+};
 
 type Notice = WorkbenchNotice;
 
@@ -32,9 +37,14 @@ type TaskHistory = WorkbenchHistoryData;
 type RuntimeApproval = WorkbenchApproval;
 type RuntimeUserInput = WorkbenchUserInput;
 
-export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProps) {
+export function AnyAgentEngineWorkbench({
+  service,
+  selectedTaskId,
+  onSelectTask,
+}: AnyAgentEngineWorkbenchProps) {
   const [revision, setRevision] = useState(0);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const changeVersion = useRef(0);
+  const taskListVersion = useRef(0);
   const [selectedEngineId, setSelectedEngineId] = useState("");
   const [draft, setDraft] = useState("");
   const [userInputDrafts, setUserInputDrafts] = useState<Record<string, string>>({});
@@ -50,12 +60,29 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
   const [history, setHistory] = useState<TaskHistory | null>(null);
 
   useEffect(() => {
-    const subscription = service.onDidChange(() => setRevision((value) => value + 1));
+    const subscription = service.onDidChange((change) => {
+      taskListVersion.current += 1;
+      if (change.taskId === selectedTaskId || (!selectedTaskId && change.task))
+        changeVersion.current += 1;
+      if (change.task) {
+        setTasks((current) => {
+          const index = current.findIndex((item) => item.id === change.taskId);
+          if (index < 0) return [change.task!, ...current];
+          return current.map((item, position) => (position === index ? change.task! : item));
+        });
+      }
+      if (!selectedTaskId && change.task) onSelectTask(change.taskId);
+      if (change.taskId !== selectedTaskId) return;
+      setTask(change.task);
+      setHistory(change.history);
+    });
     return () => subscription.dispose();
-  }, [service]);
+  }, [service, selectedTaskId, onSelectTask]);
 
   useEffect(() => {
     let isCurrent = true;
+    const startedAtVersion = changeVersion.current;
+    const listStartedAtVersion = taskListVersion.current;
     const refresh = async () => {
       setIsLoading(true);
       try {
@@ -67,19 +94,28 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
         if (!isCurrent) return;
         setCreateTaskContext(context);
         setEngines(nextEngines);
-        setTasks(nextTasks);
+        setTasks((current) => {
+          if (taskListVersion.current === listStartedAtVersion) return nextTasks;
+          const merged = new Map(nextTasks.map((item) => [item.id, item]));
+          for (const item of current) merged.set(item.id, item);
+          return [...merged.values()];
+        });
         const selected =
           nextTasks.find((item) => item.id === selectedTaskId) ?? nextTasks[0] ?? null;
         if (!selected) {
-          setTask(null);
-          setHistory(null);
+          if (changeVersion.current === startedAtVersion) {
+            setTask(null);
+            setHistory(null);
+          }
           return;
         }
+        if (!selectedTaskId && changeVersion.current === startedAtVersion)
+          onSelectTask(selected.id);
         const [freshTask, freshHistory] = await Promise.all([
           service.getTask(selected.id),
           service.getHistory(selected.id),
         ]);
-        if (!isCurrent) return;
+        if (!isCurrent || changeVersion.current !== startedAtVersion) return;
         setTask(freshTask ?? selected);
         setHistory(freshHistory);
       } catch (error) {
@@ -92,7 +128,7 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
     return () => {
       isCurrent = false;
     };
-  }, [service, selectedTaskId, revision]);
+  }, [service, selectedTaskId, onSelectTask, revision]);
 
   const effectiveEngineId = engines.some((engine) => engine.engineId === selectedEngineId)
     ? selectedEngineId
@@ -127,7 +163,7 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
       "create-task",
       () => service.createTask({ engineId: effectiveEngineId }),
       (created) => {
-        setSelectedTaskId(created.id);
+        onSelectTask(created.id);
         setDraft("");
         return `Task ${shortId(created.id)} 已创建；Session 状态：${sessionStatusLabel(created.session.status)}。`;
       },
@@ -219,15 +255,9 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
     : undefined;
 
   return (
-    <main className="flex h-full min-h-0 w-full flex-col bg-slate-50 text-slate-950">
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            AnyAgent · M1
-          </p>
-          <h1 className="text-lg font-semibold">Engine Workbench</h1>
-        </div>
-        <div className="max-w-[50%] text-right text-xs text-slate-500">
+    <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground">
+      <div className="flex shrink-0 items-center justify-end border-b border-border bg-card px-5 py-2">
+        <div className="max-w-full text-right text-xs text-foreground-subtle">
           <div>
             {createTaskContext?.environment.label ??
               createTaskContext?.environment.id ??
@@ -240,17 +270,17 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
               : " · 凭据来源未知"}
           </div>
         </div>
-      </header>
+      </div>
 
       {notice ? (
         <div
           role="status"
           className={`mx-4 mt-3 rounded-md border px-3 py-2 text-sm ${
             notice.kind === "error"
-              ? "border-red-300 bg-red-50 text-red-800"
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
               : notice.kind === "warning"
-                ? "border-amber-300 bg-amber-50 text-amber-900"
-                : "border-sky-300 bg-sky-50 text-sky-900"
+                ? "border-warning/30 bg-warning/10 text-warning"
+                : "border-border bg-surface text-foreground"
           }`}
         >
           {notice.message}
@@ -274,7 +304,7 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
           busyAction={busyAction}
           onSelectEngine={setSelectedEngineId}
           onSelectTask={(taskId) => {
-            setSelectedTaskId(taskId);
+            onSelectTask(taskId);
             setNotice(null);
           }}
           onCreateTask={handleCreateTask}
@@ -283,20 +313,20 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
         <section className="flex min-w-0 flex-1 flex-col">
           {task ? (
             <>
-              <div className="shrink-0 border-b border-slate-200 bg-white px-5 py-3">
+              <div className="shrink-0 border-b border-border bg-card px-5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="font-semibold">Task {shortId(task.id)}</h2>
-                      <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs">
+                      <span className="rounded-full border border-input-border px-2 py-0.5 text-xs">
                         {taskStatusLabel(task.status)}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-foreground-subtle">
                         创建于 {timeLabel(task.createdAt)}
                       </span>
                     </div>
                     {task.status === "frozen" || task.status !== "active" ? (
-                      <p className="mt-1 text-sm text-slate-600">
+                      <p className="mt-1 text-sm text-foreground-subtle">
                         {task.status === "frozen" ? "冻结说明：" : "终态说明："}
                         {task.closeReason ?? "未提供原因。"}
                         {task.closedAt ? ` · ${timeLabel(task.closedAt)}` : ""}
@@ -308,7 +338,7 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
                   latestExecution.status !== "failed" &&
                   latestExecution.status !== "stopped" ? (
                     <button
-                      className="rounded-md border border-amber-400 px-3 py-1.5 text-sm font-medium text-amber-900 disabled:opacity-45"
+                      className="rounded-md border border-warning/50 px-3 py-1.5 text-sm font-medium text-warning disabled:opacity-45"
                       disabled={!!stopBlock || !!unresolvedStopRequest || busyAction !== null}
                       title={
                         stopBlock ??
@@ -353,19 +383,19 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
 
               <form
                 onSubmit={submitDraft}
-                className="shrink-0 border-t border-slate-200 bg-white px-5 py-3"
+                className="shrink-0 border-t border-border bg-card px-5 py-3"
               >
                 <div className="flex items-end gap-2">
                   <textarea
                     aria-label="向当前 Task 输入"
-                    className="min-h-12 min-w-0 flex-1 resize-y rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                    className="min-h-12 min-w-0 flex-1 resize-y rounded-md border border-input-border px-3 py-2 text-sm disabled:bg-surface-hover"
                     placeholder="继续当前 Task 的多轮工作…"
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     disabled={!!submitBlock || busyAction !== null}
                   />
                   <button
-                    className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-45"
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
                     disabled={!draft.trim() || !!submitBlock || busyAction !== null}
                     title={submitBlock ?? undefined}
                   >
@@ -373,9 +403,9 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
                   </button>
                 </div>
                 {submitBlock ? (
-                  <p className="mt-2 text-xs text-amber-800">{submitBlock}</p>
+                  <p className="mt-2 text-xs text-warning">{submitBlock}</p>
                 ) : (
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-foreground-subtle">
                     每次输入都会由 Runtime 重新校验 Task、参与者、Session、授权和环境；新独立 Task
                     使用新参与者与 Session。
                   </p>
@@ -386,7 +416,7 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
             <div className="grid min-h-0 flex-1 place-items-center p-8 text-center">
               <div>
                 <h2 className="font-semibold">选择或创建一个 Task</h2>
-                <p className="mt-2 max-w-md text-sm text-slate-600">
+                <p className="mt-2 max-w-md text-sm text-foreground-subtle">
                   Workbench 通过注入的产品 Runtime
                   展示归属、事件与交互记录。尚无历史时不会推断或补造执行状态。
                 </p>
@@ -395,6 +425,6 @@ export function AnyAgentEngineWorkbench({ service }: AnyAgentEngineWorkbenchProp
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }
