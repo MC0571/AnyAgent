@@ -2249,6 +2249,13 @@ const zhCN: Record<string, string> = {
   "settings.plugins.toggle.workspaceDisabled": "已在当前工作区停用 {plugin}（覆盖 User 默认）",
   "settings.plugins.toggle.failed": "无法更新 {plugin}，请重试。",
   "settings.modelProviderDescription": "管理自定义模型供应商，配置后可在聊天时选择使用。",
+  "settings.modelProvider.harnessTitle": "Harness",
+  "settings.modelProvider.harnessNav": "Agent Engines",
+  "settings.modelProvider.harnessDescription":
+    "查看本机 Host 注册的 Engine 与当前能力。模型凭据仍在模型供应商条目中配置。",
+  "settings.modelProvider.harnessWorkDirectory": "运行工作目录",
+  "settings.modelProvider.harnessUnknownVersion": "版本未知",
+  "settings.modelProvider.harnessEmpty": "没有已注册的 Engine。",
   "settings.modelProvider.add": "添加供应商",
   "settings.modelProvider.createCustomProvider": "创建自定义供应商",
   "settings.modelProvider.templateCreateFailed": "创建供应商失败：个人供应商配置格式无效",

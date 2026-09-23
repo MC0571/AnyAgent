@@ -2,7 +2,7 @@
 
 目的与范围：约束完整 Harness 如何接入产品，以及 UI 可以据何种证据呈现运行结果；不指定 SDK、IPC 或持久化结构。
 
-设计状态：Proposed（2026-09-22）；继承 [ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md) 与 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)，不新增已接受选型。实现与验证状态：当前仓库无 Adapter 或行为测试；下列 EA 场景是未来验收条件，未执行。概念及状态归属见[领域模型](../domain/README.md)、[生命周期](../domain/lifecycle-and-ownership.md)；共享授权见[共享能力](shared-capabilities.md)，协议层次见[架构](../architecture/README.md)。
+设计状态：整体契约为 Proposed（2026-09-22）；D-101 已批准 M1 单参与者路径的近期会话、资格和归属语义，权威范围见[领域模型 DOM-02](../domain/README.md#dom-02-关联基数与身份连续性proposed)及[生命周期](../domain/lifecycle-and-ownership.md)。该批准不确定完整接口、状态词、长期关系或多参与者协作。继承 [ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md) 与 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)，不扩大其已接受语义。实现与验证范围以当前代码、测试和运行记录为准；下列 EA 场景不单独证明通过。共享授权见[共享能力](shared-capabilities.md)，协议层次见[架构](../architecture/README.md)。
 
 ## 最小接入与能力声明
 
@@ -41,7 +41,7 @@ Session 终身绑定一个 Engine，但不因此把某个 Task 定义为其永�
 
 首选草案为同一 Session 一次只执行一个输入，其余按明确队列顺序等待。运行中介入只在能力和授权允许时发送；不支持时产品须让调用者明确选择下一轮排队或拒绝，交互 UI 展示策略，自动化需预先配置，未选择时拒绝。介入成功只证明原生接纳程度，不证明模型理解。受支持的运行中介入保留独立输入／消息证据，并关联当前 Execution，不创建另一个并发 Execution；下一轮排队的输入只有获得执行方接纳后才建立新 Execution。中断请求和执行停止分别记录；不支持原生中断时报告限制，仅在执行宿主明确允许且用户授权覆盖时提供终止自有进程选项，不能伪装成原生取消。任务聚合规则见[协作契约](cross-engine-collaboration.md#col-07-控制生效范围可核查)。
 
-同一 Task 可以围绕同一目标继续多轮实现、评审和修复，继续使用原 Session；继续工作不等于每条用户消息都新建 Task，且每次输入仍须重新校验业务资格。首版同一 Session 只允许一个明确参与者驱动业务执行，并沿用单 Session 串行 Execution；同一参与者可按需要使用多个同 Engine Session，同一 Task 仍可协调多个独立 Session 或多个 Harness。首版不允许跨 Task 并发驱动或串行复用同一 Session，也不因 Session 生命周期解耦而绕过 Task 的业务接纳。
+M1 已批准同一 Task 围绕同一目标继续多轮实现、评审和修复并沿用原 Session；继续工作不等于每条用户消息都新建 Task，且每次业务请求仍须重新校验资格。新的独立 Task 使用新参与者和新 Session，拒绝直接复用旧 Task 的 Session。一个 Session 只允许一个明确参与者驱动，并按单 Session 单 Execution 串行执行。多参与者、多 Session 或多 Harness 协作仍属 Proposed 且不在 M1 范围；Session 生命周期解耦也不绕过 Task 的业务接纳。
 
 ## 事件、审批与失败
 
@@ -78,6 +78,8 @@ Adapter 仅映射 Engine 公开的请求，保留请求标识、作用范围、�
 使用可控假 Engine、事件回放和持久化重启夹具验证产品语义；接入真实 Engine 时，再用固定版本验证其 Adapter 映射。前者通过不能证明某个真实 Harness 支持相同能力。
 
 ### 首版待实现验收（Proposed）
+
+D-101 已批准的 M1 行为范围覆盖 EA-08、EA-10–EA-13 中的资格核验、同 Task 多轮、独立 Task 新建、跨 Task 拒绝和迟到事件原归属；具体实现和验证结果须核对当前代码与测试。表内其余契约细节仍为 Proposed。
 
 | 标识 | 输入或故障注入 | 必须观察到的结果 |
 | --- | --- | --- |

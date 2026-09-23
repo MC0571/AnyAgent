@@ -38,9 +38,11 @@ import type { IPromptAttachmentTransferService } from "./prompt-attachment-trans
 import type { IWindowControllerService } from "./window-controller/windowController.js";
 import type { IOnboardingRecordService } from "./onboarding/onboardingRecord.js";
 import type { IConversationShareService } from "./conversation-share/conversationShare.js";
+import type { IAnyAgentService } from "./anyagent/anyAgentService.js";
 
 /** UI 层消费的统一服务接口 */
 export interface IServiceAccessor {
+  readonly anyAgentService?: IAnyAgentService;
   readonly fileService: IFileService;
   readonly mediaPreviewService?: IMediaPreviewService;
   readonly gitService: IGitService;

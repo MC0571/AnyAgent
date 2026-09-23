@@ -9,6 +9,7 @@ import {
   goBack as navGoBack,
   goForward as navGoForward,
   pushAutomationsNavEntry,
+  pushEngineNavEntry,
   pushPluginStoreNavEntry,
   removeTaskFromHistory,
   type AutomationsNavigationTab,
@@ -56,6 +57,12 @@ export function createNavigationSlice(set: SetFn, get: GetFn) {
           workspacePath,
           workspaceIdentity,
         ),
+      }));
+    },
+
+    taskNavPushEngine: (workspacePath: string, workspaceIdentity?: string) => {
+      set((state) => ({
+        taskNavHistory: pushEngineNavEntry(state.taskNavHistory, workspacePath, workspaceIdentity),
       }));
     },
 

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 if (process.platform !== "darwin" || process.arch !== "arm64") {
@@ -13,13 +14,28 @@ const electron = join(data, "electron");
 mkdirSync(home, { recursive: true, mode: 0o700 });
 mkdirSync(electron, { recursive: true, mode: 0o700 });
 
-const inherited = ["PATH", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "SHELL", "USER", "LOGNAME"];
-const env = Object.fromEntries(inherited.flatMap((name) =>
-  process.env[name] === undefined ? [] : [[name, process.env[name]]]
-));
+const inherited = [
+  "PATH",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TERM",
+  "SHELL",
+  "USER",
+  "LOGNAME",
+];
+const env = Object.fromEntries(
+  inherited.flatMap((name) => (process.env[name] === undefined ? [] : [[name, process.env[name]]])),
+);
 Object.assign(env, {
   HOME: home,
+  COREPACK_HOME: process.env.COREPACK_HOME ?? join(homedir(), ".cache", "node", "corepack"),
   ANYAGENT_M0: "1",
+  ...(process.argv.includes("--engine-workbench") ? { ANYAGENT_M1_WORKBENCH: "1" } : {}),
+  ...(process.argv.includes("--engine-workbench") || process.env.ANYAGENT_DESKTOP_PORT
+    ? { ANYAGENT_DESKTOP_PORT: process.env.ANYAGENT_DESKTOP_PORT ?? "5175" }
+    : {}),
   ZCODE_ENV: "production",
   ZCODE_PREVIEW_IDENTITY: "1",
   ZCODE_DATA_BASE_DIR: home,
@@ -33,11 +49,15 @@ Object.assign(env, {
   ZCODE_DISABLE_FIXED_REMOTE_DEBUGGING_PORT: "1",
 });
 
-const child = spawn("pnpm", process.argv.includes("--bootstrap") ? ["bootstrap"] : ["dev:desktop:prod"], {
-  cwd: root,
-  env,
-  stdio: "inherit",
-});
+const child = spawn(
+  "pnpm",
+  process.argv.includes("--bootstrap") ? ["bootstrap"] : ["dev:desktop:prod"],
+  {
+    cwd: root,
+    env,
+    stdio: "inherit",
+  },
+);
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => child.kill(signal));
 }

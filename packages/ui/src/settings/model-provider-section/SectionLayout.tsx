@@ -17,6 +17,8 @@ interface ModelProviderSectionLayoutProps {
   navigationGroups: ModelProviderNavGroup[];
   selectedNodeKey: string | null;
   onSelectNavItem: (item: ModelProviderNavGroup["items"][number]) => void;
+  onOpenHarness?: () => void;
+  harnessActive?: boolean;
   onReorderProviderIds?: (providerIds: string[]) => Promise<void>;
   reorderableProviderIds?: ReadonlySet<string>;
   children: ReactNode;
@@ -41,6 +43,8 @@ export function ModelProviderSectionLayout({
   navigationGroups,
   selectedNodeKey,
   onSelectNavItem,
+  onOpenHarness,
+  harnessActive,
   onReorderProviderIds,
   reorderableProviderIds,
   children,
@@ -79,6 +83,8 @@ export function ModelProviderSectionLayout({
               presetLoading={presetLoading}
               customLoading={customLoading}
               onSelectNavItem={onSelectNavItem}
+              onOpenHarness={onOpenHarness}
+              harnessActive={harnessActive}
               onReorderProviderIds={onReorderProviderIds}
               reorderableProviderIds={reorderableProviderIds}
             />

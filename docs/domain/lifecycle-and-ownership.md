@@ -1,8 +1,8 @@
 # 生命周期与状态归属
 
 - 目的与范围：定义状态权威、生命周期及完成判据；协议载荷、事件重连和行为验收由[接入规格](../specs/engine-adapter.md)与[协作规格](../specs/cross-engine-collaboration.md)负责。
-- 设计状态：遵循 [ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)、[ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)；业务管理收尾与执行事实分离遵循 [ADR 0004](../decisions/0004-task-closure-is-distinct-from-execution-state.md) 的已接受语义；DOM-02 的关系方向、首版策略和 [DOM-05](README.md#dom-05-未来跨-task-串行复用条件proposed) 的未来准入条件，以及具体状态词和转换仍为 Proposed。
-- 实现与验证状态：2026-09-22 仓库尚无相应实现及行为测试；本文件是评审基线，不声称恢复、停止或持久化已经可用。
+- 设计状态：遵循 [ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)、[ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)；业务管理收尾与执行事实分离遵循 [ADR 0004](../decisions/0004-task-closure-is-distinct-from-execution-state.md) 的已接受语义。D-101 已批准 DOM-02 中限定的 M1 单参与者规则及逐次业务资格核验；长期关系模型、超出 M1 的协作规则、[DOM-05](README.md#dom-05-未来跨-task-串行复用条件proposed) 未来准入条件，以及具体状态词和转换仍为 Proposed。
+- 实现与验证范围以当前代码、测试和运行记录为准；本文件的设计语义不单独证明恢复、停止或持久化已经可用。
 - 关联文档：[概念与基数](README.md)、[运行与信任边界](../architecture/runtime-and-trust-boundaries.md)、[共享能力](../specs/shared-capabilities.md)。
 
 ## LIFE-01 权威状态与身份映射
@@ -35,7 +35,7 @@
 
 “已接纳”指 Adapter 依据 Engine 接口或受控执行宿主的确切接纳证据确认本次输入将参与执行；新执行输入在此时建立 Execution，并把 Task、Task 范围参与者、目标 Session、产品请求、原生执行标识（如有）和来源证据固定为同一条业务关联。运行中介入输入仅关联当前 Execution 并保留独立输入／消息记录，不新建 Execution；“开始执行”须有实际开始证据；“执行完成”须有对应终结证据。队列收件回执不是执行承诺。若 Engine 无单独接纳信号，Adapter 可在确认执行开始或完成时同时确认接纳，并说明证据，不补造时间点。介入消息本身不拥有独立执行终态，其投递及纳入证据与当前 Execution 的终态分开呈现；介入回复不是新的执行完成。输入被拒绝或撤回且尚未接纳时不生成虚假失败 Execution。输入已发送但接纳回执丢失时，保留投递记录并标记接纳结果未知，不杜撰已接纳状态；该记录与未知 Execution 一样阻止 Task 被标为已核实结束；用户仍可按 LIFE-03 显式放弃协调，未知事实不会因此消失。
 
-审批答复、工具结果、用量、Artifact、错误和迟到事件按原始输入／Execution 的 Task、参与者和 Session 关联归档；后续 Task 使用同一 Session（若未来获准）也不能覆盖旧记录。历史归属只能来自可靠的业务关联和来源证据，不能从 Session 当前正在为哪个 Task 工作动态推导。
+M1 已批准按上述规则固定输入和 Execution 的业务归属：审批答复、工具结果、用量、Artifact、错误和迟到事件按原始输入／Execution 的 Task、参与者和 Session 关联归档；历史归属只能来自可靠的业务关联和来源证据，不能从 Session 当前正在为哪个 Task 工作动态推导。未来若批准跨 Task Session 复用，也不能覆盖旧记录。
 
 “Engine 完成一轮”至多结束一个 Execution；参与者须提交职责要求的产物才进入 `submitted`；Task 还需指定验收者按目标接受结果才能进入 `accepted`。终态为 `accepted/failed/stopped` 的 Task 均须满足 LIFE-03 的统一终结核对门槛；需要先完成停止或结果对账，期间保留 `waiting`，展示拟结束原因。部分参与者失败可被规则明确视为非必需，但不能掩盖其尚未确认终止的执行。
 
@@ -64,6 +64,8 @@ UI 关闭不改变产品 Task 或 Engine 状态。Host 重启后从已持久化�
 删除或失去原生数据后，产品保留必要的身份墓碑与不可恢复说明，避免历史关联指向不存在却被复用的身份；具体保留期限和用户彻底删除范围需维护者批准，墓碑不得包含原始敏感内容。Artifact 外部内容被移除或权限撤销时标记不可访问，不能把缺失内容显示成空结果或成功读取。
 
 ## LIFE-ADMISSION 业务接纳资格（Proposed）
+
+D-101 已批准的 M1 原则是：每次单参与者业务请求均重新核验 Task、参与者、目标 Session 的合法使用关联、Engine／Adapter 能力及当前可用性、授权和执行环境；适用的审批、取消及参与者发起的共享调用也按其原始关联和权限范围校验。冻结或终态 Task 不接纳新业务派发；必要的历史读取、对账和获准停止控制仍按原关联处理。下列多参与者／委派扩展及 LIFE-02 具体状态词和转换仍为 Proposed。
 
 产品接纳业务输入、委派以及派发共享工具前，必须检查本次请求的 Task 生命周期及冻结状态、参与者身份／职责／执行资格、目标 Session 的业务使用资格、Engine／Adapter 的能力与实际可用性、授权及执行环境，不能仅检查 Session 是否打开或原生连接是否可用。请求中的 Task、参与者和 Session 使用关联必须由产品依据可靠记录校验，不能相信调用者任意填写的标识。
 

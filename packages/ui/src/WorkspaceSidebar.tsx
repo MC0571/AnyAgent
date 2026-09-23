@@ -17,6 +17,7 @@ import {
   CalendarClock,
   Clock3,
   Cloud,
+  Cpu,
   Folder,
   FolderOpen,
   Hash,
@@ -258,8 +259,10 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel: _goForwardShortcutLabel,
   onOpenCommandCenter,
   onOpenAutomations,
+  onOpenEngine,
   onOpenPluginStore,
   automationsActive = false,
+  engineActive = false,
   pluginStoreActive = false,
   onFileTreeOpenChange,
 }: {
@@ -310,8 +313,10 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel?: string;
   onOpenCommandCenter: () => void;
   onOpenAutomations?: () => void;
+  onOpenEngine?: () => void;
   onOpenPluginStore?: () => void;
   automationsActive?: boolean;
+  engineActive?: boolean;
   pluginStoreActive?: boolean;
   onFileTreeOpenChange?: (open: boolean) => void;
 }) {
@@ -1331,6 +1336,22 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
               <CalendarClock className="size-4" />
               {intl.formatMessage({ id: "workspace.openScheduledSettings" })}
             </Button>
+            {onOpenEngine ? (
+              <Button
+                variant="ghost"
+                onClick={onOpenEngine}
+                data-testid="engine-sidebar-open"
+                size="lg"
+                aria-pressed={engineActive}
+                className={cn(
+                  "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
+                  engineActive && "bg-selected text-foreground",
+                )}
+              >
+                <Cpu className="size-4" />
+                Engine
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               onClick={handleOpenPluginStoreMain}

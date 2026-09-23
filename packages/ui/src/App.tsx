@@ -824,6 +824,7 @@ export function App({
   );
   useTestActions(testActions);
   const [workspaceMainView, setWorkspaceMainView] = useState<WorkspaceMainView>("chat");
+  const [engineSelectedTaskId, setEngineSelectedTaskId] = useState<string | null>(null);
   const [openAutomationId, setOpenAutomationId] = useState<string | null>(null);
   const [openAutomationTab, setOpenAutomationTab] = useState<NonNullable<
     AutomationsNavigationTarget["automationTab"]
@@ -851,6 +852,14 @@ export function App({
     preserveNextSettingsExit();
     setWorkspaceMainView("plugin-store");
   }, [preserveNextSettingsExit]);
+  const handleNavigateToEngineMain = useCallback(() => {
+    setWorkspaceMainView("engine");
+  }, []);
+  useEffect(() => {
+    if (workspaceMainView === "engine" && (workspaceRemoteSessionId || workspaceIdentity)) {
+      setWorkspaceMainView("chat");
+    }
+  }, [workspaceIdentity, workspaceMainView, workspaceRemoteSessionId]);
   const handleOpenAutomationConsumed = useCallback(() => {
     setOpenAutomationId(null);
     setOpenAutomationTab(null);
@@ -859,6 +868,7 @@ export function App({
     handleSelectTask,
     handleOpenAutomations,
     handleOpenPluginStore,
+    handleOpenEngine,
     handleTaskNavBack,
     handleTaskNavForward,
     canGoBack,
@@ -873,6 +883,7 @@ export function App({
     onNavigateToTask: handleNavigateToTaskMain,
     onNavigateToAutomations: handleNavigateToAutomationsMain,
     onNavigateToPluginStore: handleNavigateToPluginStoreMain,
+    onNavigateToEngine: handleNavigateToEngineMain,
   });
   const handleOpenPluginStoreForScope = useCallback(
     (_target: PluginStoreOpenTarget = {}) => {
@@ -1133,6 +1144,9 @@ export function App({
         onOpenAutomationConsumed={handleOpenAutomationConsumed}
         handleOpenAutomations={handleOpenAutomations}
         handleOpenPluginStore={handleOpenPluginStoreForScope}
+        handleOpenEngine={handleOpenEngine}
+        engineSelectedTaskId={engineSelectedTaskId}
+        onEngineSelectedTaskIdChange={setEngineSelectedTaskId}
         handleManageInstalledPlugins={handleManageInstalledPlugins}
         onConnectRemote={onConnectRemote}
         onSelectRemoteProject={onSelectRemoteProject}

@@ -283,6 +283,8 @@ export {
 } from "./session/automationCron.js";
 
 import { ServiceCollection } from "./collection.js";
+import { IAnyAgentService } from "./anyagent/anyAgentService.js";
+import { createAnyAgentService } from "./anyagent/createAnyAgentService.js";
 import { IFileService } from "./file/file.js";
 import { IMediaPreviewService } from "./media-preview/mediaPreview.js";
 import { IGitService } from "./git/git.js";
@@ -2422,6 +2424,11 @@ export function createLocalServices(options: {
   // 注册链上的懒工厂（如 OffPeak）会各自创建 tasks-index sqlite repo；先收集到本数组，
   // services 集合建好后在 return 前统一登记进 sharedSqliteRepos 侧表
   const sqliteReposToClose: Array<{ close(): void }> = [];
+  const anyAgentService =
+    options.serviceAuthorityMode === "desktop-local" && process.env.ANYAGENT_M1_WORKBENCH === "1"
+      ? createAnyAgentService(zcodeAgentService)
+      : null;
+  if (anyAgentService) sqliteReposToClose.push(anyAgentService);
   const services = new ServiceCollection()
     .register(IFileService, fileService)
     .register(IMediaPreviewService, mediaPreviewService)
@@ -2574,6 +2581,7 @@ export function createLocalServices(options: {
       }),
     )
     .register(IPromptAttachmentTransferService, createLocalPromptAttachmentTransferService());
+  if (anyAgentService) services.register(IAnyAgentService, anyAgentService.service);
 
   // 即使初始配置关闭也必须登记 lifecycle disposer：terminal fence 需要早于任意延迟 setting/acquire
   // 恢复，不能把"当前还没有 Helper"误当成"不需要生命周期所有者"。dispose 时串行 stop host。

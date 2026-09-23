@@ -39,6 +39,7 @@ import {
   IFeedbackService,
   IPromptAttachmentTransferService,
   IWindowControllerService,
+  IAnyAgentService,
   type IServiceAccessor,
 } from "@zcode/services";
 
@@ -48,6 +49,7 @@ import {
  * 新增服务只需在此添加一个 getter。
  */
 export class RemoteServiceAccess implements IServiceAccessor {
+  readonly anyAgentService?: IAnyAgentService;
   readonly fileService: IFileService;
   readonly mediaPreviewService: IMediaPreviewService;
   readonly gitService: IGitService;
@@ -91,7 +93,12 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly feedbackService: IFeedbackService;
   readonly promptAttachmentTransferService: IPromptAttachmentTransferService;
 
-  constructor(channelClient: IChannelClient) {
+  constructor(channelClient: IChannelClient, anyAgentServiceEnabled = false) {
+    if (anyAgentServiceEnabled) {
+      this.anyAgentService = ProxyChannel.toService<IAnyAgentService>(
+        channelClient.getChannel(IAnyAgentService.channelName),
+      );
+    }
     this.fileService = ProxyChannel.toService<IFileService>(
       channelClient.getChannel(IFileService.channelName),
     );

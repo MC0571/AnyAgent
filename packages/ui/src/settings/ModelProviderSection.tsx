@@ -38,6 +38,7 @@ import {
 } from "./model-provider-section/constants.js";
 import { ModelProviderSectionDetail } from "./model-provider-section/Detail.js";
 import { ModelProviderSectionLayout } from "./model-provider-section/SectionLayout.js";
+import { HarnessProviderPanel } from "./model-provider-section/HarnessProviderPanel.js";
 import { ProviderTemplatePicker } from "./model-provider-section/ProviderTemplatePicker.js";
 import type { CodingPlanLoginOptions } from "./model-provider-section/codingPlanPricingCards.js";
 import { useModelProviderNavigation } from "./model-provider-section/useModelProviderNavigation.js";
@@ -247,7 +248,7 @@ export function ModelProviderSection({
   const { intl, locale } = useZCodeIntl();
   const confirmDialog = useConfirmDialog();
   const platform = usePlatform();
-  const { modelSelectionService, oauthService, credentialService } = useServices();
+  const { modelSelectionService, oauthService, credentialService, anyAgentService } = useServices();
   const {
     modelProviders,
     providerTemplates,
@@ -310,6 +311,8 @@ export function ModelProviderSection({
   const [, setCodingPlanProductsRefreshToken] = useState(0);
   const [pendingCreatedProviderId, setPendingCreatedProviderId] = useState<string | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [harnessSelected, setHarnessSelected] = useState(false);
+  const [harnessRefreshVersion, setHarnessRefreshVersion] = useState(0);
   const [creatingProvider, setCreatingProvider] = useState(false);
 
   useEffect(() => {
@@ -329,6 +332,7 @@ export function ModelProviderSection({
   const applyModelProviderTarget = useCallback(
     (target: SettingsModelProviderTarget | undefined) => {
       if (!target) return false;
+      setHarnessSelected(false);
       const providerId = resolveCodingPlanIntentProviderId(target);
       if (!providerId) {
         // 未知 ID 不能只静默忽略：pending 指令不消费的话，外部输入错误会困住导航。
@@ -977,6 +981,7 @@ export function ModelProviderSection({
 
   const handleSelectNavItem = useCallback(
     (item: (typeof navigationItems)[number]) => {
+      setHarnessSelected(false);
       setInvalidProviderTarget(false);
       setSelectedNodeKey(resolveModelProviderSideSelectionKey(item));
       setTemplatePickerOpen(false);
@@ -987,6 +992,7 @@ export function ModelProviderSection({
 
   const handleCreateProvider = useCallback(
     async (input: { templateId?: string; providerName?: string }) => {
+      setHarnessSelected(false);
       setCreatingProvider(true);
       try {
         const created = await createPersonalProvider({ ...input, locale });
@@ -1058,6 +1064,10 @@ export function ModelProviderSection({
       presetLoading={presetLoading}
       customLoading={customLoading}
       onRefresh={() => {
+        if (harnessSelected) {
+          setHarnessRefreshVersion((version) => version + 1);
+          return;
+        }
         void refreshModelProviderSection({
           refresh,
           // 手动刷新设置页时也要同时刷新 Z.ai / BigModel Team Plan 快照；
@@ -1067,14 +1077,29 @@ export function ModelProviderSection({
         refreshCodingPlanEntitlements();
       }}
       addProviderLabel={intl.formatMessage({ id: "settings.modelProvider.addProviderAction" })}
-      onAddProvider={() => setTemplatePickerOpen(true)}
+      onAddProvider={() => {
+        setHarnessSelected(false);
+        setTemplatePickerOpen(true);
+      }}
       navigationGroups={navigationGroups}
-      selectedNodeKey={selectedNodeKey}
+      selectedNodeKey={harnessSelected ? "harness" : selectedNodeKey}
       onSelectNavItem={handleSelectNavItem}
+      onOpenHarness={
+        anyAgentService
+          ? () => {
+              setHarnessSelected(true);
+              setInvalidProviderTarget(false);
+              setTemplatePickerOpen(false);
+            }
+          : undefined
+      }
+      harnessActive={harnessSelected}
       onReorderProviderIds={handleReorderProviderIds}
       reorderableProviderIds={reorderableProviderIds}
     >
-      {(invalidProviderTarget || navigationUnavailable) && !templatePickerOpen ? (
+      {(invalidProviderTarget || navigationUnavailable) &&
+      !templatePickerOpen &&
+      !harnessSelected ? (
         <p role="alert" className="mb-3 text-ui-base text-destructive">
           {intl.formatMessage({
             id: invalidProviderTarget
@@ -1083,7 +1108,9 @@ export function ModelProviderSection({
           })}
         </p>
       ) : null}
-      {templatePickerOpen ? (
+      {harnessSelected && anyAgentService ? (
+        <HarnessProviderPanel service={anyAgentService} refreshVersion={harnessRefreshVersion} />
+      ) : templatePickerOpen ? (
         <ProviderTemplatePicker
           templates={providerTemplates}
           creating={creatingProvider}

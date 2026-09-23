@@ -34,7 +34,15 @@ export interface PluginStoreNavEntry extends WorkspaceNavEntryBase {
   kind: "plugin-store";
 }
 
-export type WorkspaceNavEntry = TaskNavEntry | AutomationsNavEntry | PluginStoreNavEntry;
+export interface EngineNavEntry extends WorkspaceNavEntryBase {
+  kind: "engine";
+}
+
+export type WorkspaceNavEntry =
+  | TaskNavEntry
+  | AutomationsNavEntry
+  | PluginStoreNavEntry
+  | EngineNavEntry;
 
 export interface TaskNavigationHistory {
   entries: WorkspaceNavEntry[];
@@ -58,6 +66,10 @@ export function isAutomationsNavEntry(entry: WorkspaceNavEntry): entry is Automa
 
 export function isPluginStoreNavEntry(entry: WorkspaceNavEntry): entry is PluginStoreNavEntry {
   return entry.kind === "plugin-store";
+}
+
+export function isEngineNavEntry(entry: WorkspaceNavEntry): entry is EngineNavEntry {
+  return entry.kind === "engine";
 }
 
 function isSameNavEntry(left: WorkspaceNavEntry, right: WorkspaceNavEntry): boolean {
@@ -145,6 +157,18 @@ export function pushPluginStoreNavEntry(
 ): TaskNavigationHistory {
   return pushEntry(history, {
     kind: "plugin-store",
+    workspacePath,
+    ...(workspaceIdentity ? { workspaceIdentity } : {}),
+  });
+}
+
+export function pushEngineNavEntry(
+  history: TaskNavigationHistory,
+  workspacePath: string,
+  workspaceIdentity?: string,
+): TaskNavigationHistory {
+  return pushEntry(history, {
+    kind: "engine",
     workspacePath,
     ...(workspaceIdentity ? { workspaceIdentity } : {}),
   });

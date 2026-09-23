@@ -5,6 +5,7 @@ import {
   canGoBack as navCanGoBack,
   canGoForward as navCanGoForward,
   isAutomationsNavEntry,
+  isEngineNavEntry,
   isPluginStoreNavEntry,
   type AutomationsNavigationTab,
 } from "@/lib/taskNavigationHistory.js";
@@ -41,6 +42,7 @@ export function useWorkspaceTaskNavigation({
   onNavigateToTask,
   onNavigateToAutomations,
   onNavigateToPluginStore,
+  onNavigateToEngine,
 }: {
   intl: { formatMessage: (descriptor: { id: string }) => string };
   workspaceAbsPath: string;
@@ -49,6 +51,7 @@ export function useWorkspaceTaskNavigation({
   onNavigateToTask?: () => void;
   onNavigateToAutomations?: (target: AutomationsNavigationTarget) => void;
   onNavigateToPluginStore?: (target: Omit<AutomationsNavigationTarget, "automationId">) => void;
+  onNavigateToEngine?: (target: Omit<AutomationsNavigationTarget, "automationId">) => void;
 }) {
   // 跨 workspace 选择会先同步切换 tab，但本次 React render 捕获的 ambient
   // services 仍可能属于旧 remote attachment。local 目标必须固定从 window base attachment
@@ -59,6 +62,7 @@ export function useWorkspaceTaskNavigation({
   const taskNavHistory = useZCodeSessionStore((s) => s.taskNavHistory);
   const taskNavPushAutomations = useZCodeSessionStore((s) => s.taskNavPushAutomations);
   const taskNavPushPluginStore = useZCodeSessionStore((s) => s.taskNavPushPluginStore);
+  const taskNavPushEngine = useZCodeSessionStore((s) => s.taskNavPushEngine);
   const taskNavGoBack = useZCodeSessionStore((s) => s.taskNavGoBack);
   const taskNavGoForward = useZCodeSessionStore((s) => s.taskNavGoForward);
   const removeTaskFromNavHistory = useZCodeSessionStore((s) => s.removeTaskFromNavHistory);
@@ -224,6 +228,11 @@ export function useWorkspaceTaskNavigation({
     onNavigateToPluginStore?.({ workspacePath: workspaceAbsPath, workspaceIdentity });
   }, [onNavigateToPluginStore, taskNavPushPluginStore, workspaceAbsPath, workspaceIdentity]);
 
+  const handleOpenEngine = useCallback(() => {
+    taskNavPushEngine(workspaceAbsPath, workspaceIdentity);
+    onNavigateToEngine?.({ workspacePath: workspaceAbsPath, workspaceIdentity });
+  }, [onNavigateToEngine, taskNavPushEngine, workspaceAbsPath, workspaceIdentity]);
+
   const handleTaskNavBack = useCallback(() => {
     const currentWorkspaceState = useZCodeSessionStore
       .getState()
@@ -277,6 +286,16 @@ export function useWorkspaceTaskNavigation({
         onNavigateToPluginStore?.(currentEntry);
         return;
       }
+      if (isEngineNavEntry(currentEntry)) {
+        activateTabByPath(
+          currentEntry.workspacePath,
+          currentEntry.workspaceIdentity
+            ? { workspaceIdentity: currentEntry.workspaceIdentity }
+            : undefined,
+        );
+        onNavigateToEngine?.(currentEntry);
+        return;
+      }
       const navWorkspaceState = useZCodeSessionStore
         .getState()
         .getWorkspaceState(currentEntry.workspacePath, currentEntry.workspaceIdentity);
@@ -306,6 +325,7 @@ export function useWorkspaceTaskNavigation({
     intl,
     onNavigateToAutomations,
     onNavigateToPluginStore,
+    onNavigateToEngine,
     removeTaskFromNavHistory,
     taskNavGoBack,
     workspaceAbsPath,
@@ -363,6 +383,16 @@ export function useWorkspaceTaskNavigation({
         onNavigateToPluginStore?.(currentEntry);
         return;
       }
+      if (isEngineNavEntry(currentEntry)) {
+        activateTabByPath(
+          currentEntry.workspacePath,
+          currentEntry.workspaceIdentity
+            ? { workspaceIdentity: currentEntry.workspaceIdentity }
+            : undefined,
+        );
+        onNavigateToEngine?.(currentEntry);
+        return;
+      }
       const navWorkspaceState = useZCodeSessionStore
         .getState()
         .getWorkspaceState(currentEntry.workspacePath, currentEntry.workspaceIdentity);
@@ -391,6 +421,7 @@ export function useWorkspaceTaskNavigation({
     intl,
     onNavigateToAutomations,
     onNavigateToPluginStore,
+    onNavigateToEngine,
     removeTaskFromNavHistory,
     taskNavGoForward,
     workspaceAbsPath,
@@ -410,6 +441,7 @@ export function useWorkspaceTaskNavigation({
     handleSelectTask,
     handleOpenAutomations,
     handleOpenPluginStore,
+    handleOpenEngine,
     handleTaskNavBack,
     handleTaskNavForward,
     canGoBack,
