@@ -67,4 +67,6 @@ AI 生成的代码、命令、解释、文件和建议可能存在错误、遗�
 
 ## 四、第三方许可与版权声明
 
-本仓库第一方代码依照根 [LICENSE](LICENSE) 采用 Apache-2.0；该许可不替其他权利人新增授权，也不覆盖第三方软件、复制代码、原生二进制、字体、图标、网页素材及其他资源的独立条款。具体依赖包详见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。受第三方版权、许可及再分发条件等约束，不承诺提供官方产品的全部功能及活动政策，具体以实际发布的源码和构建产物为准。
+AnyAgent 自有代码依照根 [LICENSE](LICENSE) 采用 Apache-2.0。M0 导入的 ZCode 源码遵循固定上游版本的 Apache-2.0 许可；完整上游许可文本及 `Copyright 2026 Z.AI Co., Ltd` 声明保留在 [third-party/ZCode-LICENSE](third-party/ZCode-LICENSE)，来源和导入范围见 [ZC-04](docs/architecture/zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线)。
+
+根许可不替其他权利人新增授权，也不覆盖第三方软件、复制代码、原生二进制、字体、图标、网页素材及其他资源的独立条款。具体依赖包详见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。受第三方版权、许可及再分发条件等约束，不承诺提供官方产品的全部功能及活动政策，具体以实际发布的源码和构建产物为准。

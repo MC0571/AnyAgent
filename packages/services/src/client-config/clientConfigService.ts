@@ -65,6 +65,7 @@ export function createClientConfigService(dependencies: {
   return {
     async getSnapshot(options = {}) {
       const { forceRefresh } = clientConfigReadOptionsSchema.parse(options);
+      if (process.env.ANYAGENT_M0 === "1") return { pluginStoreOrder: null };
       const context = await dependencies.resolveRequestContext();
       const url = new URL(
         "/api/v1/client/configs",

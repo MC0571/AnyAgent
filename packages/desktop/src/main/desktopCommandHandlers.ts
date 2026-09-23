@@ -149,6 +149,7 @@ export async function clearCodingPlanWebviewStorage(options: {
 }
 
 async function fetchRemoteAppConfig(fetchRemoteConfig?: () => Promise<unknown>): Promise<unknown> {
+  if (process.env.ANYAGENT_M0 === "1") return {};
   if (!fetchRemoteConfig) throw new Error("Help config reader is unavailable");
   return fetchRemoteConfig();
 }
@@ -168,6 +169,7 @@ function resolveLocalAppConfigPath(options?: {
 }
 
 async function readLocalAppConfig(readLocalConfig?: () => unknown): Promise<unknown> {
+  if (process.env.ANYAGENT_M0 === "1") return {};
   const localConfigPath = resolveLocalAppConfigPath();
   return readLocalConfig?.() ?? JSON.parse(await readFile(localConfigPath, "utf-8"));
 }
