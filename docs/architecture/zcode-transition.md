@@ -1,16 +1,16 @@
 # ZCode 过渡适配设计
 
-目的与范围：记录可核实的来源边界、候选适配位置与迁移验证门槛；本轮不导入源码、不安装 Runtime、不执行迁移。
+目的与范围：记录可核实的来源边界、M0 整体 bootstrap 过渡基线、候选适配位置与迁移验证门槛。
 
-设计状态：Proposed。现有 ADR 未接受 ZCode v4、TanStack AI 或 AG-UI；本设计遵循 [ADR 0001](../decisions/0001-domain-tools-are-optional-plugins.md)、[ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)和 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)，不修改这些决定。
+设计状态：M0 采用固定 ZCode 源码整体 bootstrap 作为过渡基线，首个受支持开发组合为 macOS Apple Silicon；后续架构仍为 Proposed。现有 ADR 未接受 ZCode v4、TanStack AI 或 AG-UI；本设计遵循 [ADR 0001](../decisions/0001-domain-tools-are-optional-plugins.md)、[ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)和 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)，不修改这些决定。
 
-实现与验证状态：仅静态阅读与有限来源比对，未运行 ZCode 或 AnyAgent 应用；上游能力不等于 AnyAgent 已验证能力。
+实现与验证状态：M0 源码已导入本 worktree；macOS Apple Silicon 的依赖准备、构建、类型检查、lint、隔离桌面启动和一次原生模型对话已实测。现有启动观察不能证明所有网络行为。上游能力不等于 AnyAgent 已验证能力。
 
 关联文档：[架构公共边界](README.md)、[运行与信任边界](runtime-and-trust-boundaries.md)、[Engine 契约](../specs/engine-adapter.md)、[共享能力契约](../specs/shared-capabilities.md)。
 
 ## ZC-01：来源与事实边界
 
-核查日期：2026-09-22。
+以下为 2026-09-22 的历史核查快照；M0 当前导入证据见 [ZC-04](#zc-04m0-整体-bootstrap-过渡基线)。
 
 | 对象 | 已核实事实 | 不能推导的结论 |
 | --- | --- | --- |
@@ -59,6 +59,18 @@
 
 ## 未决与批准门槛
 
-需要维护者决定导入方式与范围、正式上游基线、是否暂留 v4、首个 Engine 与部署组合，以及独立发行配置。候选方案的代价分别是：整套导入能保留交互但继承耦合；按模块导入减少产品服务依赖但需要重新连接接口；仅参考重建保留最清楚边界但实现成本更高。当前首选按边界选择性导入和包装，最终选择依赖完整来源与许可核验、契约适配样例和故障验证，尚未批准。
+M0 的导入方式、固定来源与首个开发系统／架构已由维护者确定，见下节。是否长期保留 v4、未来 Engine/Workspace 组合及独立发行配置仍待后续决定。整体导入保留了现有桌面交互，也继承了上游耦合；按模块导入需要重新连接接口；仅参考重建成本更高。M0 选择不改变长期 Core + Reference App 目标。
 
 后续迁移的最小评审包应包含固定提交与文件清单、许可证检查、协议字段/语义差异、能力声明、上述验证结果和回退演练记录。未经这些证据，不将“上游有此实现”提升为“AnyAgent 已支持”。
+
+## ZC-04：M0 整体 bootstrap 过渡基线
+
+2026-09-23 固定官方 [zai-org/ZCode](https://github.com/zai-org/ZCode) 提交 `872ad960de7ec172591f7e1952f7849229f94521`，其 Git tree 为 `d185a9a893c00d51fc3fe51fe7371b9eea7de143`。本地参考副本无 Git 元数据，因此从官方提交对象导入；参考副本的 `package.json`、`pnpm-lock.yaml`、根 `LICENSE`、`NOTICE.md`、桌面主进程与 Host 入口等核对文件与固定提交逐字节一致，但不将参考目录认作来源。
+
+固定提交列出 6,973 个路径；按原路径导入其中 6,717 个文件及符号链接。排除的 256 个原路径为 `.agents/`、`.vscode/`、根 `.env*`、根 `AGENTS.md`、`README.md`、`README.en.md`、`CONTEXT.md`、`DESIGN.md`、`LICENSE`。排除仓库专用说明与环境配置，保留 AnyAgent 已有的规则、愿景、README 和 Apache-2.0 许可证；固定上游 `LICENSE` 原文另存于 [ZCode-LICENSE](../../third-party/ZCode-LICENSE)，SHA-256 为 `606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b`，其 Z.AI 版权声明见 [NOTICE](../../NOTICE.md)。导入范围的完整文件清单由本仓库 Git tree 承载；上游版本及排除规则由本节记录。导入了上游 `NOTICE.md`、`THIRD-PARTY-NOTICES.md` 和 `third-party/`，其第三方条款仍需在任何分发前按实际产物核对。
+
+M0 以 macOS Apple Silicon 为首个开发组合，使用 [根清单](../../package.json) 的 `m0:bootstrap` 和 `m0:desktop` 入口。隔离启动器在 [scripts/anyagent-m0-desktop.mjs](../../scripts/anyagent-m0-desktop.mjs) 中集中设置独立 HOME、业务数据、Electron 数据、应用名称及不可用的本地产品服务端点，并从进程环境中过滤继承的凭据。早期设置读取、Host 的本地 `.env` 与登录 Shell 采集、自动更新、遥测和官方插件市场在 M0 基线中调整或关闭。开发态 macOS 应用包、工作区链接、Finder 服务、图标、窗口及首屏使用 AnyAgent 身份；随包内部仍保留 ZCode 命名，作为待拆分的过渡实现。上游 OAuth 回调仍使用 `zcode:` 服务端约定，未验证为 AnyAgent 可用能力。
+
+本次在 macOS arm64、Node 24.14.0、pnpm 10.33.2 上完成 `pnpm m0:bootstrap`、`pnpm typecheck`、`pnpm lint`（70 条上游既有警告、0 错误）及 `pnpm m0:desktop`。首次打开的设置和数据库位于 `.anyagent-runtime/home/.zcode/`，Electron 数据位于 `.anyagent-runtime/electron/`；欢迎页可跳过未选择的服务并进入无模型工作区。实测发现并关闭了桌面灰度、Host 内置 provider 刷新、Coding Plan 配置和场景模板的隐式请求；既有 `~/.zcode` 的 2,349 个条目在启动后没有修改时间晚于启动时间的记录，既有 ZCode 应用数据目录仍不存在。用户在隔离设置中自行输入凭据后，按 [OpenCode Go 官方模型表](https://opencode.ai/docs/go/) 配置 `https://opencode.ai/zen/go/v1`、Chat Completions 和 `glm-5.3-flash`；AnyAgent 原生对话返回预期文本 `M0_GO_OK_9243`。这些是本机启动与单次对话观察、代码边界核对，不是完整流量抓包、其他平台或更多模型的验证。
+
+回退边界是本次独立分支和独立测试目录 `.anyagent-runtime/`。首次启动不迁移或复制 ZCode 现有数据与凭据；用户必须在隔离目录中明确配置模型认证。M0 不发行安装包，不将上游图标、签名、服务账户或原生 Runtime 宣称为 AnyAgent 的最终架构。

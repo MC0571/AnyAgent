@@ -2,7 +2,7 @@
 
 目的与范围：确定执行位置、状态持有者、故障恢复和安全约束，为实现与故障注入测试提供依据。
 
-设计状态：实现方案为 Proposed；本轮 Session 与 Task 的长期关系及首版策略仍为 Proposed；业务收尾与执行事实分离遵循 [ADR 0004](../decisions/0004-task-closure-is-distinct-from-execution-state.md)。实现与验证状态：当前无 Runtime、Engine 接入或业务测试，证据基线见[架构入口](README.md)。以下是设计约束及待执行验证，不是已通过测试的行为。
+设计状态：实现方案为 Proposed；本轮 Session 与 Task 的长期关系及首版策略仍为 Proposed；业务收尾与执行事实分离遵循 [ADR 0004](../decisions/0004-task-closure-is-distinct-from-execution-state.md)。实现与验证状态：2026-09-22 的原始基线无 Runtime、Engine 接入或业务测试；M0 已导入上游过渡源码，见 [ZC-04](zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线)，尚未实现本文件的产品级运行契约。以下是设计约束及待执行验证，不是已通过测试的行为。
 
 关联文档：[模块边界](README.md#arc-01组织与依赖)、[领域生命周期](../domain/lifecycle-and-ownership.md)、[Engine 契约](../specs/engine-adapter.md)、[协作契约](../specs/cross-engine-collaboration.md)、[共享能力](../specs/shared-capabilities.md)、[ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)、[ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。
 

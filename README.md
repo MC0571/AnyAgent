@@ -7,6 +7,21 @@ AnyAgent 致力于构建一个开源、本地优先的通用 Agent 桌面工作�
 
 项目目前处于早期开发阶段。长期目标与设计方向见 [VISION.md](VISION.md)，工程设计与评审入口见 [docs/README.md](docs/README.md)。
 
+## M0 开发基线
+
+M0 暂以 [固定 ZCode 源码](docs/architecture/zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线) 整体 bootstrap，首个开发组合限定 macOS Apple Silicon。准备 Node 24.14.0 和 pnpm 10.33.2 后，在干净检出中运行：
+
+```sh
+pnpm m0:bootstrap
+bash scripts/m0-smoke.sh before
+set -o pipefail
+pnpm m0:desktop 2>&1 | tee .anyagent-runtime/m0-desktop.log
+```
+
+桌面启动器将测试数据写入被 Git 忽略的 `.anyagent-runtime/`，不读取现有 ZCode 凭据；模型认证需要在此独立配置。M0 基线用于验证构建、启动和原生基础对话，不代表长期 Core + Reference App 架构已经实现。
+
+冒烟检查：首次启动后跳过上游账户登录；在模型设置中自行配置一个 Chat Completions 供应商和密钥，并选择可用模型。输入 `Reply exactly M0_GO_OK_9243`，待模型回复 `M0_GO_OK_9243` 后，在另一个终端运行 `bash scripts/m0-smoke.sh after`。检查会从隔离数据库核对这轮原生对话，确认自启动标记以来未改写常见 ZCode 数据目录，并检查日志中没有隐式公共配置请求失败。使用 mise 的全新检出需先执行 `mise trust`。日志留在被忽略的本地目录；不要提交包含凭据或私人内容的日志。
+
 ## 长期定位
 
 AnyAgent 同时面向两层目标：

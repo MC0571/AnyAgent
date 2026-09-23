@@ -4,7 +4,7 @@
 
 设计状态：Proposed；遵循已接受的 [ADR 0001](../decisions/0001-domain-tools-are-optional-plugins.md)、[ADR 0002](../decisions/0002-engine-native-and-product-shared-tools-are-distinct.md) 和 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。本轮关于 Session 与 Task 关系的长期方向及首版策略仍是 Proposed，不新增 Accepted ADR，也不批准新的技术选型。
 
-实现与验证状态：历史核查快照为 2026-09-22 的 AnyAgent `intial` 分支、提交 `2b2c3b55ffcea62cd75e4bff9bafe9f55482523f`；该日期与提交保留，不被本轮覆盖。本轮定向复核于 2026-09-22、`intial` 分支 HEAD `73520d02bca217472c61fa62d5940eee37645a78` 完成，仍未发现应用源码、依赖声明、Runtime 或业务测试；当前实际可执行逻辑只有 [ADR 索引生成](../decisions/generate-index.sh)及其[测试脚本](../decisions/test-generate-index.sh)。以下模块和流程均为待实现设计，不能引用为已支持能力。
+实现与验证状态：历史核查快照为 2026-09-22 的 AnyAgent `intial` 分支、提交 `2b2c3b55ffcea62cd75e4bff9bafe9f55482523f`；该日期与提交保留。本轮定向复核于 2026-09-22、`intial` 分支 HEAD `73520d02bca217472c61fa62d5940eee37645a78` 完成，当时未发现应用源码、依赖声明、Runtime 或业务测试。M0 当前已导入上游过渡源码，来源与范围见 [ZC-04](zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线)；以下 Core 模块和流程仍为待实现设计，不能以源码导入宣称已支持。
 
 关联权威：[产品愿景](../../VISION.md)、[领域定义](../domain/README.md)、[状态归属](../domain/lifecycle-and-ownership.md)、[Engine 契约](../specs/engine-adapter.md)、[协作契约](../specs/cross-engine-collaboration.md)、[共享能力契约](../specs/shared-capabilities.md)。
 
