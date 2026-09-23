@@ -2,7 +2,7 @@
 
 目的与范围：规定 Task／Workflow 协调参与者、显式消息与产物的外部行为；不规定消息总线、锁实现或 Harness 私有上下文结构。
 
-设计状态：Proposed（2026-09-22），遵循 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。本规格把 Task／参与者与 Session 的业务使用关联同 Session 的 Engine 身份和原生状态分开；首版默认新独立 Task 新建参与者和 Session，暂不支持跨 Task 使用既有 Session。实现与验证状态：尚无业务代码或协作测试；CO 场景为待实现验收要求。身份、基数与状态权威定义见[领域模型](../domain/README.md)和[生命周期](../domain/lifecycle-and-ownership.md)，输入与原生事件证据见[Engine 契约](engine-adapter.md)，资源边界见[共享能力](shared-capabilities.md)。
+设计状态：Proposed（2026-09-22），遵循 [ADR 0003](../decisions/0003-cross-engine-collaboration-is-task-scoped.md)。本规格把 Task／参与者与 Session 的业务使用关联同 Session 的 Engine 身份和原生状态分开；首版默认新独立 Task 新建参与者和 Session，暂不支持跨 Task 使用既有 Session。实现与验证状态：M0 已导入上游过渡源码，但尚未实现或验证本规格的跨 Engine 协作；CO 场景为待实现验收要求。身份、基数与状态权威定义见[领域模型](../domain/README.md)和[生命周期](../domain/lifecycle-and-ownership.md)，输入与原生事件证据见[Engine 契约](engine-adapter.md)，资源边界见[共享能力](shared-capabilities.md)。
 
 本规格在协作能力实施时约束其行为；“首版待实现验收”不表示近期 Engine 接入 Milestone 必须实现委派、消息、Workflow 调度、预算或多参与者整合。具体交付范围以 GitHub Milestone／Issue 为准，单参与者路径仍须遵守适用的业务接纳、审批、取消与来源归属约束。
 
