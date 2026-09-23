@@ -12,7 +12,7 @@ case "${1:-}" in
   before)
     mkdir -p -m 700 "$runtime"
     if [[ -f "$db" ]]; then
-      sqlite3 -readonly "$db" 'SELECT COALESCE(MAX(time_created),0) FROM message;' > "$baseline_file"
+      sqlite3 "$db" 'SELECT COALESCE(MAX(time_created),0) FROM message;' > "$baseline_file"
     else
       printf '0\n' > "$baseline_file"
     fi
@@ -30,7 +30,7 @@ case "${1:-}" in
         exit 1
       fi
     done
-    result="$(sqlite3 -readonly "$db" "SELECT EXISTS(SELECT 1 FROM message u JOIN part up ON up.message_id=u.id JOIN message a ON a.session_id=u.session_id AND a.sequence=u.sequence+1 JOIN part ap ON ap.message_id=a.id WHERE u.time_created > $baseline AND json_extract(u.data,'$.role')='user' AND json_extract(up.data,'$.text')='Reply exactly M0_GO_OK_9243' AND json_extract(a.data,'$.role')='assistant' AND json_extract(ap.data,'$.text')='M0_GO_OK_9243');")"
+    result="$(sqlite3 "$db" "SELECT EXISTS(SELECT 1 FROM message u JOIN part up ON up.message_id=u.id JOIN message a ON a.session_id=u.session_id AND a.sequence=u.sequence+1 JOIN part ap ON ap.message_id=a.id WHERE u.time_created > $baseline AND json_extract(u.data,'$.role')='user' AND json_extract(up.data,'$.text')='Reply exactly M0_GO_OK_9243' AND json_extract(a.data,'$.role')='assistant' AND json_extract(ap.data,'$.text')='M0_GO_OK_9243');")"
     [[ "$result" == "1" ]] || { echo "Expected native chat response was not found in the isolated database." >&2; exit 1; }
     if grep -Eq 'client-config\.getSnapshot FAIL|\[community\] failed to fetch remote config' "$log"; then
       echo "An unselected upstream configuration request failed during the smoke run." >&2
