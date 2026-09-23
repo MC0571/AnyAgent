@@ -31,9 +31,9 @@
 ## 关联事实载体
 
 - [决策 0003：跨 Engine 协作以 Task 与 Workflow 为边界](0003-cross-engine-collaboration-is-task-scoped.md)
-- [生命周期：取消、停止与业务收尾](../domain/lifecycle-and-ownership.md#LIFE-03)
-- [生命周期：归档与删除](../domain/lifecycle-and-ownership.md#LIFE-05)
-- [运行边界：状态持久化与恢复](../architecture/runtime-and-trust-boundaries.md#RT-01)
+- [生命周期：取消、停止与业务收尾](../domain/lifecycle-and-ownership.md#life-03-取消停止与副作用)
+- [生命周期：归档与删除](../domain/lifecycle-and-ownership.md#life-05-归档删除与历史)
+- [运行边界：状态持久化与恢复](../architecture/runtime-and-trust-boundaries.md#rt-01运行所有权与持久化方案)
 
 ## 修订记录
 
