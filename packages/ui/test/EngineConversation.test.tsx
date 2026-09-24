@@ -222,6 +222,7 @@ test("EngineConversation sends through the product composer and renders ordered 
   const replies: Array<{ approvalId: string; optionId: string }> = [];
   const feedbackRequests: Array<Record<string, unknown>> = [];
   const stopRequests: Array<{ taskId: string; executionId: string }> = [];
+  const queueResumeRequests: string[] = [];
   let failNextSubmit = false;
   let clock = 1_000;
   const taskRecord = (id: string) => {
@@ -350,6 +351,20 @@ test("EngineConversation sends through the product composer and renders ordered 
       };
       emit();
     },
+    moveQueuedInput: async () => {},
+    resumeQueuedInputs: async ({ taskId: resumedTaskId }: { taskId: string }) => {
+      queueResumeRequests.push(resumedTaskId);
+      activeTask = { ...activeTask, session: { ...activeTask.session, queuePaused: false } };
+      emit();
+    },
+    sendQueuedInputNow: async () => ({
+      priorityRestored: false,
+      stopRequest: {
+        status: "requested",
+        deliveryStatus: "delivered",
+        stopEvidence: null,
+      },
+    }),
     replyToApproval: async ({ approvalId, optionId }: { approvalId: string; optionId: string }) => {
       replies.push({ approvalId, optionId });
       history = {
@@ -719,7 +734,9 @@ test("EngineConversation sends through the product composer and renders ordered 
     assert.equal(composerSubmit()?.getAttribute("aria-label"), "加入队列");
     const queueDraft = document.querySelector<HTMLElement>(
       '[data-testid="engine-composer-input"]',
-    ) as HTMLElement & { __zcodeLexicalInputE2E: { setText: (value: string) => void } };
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E: { setText: (value: string) => void; getText: () => string };
+    };
     await act(async () => queueDraft.__zcodeLexicalInputE2E.setText("Queued while running"));
     await act(async () => composerSubmit()?.click());
     await waitFor(
@@ -740,6 +757,79 @@ test("EngineConversation sends through the product composer and renders ordered 
       null,
       "a queued Input has not reached the Engine and is not a conversation message",
     );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-edit-input-queued-test"]')
+        ?.click(),
+    );
+    await waitFor(() => assert.equal(container.querySelector('[data-testid="v4-queue"]'), null));
+    assert.equal(queueDraft.__zcodeLexicalInputE2E.getText(), "Queued while running");
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(queuedRequests.length, 2));
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="v4-queue-item-send-now-input-queued-test"]',
+        )
+        ?.click(),
+    );
+    assert.equal(
+      container.querySelector('[data-testid="engine-input-input-queued-test"]'),
+      null,
+      "send-now request alone must not create a dispatched conversation message",
+    );
+    history = {
+      ...history,
+      inputs: history.inputs.map((input) =>
+        input.id === "input-queued-test" && input.status === "queued"
+          ? {
+              ...input,
+              attachments: [
+                { id: "old-attachment", fileName: "old.txt", mimeType: "text/plain", sizeBytes: 4 },
+              ],
+            }
+          : input,
+      ),
+    };
+    await act(async () => emit());
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-edit-input-queued-test"]')
+        ?.click(),
+    );
+    assert.match(
+      container.querySelector('[data-testid="v4-queue"]')?.textContent ?? "",
+      /Queued while running/,
+    );
+    const beforeQueuePause = history;
+    history = {
+      ...history,
+      inputs: history.inputs.map((input) =>
+        input.status === "started" ? { ...input, status: "completed" } : input,
+      ),
+      executions: history.executions.map((execution) =>
+        execution.status === "started" ? { ...execution, status: "completed" } : execution,
+      ),
+    };
+    activeTask = { ...activeTask, session: { ...activeTask.session, queuePaused: true } };
+    await act(async () => emit());
+    assert.equal(
+      container.querySelector('[data-testid="v4-queue"]')?.getAttribute("data-queue-auto-drain"),
+      "false",
+    );
+    assert.ok(container.querySelector('[data-testid="v4-queue-paused-banner"]'));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="v4-queue-resume"]')?.click(),
+    );
+    await waitFor(() => assert.deepEqual(queueResumeRequests, [taskId]));
+    await waitFor(() =>
+      assert.equal(
+        container.querySelector('[data-testid="v4-queue"]')?.getAttribute("data-queue-auto-drain"),
+        "true",
+      ),
+    );
+    history = beforeQueuePause;
+    await act(async () => emit());
     await act(async () =>
       container
         .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-delete-input-queued-test"]')
@@ -2636,11 +2726,27 @@ test("an active ZCode Harness task switches models within its Session and submit
       "/help compact should describe the Host instructions field accurately",
     );
     assert.equal(submissions.length, 0);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help locale"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.ok(
+          document.body.textContent?.includes(
+            "M1 通过产品全局 UI 语言偏好支持 auto、en-US 和 zh-CN。",
+          ),
+        ),
+      "/help locale should describe the existing product preference route",
+    );
+    assert.equal(submissions.length, 0);
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/help"));
     await submitCurrentDraft();
     await waitFor(
       () =>
-        assert.ok(document.body.textContent?.includes("固定 CLI 命令暂不支持：/login、/logout")),
+        assert.ok(
+          document.body.textContent?.includes(
+            "固定 CLI 命令暂不支持：/login、/logout、/expert、/dwf、/fork、/mcp、/plugins、/resume、/rewind、/goal",
+          ),
+        ),
       "/help should distinguish the fixed M0 catalog from M1-supported commands",
     );
 
@@ -2649,9 +2755,37 @@ test("an active ZCode Harness task switches models within its Session and submit
     assert.equal(submissions.length, 0, "unmapped native /goal must not become an ordinary prompt");
     assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/goal status");
     await waitFor(
-      () => assert.ok(document.body.textContent?.includes("没有对应的 Host 操作；输入已保留")),
-      "a fixed but unmapped M0 command should explain its limitation",
+      () =>
+        assert.ok(
+          document.body.textContent?.includes(
+            "M0 保存 Session 目标并可触发目标续跑；M1 没有对应的 Task 级 Host/Runtime 操作。",
+          ),
+        ),
+      "a fixed but unmapped M0 command should explain the missing Task-scoped operation",
     );
+
+    const unsupportedNativeCommands = [
+      ["/login setup", "M0 登录会启动共享账号与凭据流程"],
+      ["/logout", "M0 退出登录会删除多个 Session 共用的凭据"],
+      ["/expert status", "M0 管理持久化 Expert 工作流"],
+      ["/dwf list", "M0 操作 CLI 动态工作流运行记录"],
+      ["/fork latest", "M0 从工作区检查点分叉，M1 从指定产品 Execution 分叉"],
+      ["/mcp status", "M0 管理 CLI 的 MCP 服务连接"],
+      ["/plugin list", "M0 修改后续 CLI Session 使用的插件配置"],
+      ["/continue", "M0 CLI Session ID 不能安全地映射并授权"],
+      ["/rewind latest", "M0 恢复工作区检查点；M1 只支持绑定到指定产品 Execution"],
+      ["/target pause", "M0 保存 Session 目标并可触发目标续跑"],
+    ] as const;
+    for (const [command, reason] of unsupportedNativeCommands) {
+      await act(async () => input.__zcodeLexicalInputE2E!.setText(command));
+      await submitCurrentDraft();
+      assert.equal(submissions.length, 0, `${command} must not become an ordinary Input`);
+      assert.equal(input.__zcodeLexicalInputE2E!.getText(), command);
+      await waitFor(
+        () => assert.ok(document.body.textContent?.includes(reason)),
+        `${command} should preserve its draft and explain the semantic/ownership boundary`,
+      );
+    }
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/custom-note take notes"));
     await submitCurrentDraft();
@@ -3204,8 +3338,60 @@ test("an active ZCode Harness task switches models within its Session and submit
       "/init should submit through the product Runtime input path",
     );
     assert.equal(submissions[submissionsBeforePlan + 5]?.taskId, forkTask.id);
+    const submissionsBeforeLocale = submissions.length;
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/loc"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="app-slash:locale"]')),
+      "the mapped M0 /locale command should be discoverable in the M1 Composer picker",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="app-slash:locale"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await waitFor(
+      () => assert.equal(forkInput.__zcodeLexicalInputE2E!.getText(), "/locale "),
+      "selecting /locale should preserve the M0 command form for entering a preference",
+    );
+    assert.equal(submissions.length, submissionsBeforeLocale);
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/locale"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("当前界面语言：zh-CN（偏好：zh-CN）")),
+      "/locale should report the product's current UI preference",
+    );
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/locale en-US"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.equal(dom.window.localStorage.getItem("zcode-locale-preference"), "en-US"),
+      "/locale en-US should update the product's persisted locale preference",
+    );
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/locale fr-FR"));
+    await submitCurrentDraft();
+    assert.equal(forkInput.__zcodeLexicalInputE2E!.getText(), "/locale fr-FR");
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("Unsupported UI locale fr-FR")),
+      "an unsupported locale should preserve its draft and explain the accepted values",
+    );
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/language auto"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.equal(dom.window.localStorage.getItem("zcode-locale-preference"), "system"),
+      "/language auto should persist the product system locale preference",
+    );
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/locale zh-CN"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.equal(dom.window.localStorage.getItem("zcode-locale-preference"), "zh-CN"),
+      "the UI locale should restore to its original test language",
+    );
+    assert.equal(
+      submissions.length,
+      submissionsBeforeLocale,
+      "locale must not create a Task Input",
+    );
     await act(async () => {
-      input.blur();
+      forkInput.blur();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
   } finally {

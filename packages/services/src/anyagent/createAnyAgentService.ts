@@ -303,6 +303,15 @@ export function createAnyAgentService(
     async cancelQueuedInput(input) {
       runtime.cancelQueuedInput(input);
     },
+    async moveQueuedInput(input) {
+      runtime.moveQueuedInput(input);
+    },
+    async resumeQueuedInputs(input) {
+      await runtime.resumeQueuedInputs(input);
+    },
+    async sendQueuedInputNow(input) {
+      return runtime.sendQueuedInputNow(input);
+    },
     async reviseTurn(input) {
       await runtime.reviseTurn(input);
     },

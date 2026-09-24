@@ -1329,6 +1329,292 @@ export class TaskRuntime {
     return this.#publicInput(record.data);
   }
 
+  moveQueuedInput(
+    input: TaskLifecycleRequest & {
+      readonly inputId: string;
+      readonly beforeInputId: string | null;
+    },
+  ): void {
+    this.#assertOpen();
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "execution.run",
+    );
+    this.#requireActiveTask(task);
+    if (this.#queueDrainingSessions.has(session.id))
+      throw new RuntimeEligibilityError("A queued Input is already being dispatched.");
+    const queued = this.#queuedInputs(session.id);
+    const moving = queued.find((record) => record.id === input.inputId);
+    if (!moving || moving.data.participantId !== input.participantId)
+      throw new RuntimeEligibilityError("Queued Input ownership or state changed before reorder.");
+    if (input.beforeInputId === input.inputId) return;
+    const remaining = queued.filter((record) => record.id !== input.inputId);
+    const beforeIndex =
+      input.beforeInputId === null
+        ? remaining.length
+        : remaining.findIndex((record) => record.id === input.beforeInputId);
+    if (beforeIndex < 0)
+      throw new RuntimeEligibilityError("Queue reorder anchor is no longer queued.");
+    remaining.splice(beforeIndex, 0, moving);
+    this.#store.transaction(() => {
+      remaining.forEach((record, position) => {
+        record.data.queuePosition = position;
+        this.#save(
+          "input",
+          record.id,
+          task.id,
+          session.id,
+          record.id,
+          record.data,
+          "queued",
+          record.createdAt,
+          this.#now(),
+        );
+      });
+    });
+    this.#publish(task.id, "input", moving.id);
+  }
+
+  async resumeQueuedInputs(input: TaskLifecycleRequest): Promise<void> {
+    this.#assertOpen();
+    await this.#withCommandLock(`queue-resume:${input.sessionId}`, async () => {
+      const { task, session } = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "execution.run",
+      );
+      this.#requireActiveTask(task);
+      if (!session.data.projection.queuePaused)
+        throw new RuntimeEligibilityError("This Session queue is not paused.");
+      this.#assertNoActiveCompact(task.id, session.id);
+      this.#assertNoActiveFileRewind(task.id, session.id);
+      const queued = this.#queuedInputs(session.id);
+      if (!queued.length) throw new RuntimeEligibilityError("This Session has no queued Inputs.");
+      const unresolvedInput = this.#store
+        .listInSession<InputData>("input", session.id)
+        .find((record) =>
+          ["received", "native-accepted", "started", "unknown"].includes(record.data.status),
+        );
+      const unresolvedExecution = this.#store
+        .listInSession<ExecutionData>("execution", session.id)
+        .find((record) => !TERMINAL_EXECUTION_STATUSES.has(record.data.status));
+      if (unresolvedInput || unresolvedExecution)
+        throw new RuntimeEligibilityError(
+          "Reconcile the original Execution to a confirmed terminal state before resuming the queue.",
+          "result-unknown",
+        );
+      const nativeSessionId = session.data.nativeSessionId;
+      if (!nativeSessionId || this.#liveSessions.get(session.id) !== nativeSessionId)
+        throw new RuntimeEligibilityError(
+          "Restore the original native Session before resuming the queue.",
+        );
+      const engine = this.#engineFor(task.data);
+      this.#assertCapability(
+        await this.#capabilities(engine),
+        task.data.engineId,
+        task.data.environment.id,
+        "execution.run",
+        task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
+      );
+      const latest = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "execution.run",
+      );
+      if (
+        !latest.session.data.projection.queuePaused ||
+        latest.session.data.nativeSessionId !== nativeSessionId ||
+        this.#liveSessions.get(session.id) !== nativeSessionId
+      )
+        throw new RuntimeEligibilityError(
+          "The Task or native Session changed before queue resume.",
+        );
+      this.#assertNoActiveCompact(task.id, session.id);
+      this.#assertNoActiveFileRewind(task.id, session.id);
+      if (
+        this.#store
+          .listInSession<InputData>("input", session.id)
+          .some((record) =>
+            ["received", "native-accepted", "started", "unknown"].includes(record.data.status),
+          ) ||
+        this.#store
+          .listInSession<ExecutionData>("execution", session.id)
+          .some((record) => !TERMINAL_EXECUTION_STATUSES.has(record.data.status))
+      )
+        throw new RuntimeEligibilityError("Execution state changed before queue resume.");
+      const resumedAt = this.#now();
+      session.data.projection = {
+        ...latest.session.data.projection,
+        queuePaused: false,
+        updatedAt: resumedAt,
+      };
+      this.#save(
+        "session",
+        session.id,
+        task.id,
+        session.id,
+        null,
+        session.data,
+        session.data.projection.status,
+        session.createdAt,
+        resumedAt,
+      );
+      this.#publish(task.id, "task", task.id);
+      void this.#drainQueuedInputs(session.id);
+    });
+  }
+
+  async sendQueuedInputNow(input: TaskLifecycleRequest & { readonly inputId: string }): Promise<{
+    readonly stopRequest: RuntimeStopRequest | null;
+    readonly priorityRestored: boolean;
+  }> {
+    this.#assertOpen();
+    return this.#withCommandLock(`send-queued:${input.sessionId}`, async () => {
+      const { task, session } = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "execution.run",
+      );
+      this.#requireActiveTask(task);
+      if (session.data.projection.queuePaused)
+        throw new RuntimeEligibilityError("Resume the paused queue explicitly before send-now.");
+      const originalOrder = this.#queuedInputs(session.id).map((record) => record.id);
+      if (!originalOrder.includes(input.inputId))
+        throw new RuntimeEligibilityError("Input is no longer queued.");
+      const inputs = this.#store.listInSession<InputData>("input", session.id);
+      if (inputs.some((record) => record.data.status === "unknown"))
+        throw new RuntimeEligibilityError(
+          "The native result is unknown; reconcile it before sending queued work.",
+          "result-unknown",
+        );
+      const activeExecutions = this.#store
+        .listInSession<ExecutionData>("execution", session.id)
+        .filter((record) => !TERMINAL_EXECUTION_STATUSES.has(record.data.status));
+      if (
+        activeExecutions.length > 1 ||
+        activeExecutions.some((record) => record.data.status === "unknown")
+      )
+        throw new RuntimeEligibilityError(
+          "The current execution needs reconciliation before send-now.",
+        );
+      if (
+        activeExecutions.length === 0 &&
+        inputs.some((record) => DISPATCHED_INPUT_STATUSES.has(record.data.status))
+      )
+        throw new RuntimeEligibilityError(
+          "The current Input has no confirmed native Execution yet.",
+        );
+      const active = activeExecutions[0];
+      if (active) {
+        const unresolvedStop = this.#store
+          .list<RuntimeStopRequest>("stop-request", task.id)
+          .find(
+            (record) =>
+              record.data.executionId === active.id &&
+              ["requested", "unknown"].includes(record.data.status),
+          );
+        if (unresolvedStop)
+          throw new RuntimeEligibilityError(
+            `Execution ${active.id} already has unresolved StopRequest ${unresolvedStop.id}.`,
+          );
+        this.#qualify(
+          input.taskId,
+          input.participantId,
+          input.sessionId,
+          input.authorizationId,
+          "execution.interrupt",
+        );
+        const engine = this.#engineFor(task.data);
+        const snapshot = await this.#capabilities(engine);
+        this.#assertCapability(
+          snapshot,
+          task.data.engineId,
+          task.data.environment.id,
+          "execution.interrupt",
+          task.data.engine.configurationVersion,
+          task.data.engine.adapterVersion,
+        );
+      }
+      // A terminal event may start draining while the capability probe is in flight.
+      // In that case the move rejects and we never claim this item was prioritized.
+      this.moveQueuedInput({
+        ...input,
+        beforeInputId: this.#queuedInputs(session.id)[0]?.id ?? null,
+      });
+      const restorePriority = (): boolean => {
+        if (this.#queueDrainingSessions.has(session.id)) return false;
+        const currentOrder = this.#queuedInputs(session.id).map((record) => record.id);
+        const expectedOrder = [
+          input.inputId,
+          ...originalOrder.filter((id) => id !== input.inputId),
+        ];
+        if (currentOrder.join("\u0000") !== expectedOrder.join("\u0000")) return false;
+        this.moveQueuedInput({
+          ...input,
+          beforeInputId: originalOrder[originalOrder.indexOf(input.inputId) + 1] ?? null,
+        });
+        return true;
+      };
+      if (active) {
+        const current = this.#require<ExecutionData>("execution", active.id);
+        if (TERMINAL_EXECUTION_STATUSES.has(current.data.status)) {
+          void this.#drainQueuedInputs(session.id);
+          return { stopRequest: null, priorityRestored: false };
+        }
+        try {
+          const stopRequest = await this.requestStop({ ...input, executionId: active.id });
+          return {
+            stopRequest,
+            priorityRestored:
+              stopRequest.deliveryStatus === "not-delivered" && stopRequest.status !== "confirmed"
+                ? restorePriority()
+                : false,
+          };
+        } catch (error) {
+          // Completion can win the race against interrupt qualification. The
+          // queued item then follows the ordinary one-at-a-time drain path.
+          if (
+            TERMINAL_EXECUTION_STATUSES.has(
+              this.#require<ExecutionData>("execution", active.id).data.status,
+            )
+          ) {
+            void this.#drainQueuedInputs(session.id);
+            return { stopRequest: null, priorityRestored: false };
+          }
+          const restored = restorePriority();
+          throw new RuntimeEligibilityError(
+            `Send-now could not stop the current Execution; queue order ${restored ? "was restored" : "may have changed"}: ${errorMessage(error)}`,
+          );
+        }
+      }
+      void this.#drainQueuedInputs(session.id);
+      return { stopRequest: null, priorityRestored: false };
+    });
+  }
+
+  #queuedInputs(sessionId: string): StoredRecord<InputData>[] {
+    return this.#store
+      .listInSession<InputData>("input", sessionId)
+      .filter((record) => record.data.status === "queued")
+      .map((record, index) => ({ record, index }))
+      .sort(
+        (left, right) =>
+          (left.record.data.queuePosition ?? left.index) -
+            (right.record.data.queuePosition ?? right.index) || left.index - right.index,
+      )
+      .map(({ record }) => record);
+  }
+
   async reviseTurn(input: ReviseTurn): Promise<RuntimeInput> {
     this.#assertOpen();
     const { task, session } = this.#qualify(
@@ -1524,7 +1810,7 @@ export class TaskRuntime {
         .list<InputData>("input", task.id)
         .filter((record) => record.data.sessionId === session.id);
       if (promotedInputId) {
-        const queuedRecords = records.filter((record) => record.data.status === "queued");
+        const queuedRecords = this.#queuedInputs(session.id);
         const queuedRecord = this.#require<InputData>("input", promotedInputId);
         if (
           queuedRecord.taskId !== task.id ||
@@ -1558,6 +1844,7 @@ export class TaskRuntime {
         this.#assertNoActiveCompact(task.id, session.id);
         this.#assertNoActiveFileRewind(task.id, session.id);
         queuedRecord.data.status = "received";
+        delete queuedRecord.data.queuePosition;
         queuedRecord.data.error = null;
         data = queuedRecord.data;
         this.#save(
@@ -1573,7 +1860,7 @@ export class TaskRuntime {
         );
       } else {
         this.#assertNoActiveFileRewind(task.id, session.id);
-        const queuedRecords = records.filter((record) => record.data.status === "queued");
+        const queuedRecords = this.#queuedInputs(session.id);
         const dispatchedRecords = records.filter((record) =>
           DISPATCHED_INPUT_STATUSES.has(record.data.status),
         );
@@ -1628,6 +1915,15 @@ export class TaskRuntime {
           ...(submissionConfig ? { submissionConfig } : {}),
           ...(recordedAttachments ? { attachments: recordedAttachments } : {}),
           status: queued ? "queued" : "received",
+          ...(queued
+            ? {
+                queuePosition:
+                  Math.max(
+                    queuedRecords.length - 1,
+                    ...queuedRecords.map((record) => record.data.queuePosition ?? -1),
+                  ) + 1,
+              }
+            : {}),
           receivedAt,
           acceptedAt: null,
           startedAt: null,
@@ -2948,14 +3244,13 @@ export class TaskRuntime {
     if (this.#closed || this.#queueDrainingSessions.has(sessionId)) return;
     this.#queueDrainingSessions.add(sessionId);
     try {
-      const queued = this.#store
-        .listInSession<InputData>("input", sessionId)
-        .find((record) => record.data.status === "queued");
+      const queued = this.#queuedInputs(sessionId)[0];
       if (!queued) return;
 
       const { taskId } = queued;
       const task = this.#store.get<TaskData>("task", taskId);
       const session = this.#store.get<SessionData>("session", sessionId);
+      if (session?.data.projection.queuePaused) return;
       if (!task || task.data.status !== "active") {
         this.#rejectQueuedInputs(
           taskId,
@@ -3037,9 +3332,7 @@ export class TaskRuntime {
       }
     } catch (error) {
       if (!this.#closed) {
-        const queued = this.#store
-          .listInSession<InputData>("input", sessionId)
-          .find((record) => record.data.status === "queued");
+        const queued = this.#queuedInputs(sessionId)[0];
         if (queued)
           this.#rejectQueuedInputs(
             queued.taskId,
@@ -3957,7 +4250,8 @@ export class TaskRuntime {
         (record) =>
           record.sessionId === sessionId &&
           record.status !== null &&
-          ACTIVE_INPUT_STATUSES.has(record.status),
+          ACTIVE_INPUT_STATUSES.has(record.status) &&
+          record.status !== "queued",
       );
     const execution = this.#store
       .list<ExecutionData>("execution", taskId)
@@ -4362,6 +4656,7 @@ export class TaskRuntime {
       session.data.projection = {
         ...session.data.projection,
         status: "unknown",
+        ...(this.#queuedInputs(session.id).length ? { queuePaused: true } : {}),
         updatedAt: recoveredAt,
       };
       this.#save(
@@ -4384,12 +4679,8 @@ export class TaskRuntime {
       );
       for (const input of this.#store.list<InputData>("input", session.taskId)) {
         if (input.data.sessionId !== session.id) continue;
-        if (input.data.status === "queued") {
-          input.data.status = "rejected";
-          input.data.error =
-            "Runtime restarted before this queued Input was dispatched; it was not sent.";
-          input.data.terminalAt = recoveredAt;
-        } else if (ACTIVE_INPUT_STATUSES.has(input.data.status)) {
+        if (input.data.status === "queued") continue;
+        if (ACTIVE_INPUT_STATUSES.has(input.data.status)) {
           input.data.status = "unknown";
           input.data.error =
             "Runtime restarted; explicit native Execution reconciliation is required before continuing.";

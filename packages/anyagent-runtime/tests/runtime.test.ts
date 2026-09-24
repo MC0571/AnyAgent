@@ -594,7 +594,7 @@ test("queued Input is rejected when its Task freezes or authorization expires be
   }
 });
 
-test("Runtime restart marks dispatched Input unknown and rejects queued text without resending", async () => {
+test("Runtime restart holds queued text until original reconciliation, native restore, and explicit resume", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-queue-restart-"));
   const databasePath = join(directory, "runtime.sqlite");
   const engine = new ManualEngine();
@@ -615,6 +615,15 @@ test("Runtime restart marks dispatched Input unknown and rejects queued text wit
     };
     await runtime.submitInput({ ...identity, text: "A" });
     queuedId = (await runtime.submitInput({ ...identity, text: "B", delivery: "queue" })).id;
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "queue-restart-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "queue-restart-A-started" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
     runtime.close();
 
     runtime = createTaskRuntime({
@@ -623,12 +632,35 @@ test("Runtime restart marks dispatched Input unknown and rejects queued text wit
     });
     const history = runtime.getHistory(taskId)!;
     assert.equal(history.inputs.find((input) => input.text === "A")?.status, "unknown");
-    assert.equal(history.inputs.find((input) => input.id === queuedId)?.status, "rejected");
-    assert.match(
-      history.inputs.find((input) => input.id === queuedId)?.error ?? "",
-      /before this queued Input was dispatched/i,
-    );
+    assert.equal(history.inputs.find((input) => input.id === queuedId)?.status, "queued");
+    assert.equal(runtime.getTask(taskId)?.session.queuePaused, true);
     assert.equal(engine.runs.length, 1);
+    await assert.rejects(runtime.resumeQueuedInputs(identity), /Session is unknown/i);
+    await assert.rejects(runtime.restoreTaskSession(identity), /unresolved native work/i);
+    const executionId = history.executions[0]?.id;
+    assert.ok(executionId);
+    engine.setCapability("execution.reconcile", {
+      support: "supported",
+      availability: "available",
+    });
+    engine.reconcileResult = {
+      status: "completed",
+      result: "original finished",
+      evidence: { source: "engine", evidenceId: "queue-restart-original-completed" },
+    };
+    await runtime.reconcileExecution({ ...identity, executionId });
+    assert.equal(engine.runs.length, 1);
+    const restored = await runtime.restoreTaskSession(identity);
+    assert.equal(restored.session.queuePaused, true);
+    assert.equal(
+      engine.runs.length,
+      1,
+      "restoring the native Session cannot auto-dispatch queued work",
+    );
+    await runtime.resumeQueuedInputs(identity);
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.input, "B");
+    assert.equal(engine.runs[1]?.commandId, queuedId);
   } finally {
     runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -1114,6 +1146,198 @@ test("Runtime rejects busy queued attachments and records queue cancellation", a
     );
     assert.equal(engine.runs.length, 1);
     assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("queued Inputs keep a persisted order and dispatch each exactly once", async () => {
+  const engine = new ManualEngine();
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-queue-order-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const b = await runtime.submitInput({ ...identity, text: "B", delivery: "queue" });
+    await runtime.submitInput({ ...identity, text: "C", delivery: "queue" });
+    const d = await runtime.submitInput({ ...identity, text: "D", delivery: "queue" });
+    runtime.moveQueuedInput({ ...identity, inputId: d.id, beforeInputId: b.id });
+    assert.deepEqual(
+      runtime
+        .getHistory(task.id)!
+        .inputs.filter((input) => input.status === "queued")
+        .sort((left, right) => left.queuePosition! - right.queuePosition!)
+        .map((input) => input.text),
+      ["D", "B", "C"],
+    );
+    const database = new DatabaseSync(databasePath);
+    try {
+      const stored = database
+        .prepare("SELECT data FROM runtime_records WHERE kind = 'input' AND id = ?")
+        .get(d.id) as { data: string };
+      assert.equal(JSON.parse(stored.data).queuePosition, 0);
+    } finally {
+      database.close();
+    }
+    assert.throws(
+      () =>
+        runtime.moveQueuedInput({
+          ...identity,
+          inputId: d.id,
+          beforeInputId: "missing",
+        }),
+      /anchor/i,
+    );
+    const finish = (runIndex: number, label: string) => {
+      engine.emit(runIndex, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: `${label}-accepted` },
+      });
+      engine.emit(runIndex, {
+        type: "execution.started",
+        evidence: { source: "engine", evidenceId: `${label}-started` },
+      });
+      engine.emit(runIndex, {
+        type: "execution.completed",
+        evidence: { source: "engine", evidenceId: `${label}-completed` },
+      });
+    };
+    finish(0, "A");
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.input, "D");
+    finish(1, "D");
+    await until(() => engine.runs.length === 3);
+    assert.equal(engine.runs[2]?.input, "B");
+    finish(2, "B");
+    await until(() => engine.runs.length === 4);
+    assert.equal(engine.runs[3]?.input, "C");
+    finish(3, "C");
+    await until(() =>
+      runtime.getHistory(task.id)!.inputs.every((input) => input.status === "completed"),
+    );
+    assert.deepEqual(
+      engine.runs.map((run) => run.input),
+      ["A", "D", "B", "C"],
+    );
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("send-now requests a real stop and waits for terminal evidence before promoting its target", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const b = await runtime.submitInput({ ...identity, text: "B", delivery: "queue" });
+    const c = await runtime.submitInput({ ...identity, text: "C", delivery: "queue" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "A-started" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
+    const receipt = await runtime.sendQueuedInputNow({ ...identity, inputId: c.id });
+    assert.equal(receipt.stopRequest?.status, "requested");
+    assert.equal(engine.interrupts, 1);
+    assert.equal(engine.runs.length, 1, "a stop delivery ACK is not terminal evidence");
+    await assert.rejects(
+      runtime.sendQueuedInputNow({ ...identity, inputId: b.id }),
+      /unresolved StopRequest/i,
+    );
+    assert.equal(engine.interrupts, 1, "repeated send-now must not dispatch another stop");
+    assert.deepEqual(
+      runtime
+        .getHistory(task.id)!
+        .inputs.filter((input) => input.status === "queued")
+        .sort((left, right) => left.queuePosition! - right.queuePosition!)
+        .map((input) => input.text),
+      ["C", "B"],
+    );
+    engine.emit(0, {
+      type: "execution.stopped",
+      evidence: { source: "engine", evidenceId: "A-native-stopped" },
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.input, "C");
+    assert.equal(runtime.getHistory(task.id)!.stopRequests[0]?.status, "confirmed");
+    assert.equal(
+      runtime.getHistory(task.id)!.inputs.find((input) => input.id === b.id)?.status,
+      "queued",
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("send-now restores queue order when stop qualification fails before delivery", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    await runtime.submitInput({ ...identity, text: "B", delivery: "queue" });
+    const c = await runtime.submitInput({ ...identity, text: "C", delivery: "queue" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "A-started" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
+    let probes = 0;
+    engine.refreshHandler = async () => {
+      if (++probes === 2) throw new Error("capability probe failed");
+      return engine.getCapabilities();
+    };
+    await assert.rejects(
+      runtime.sendQueuedInputNow({ ...identity, inputId: c.id }),
+      /queue order was restored/i,
+    );
+    assert.equal(engine.interrupts, 0);
+    assert.deepEqual(
+      runtime
+        .getHistory(task.id)!
+        .inputs.filter((input) => input.status === "queued")
+        .sort((left, right) => left.queuePosition! - right.queuePosition!)
+        .map((input) => input.text),
+      ["B", "C"],
+    );
   } finally {
     runtime.close();
   }

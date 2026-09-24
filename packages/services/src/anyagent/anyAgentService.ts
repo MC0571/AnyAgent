@@ -27,6 +27,7 @@ import type {
   TaskLifecycleRequest,
   ReconcileExecution,
   RuntimeExecution,
+  RuntimeStopRequest,
 } from "@anyagent/runtime/types";
 import { createServiceDescriptor } from "../descriptors.js";
 
@@ -81,6 +82,25 @@ export interface IAnyAgentService {
     readonly authorizationId: string;
     readonly inputId: string;
   }): Promise<void>;
+  moveQueuedInput(input: {
+    readonly taskId: string;
+    readonly participantId: string;
+    readonly sessionId: string;
+    readonly authorizationId: string;
+    readonly inputId: string;
+    readonly beforeInputId: string | null;
+  }): Promise<void>;
+  resumeQueuedInputs(input: TaskLifecycleRequest): Promise<void>;
+  sendQueuedInputNow(input: {
+    readonly taskId: string;
+    readonly participantId: string;
+    readonly sessionId: string;
+    readonly authorizationId: string;
+    readonly inputId: string;
+  }): Promise<{
+    readonly stopRequest: RuntimeStopRequest | null;
+    readonly priorityRestored: boolean;
+  }>;
   reviseTurn(input: ReviseTurn): Promise<void>;
   setAssistantFeedback(input: SetAssistantFeedback): Promise<RuntimeAssistantFeedbackResult>;
   getExecutionFileChanges(input: ExecutionFileTarget): Promise<RuntimeExecutionFileChanges | null>;

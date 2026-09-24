@@ -102,6 +102,7 @@ const rendererMappedSlashCommands = new Set([
   "compact",
   "effort",
   "help",
+  "locale",
   "mode",
   "model",
   "new",
@@ -109,6 +110,48 @@ const rendererMappedSlashCommands = new Set([
   "skill",
   "variant",
 ]);
+const unsupportedNativeSlashReasons = {
+  login: {
+    en: "M0 login starts a shared account and credential flow; the Task Composer has no Host-mediated account action.",
+    zh: "M0 登录会启动共享账号与凭据流程；当前 Task Composer 没有经 Host 授权的账号操作。",
+  },
+  logout: {
+    en: "M0 logout removes credentials shared across sessions; the Task Composer has no Host-mediated account action.",
+    zh: "M0 退出登录会删除多个 Session 共用的凭据；当前 Task Composer 没有经 Host 授权的账号操作。",
+  },
+  expert: {
+    en: "M0 manages durable Expert workflow runs; M1 exposes ordinary Task executions but no Task-scoped Expert workflow API.",
+    zh: "M0 管理持久化 Expert 工作流；M1 目前只提供 Task 执行操作，没有 Task 级 Expert 工作流 API。",
+  },
+  dwf: {
+    en: "M0 operates on the CLI dynamic-workflow run registry; M1 has no matching Task-scoped Host operation.",
+    zh: "M0 操作 CLI 动态工作流运行记录；M1 没有对应的 Task 级 Host 操作。",
+  },
+  fork: {
+    en: "M0 forks from a workspace checkpoint, while M1 forks from a selected product Execution; the source semantics do not match.",
+    zh: "M0 从工作区检查点分叉，M1 从指定产品 Execution 分叉；两者的来源语义不一致。",
+  },
+  mcp: {
+    en: "M0 manages CLI MCP server connections; M1 has no Task-scoped Host route for this CLI configuration.",
+    zh: "M0 管理 CLI 的 MCP 服务连接；M1 没有对应的 Task 级 Host 路径来操作这份 CLI 配置。",
+  },
+  plugins: {
+    en: "M0 changes CLI plugin configuration for future CLI sessions; that is not the product Plugin manager or a Task Host action.",
+    zh: "M0 修改后续 CLI Session 使用的插件配置；这不等同于产品插件管理器，也没有对应的 Task Host 操作。",
+  },
+  resume: {
+    en: "An M0 CLI Session id cannot safely identify and authorize a product Task, Participant, and Session.",
+    zh: "M0 CLI Session ID 不能安全地映射并授权到产品 Task、Participant 和 Session。",
+  },
+  rewind: {
+    en: "M0 restores workspace checkpoints; M1 only offers file rewind qualified to a specific product Execution.",
+    zh: "M0 恢复工作区检查点；M1 只支持绑定到指定产品 Execution 的文件撤销。",
+  },
+  goal: {
+    en: "M0 stores Session goal state and can trigger goal continuation; M1 has no matching Task-scoped Host/Runtime operation.",
+    zh: "M0 保存 Session 目标并可触发目标续跑；M1 没有对应的 Task 级 Host/Runtime 操作。",
+  },
+} as const;
 
 function parseLeadingSlashCommand(text: string): { name: string; args: string } | null {
   const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/u.exec(text.trim());
@@ -171,7 +214,11 @@ function excludedNativeSlashCommandNames(commands: readonly ZCodeSlashCommand[])
     );
 }
 
-function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashCommand[]): string {
+function formatEngineSlashHelp(
+  args: string,
+  commands: readonly ZCodeSlashCommand[],
+  locale: string,
+): string {
   const requestedName = normalizeSlashCommandValue(args.trim()).toLowerCase();
   if (requestedName) {
     const entry = BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES.find(
@@ -185,7 +232,17 @@ function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashComman
         `${entry.usage} — ${entry.summary}`,
         ...entry.details,
         ...(entry.name === "compact" ? ["M1 Engine 通过 Host 支持可选 instructions。"] : []),
-        ...(isMapped ? [] : ["此原生命令当前没有对应的 Harness 操作。"]),
+        ...(entry.name === "locale"
+          ? ["M1 通过产品全局 UI 语言偏好支持 auto、en-US 和 zh-CN。"]
+          : []),
+        ...(!isMapped
+          ? [
+              unsupportedNativeSlashReasons[
+                entry.name as keyof typeof unsupportedNativeSlashReasons
+              ]?.[locale === "zh-CN" ? "zh" : "en"] ??
+                "此原生命令当前没有对应的 Task 级 Host 操作。",
+            ]
+          : []),
       ].join("\n");
     }
     const custom = commands.find(
@@ -340,6 +397,8 @@ export function EngineConversation({
   const [loading, setLoading] = useState(true);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [pendingEditQueueItemId, setPendingEditQueueItemId] = useState<string | null>(null);
+  const [recoveredQueueDrafts, setRecoveredQueueDrafts] = useState<Record<string, string>>({});
   const [restoreErrors, setRestoreErrors] = useState<Record<string, string>>({});
   const [reconcileErrors, setReconcileErrors] = useState<Record<string, string>>({});
   const lifecycleActionsRef = useRef(new Set<string>());
@@ -371,7 +430,7 @@ export function EngineConversation({
   const followConversationTailRef = useRef(true);
   const selectedTaskIdRef = useRef(selectedTaskId);
   selectedTaskIdRef.current = selectedTaskId;
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale, localePreference, setLocalePreference } = useZCodeIntl();
   const platform = usePlatform();
   const unavailableControlValue = intl.formatMessage({
     id: "engine.composer.unavailableValue",
@@ -572,6 +631,21 @@ export function EngineConversation({
     if (visibleTask) onTitleChange?.(visibleTask.id, visibleTitle);
   }, [onTitleChange, visibleTask?.id, visibleTitle]);
   const queuedInputs = visibleHistory?.inputs.filter((input) => input.status === "queued") ?? [];
+  const queuePaused = visibleTask?.session.queuePaused === true;
+  queuedInputs.sort((left, right) => (left.queuePosition ?? 0) - (right.queuePosition ?? 0));
+  useEffect(() => {
+    if (!visibleTask) return;
+    const recovered = recoveredQueueDrafts[visibleTask.id];
+    const editor = inputApiRef.current;
+    if (!recovered || !editor) return;
+    editor.setText([editor.getText(), recovered].filter(Boolean).join("\n\n"));
+    editor.focus();
+    setRecoveredQueueDrafts((current) => {
+      const next = { ...current };
+      delete next[visibleTask.id];
+      return next;
+    });
+  }, [recoveredQueueDrafts, visibleTask?.id]);
   const activeRound =
     visibleHistory?.inputs.some((input) =>
       ["received", "native-accepted", "started"].includes(input.status),
@@ -597,7 +671,7 @@ export function EngineConversation({
     ? unknownExecutions.length > 0
       ? "请先对账结果未知的原执行；对账不会重发原输入。"
       : "原生输入结果未知，尚无可对账的执行；请先核实原生状态。"
-    : activeRound || queuedInputs.length > 0
+    : activeRound || (queuedInputs.length > 0 && !queuePaused)
       ? "Session 仍有未完成的输入或执行，完成对账后才能恢复继续。"
       : hasUnresolvedMaintenance
         ? "Session 仍有未决的压缩或文件撤销操作，核实后才能恢复。"
@@ -835,6 +909,12 @@ export function EngineConversation({
         run: () => inputApiRef.current?.setText("/new "),
       },
       {
+        value: "locale",
+        description: locale === "zh-CN" ? "查看或切换界面语言" : "Show or switch the UI locale",
+        keywords: ["locale", "language", "语言"],
+        run: () => inputApiRef.current?.setText("/locale "),
+      },
+      {
         value: "effort",
         description: "查看或切换当前模型的推理档位",
         keywords: ["effort", "推理", "档位"],
@@ -850,7 +930,8 @@ export function EngineConversation({
         value: "help",
         description: "查看当前 Harness 命令帮助",
         keywords: ["help", "帮助", "命令"],
-        run: () => toast(formatEngineSlashHelp("", nativeSlashCommands), { variant: "info" }),
+        run: () =>
+          toast(formatEngineSlashHelp("", nativeSlashCommands, locale), { variant: "info" }),
       },
     ];
     return uiCommands;
@@ -1256,7 +1337,48 @@ export function EngineConversation({
         }));
         submittedText = slashCommand.args;
       } else if (slashCommand.name === "help") {
-        toast(formatEngineSlashHelp(slashCommand.args, nativeSlashCommands), { variant: "info" });
+        toast(formatEngineSlashHelp(slashCommand.args, nativeSlashCommands, locale), {
+          variant: "info",
+        });
+        return true;
+      } else if (slashCommand.name === "locale") {
+        const requestedLocale = slashCommand.args.trim();
+        if (!requestedLocale || requestedLocale === "status" || requestedLocale === "list") {
+          const preference = localePreference === "system" ? "auto" : localePreference;
+          setNotice({
+            kind: "info",
+            message:
+              locale === "zh-CN"
+                ? `当前界面语言：${locale}（偏好：${preference}）。可选：auto、en-US、zh-CN。`
+                : `Current UI locale: ${locale} (preference: ${preference}). Available: auto, en-US, zh-CN.`,
+          });
+          return true;
+        }
+        const preference =
+          requestedLocale === "auto"
+            ? "system"
+            : requestedLocale === "en-US" || requestedLocale === "zh-CN"
+              ? requestedLocale
+              : null;
+        if (!preference) {
+          setNotice({
+            kind: "info",
+            message:
+              locale === "zh-CN"
+                ? `不支持界面语言 ${requestedLocale}；可选：auto、en-US、zh-CN。输入已保留。`
+                : `Unsupported UI locale ${requestedLocale}; choose auto, en-US, or zh-CN. Your draft is preserved.`,
+          });
+          return false;
+        }
+        setLocalePreference(preference);
+        const messageLocale = preference === "system" ? locale : preference;
+        setNotice({
+          kind: "info",
+          message:
+            messageLocale === "zh-CN"
+              ? `界面语言偏好已切换为 ${requestedLocale}。`
+              : `UI locale preference switched to ${requestedLocale}.`,
+        });
         return true;
       } else if (slashCommand.name === "model") {
         if (runBlockedReason || busyAction) {
@@ -1468,10 +1590,15 @@ export function EngineConversation({
         const catalogCommand = nativeSlashCommands.find(
           (command) => normalizeSlashCommandValue(command.name).toLowerCase() === slashCommand.name,
         );
+        const unsupportedReason = nativeBuiltin
+          ? unsupportedNativeSlashReasons[
+              slashCommand.name as keyof typeof unsupportedNativeSlashReasons
+            ]?.[locale === "zh-CN" ? "zh" : "en"]
+          : null;
         const message = nativeBuiltin
           ? locale === "zh-CN"
-            ? `/${slashCommand.name} 属于固定 ZCode CLI 命令目录，但当前 M1 Engine 对话没有对应的 Host 操作；输入已保留。`
-            : `/${slashCommand.name} is in the fixed ZCode CLI catalog, but M1 Engine conversations have no matching Host action. Your draft is preserved.`
+            ? `/${slashCommand.name} 暂不映射：${unsupportedReason ?? "当前 M1 Engine 对话没有对应的 Task 级 Host 操作。"} 输入已保留。`
+            : `/${slashCommand.name} is not mapped: ${unsupportedReason ?? "M1 Engine conversations have no matching Task-scoped Host action."} Your draft is preserved.`
           : catalogCommand?.source === "custom"
             ? locale === "zh-CN"
               ? `/${slashCommand.name} 是 ZCode CLI 自定义命令；当前 M1 Engine 对话不执行此类命令，输入已保留。`
@@ -1746,6 +1873,125 @@ export function EngineConversation({
           inputId,
         }),
       () => null,
+    );
+  };
+
+  const editQueuedInput = async (inputId: string) => {
+    if (!visibleTask || busyAction || pendingEditQueueItemId) return;
+    const input = queuedInputs.find((entry) => entry.id === inputId);
+    if (!input) return;
+    if (input.attachments?.length) {
+      setNotice({
+        kind: "error",
+        message: "该队列项含附件，当前无法安全恢复到草稿；原队列项已保留。",
+      });
+      return;
+    }
+    const sourceTask = visibleTask;
+    const editor = inputApiRef.current;
+    if (!editor || editor.getText().trim()) {
+      setNotice({ kind: "info", message: "请先清空当前草稿，再撤回队列项编辑。" });
+      return;
+    }
+    setPendingEditQueueItemId(inputId);
+    try {
+      const accepted = await runAction(
+        `queue-edit:${inputId}`,
+        () =>
+          service.cancelQueuedInput({
+            taskId: sourceTask.id,
+            participantId: sourceTask.participant.id,
+            sessionId: sourceTask.session.id,
+            authorizationId: sourceTask.authorizationId,
+            inputId,
+          }),
+        () => null,
+      );
+      if (!accepted) return;
+      if (selectedTaskIdRef.current === sourceTask.id && inputApiRef.current === editor) {
+        editor.setText([editor.getText(), input.text].filter(Boolean).join("\n\n"));
+        editor.focus();
+      } else {
+        setRecoveredQueueDrafts((current) => ({
+          ...current,
+          [sourceTask.id]: [current[sourceTask.id], input.text].filter(Boolean).join("\n\n"),
+        }));
+      }
+      if (input.submissionConfig) {
+        const parsedModel = modelSelectionSchema.safeParse(input.submissionConfig.modelSelection);
+        setConfigByTask((current) => ({
+          ...current,
+          [sourceTask.id]: {
+            ...(typeof input.submissionConfig?.mode === "string"
+              ? { mode: input.submissionConfig.mode }
+              : {}),
+            ...(parsedModel.success ? { modelSelection: parsedModel.data } : {}),
+          },
+        }));
+      }
+    } finally {
+      setPendingEditQueueItemId(null);
+    }
+  };
+
+  const moveQueuedInput = (inputId: string, beforeInputId: string | null) => {
+    if (!visibleTask || busyAction || pendingEditQueueItemId) return;
+    void runAction(
+      `queue-move:${inputId}`,
+      () =>
+        service.moveQueuedInput({
+          taskId: visibleTask.id,
+          participantId: visibleTask.participant.id,
+          sessionId: visibleTask.session.id,
+          authorizationId: visibleTask.authorizationId,
+          inputId,
+          beforeInputId,
+        }),
+      () => null,
+    );
+  };
+
+  const sendQueuedInputNow = (inputId: string) => {
+    if (!visibleTask || busyAction || pendingEditQueueItemId) return;
+    void runAction(
+      `queue-send-now:${inputId}`,
+      () =>
+        service.sendQueuedInputNow({
+          taskId: visibleTask.id,
+          participantId: visibleTask.participant.id,
+          sessionId: visibleTask.session.id,
+          authorizationId: visibleTask.authorizationId,
+          inputId,
+        }),
+      ({ stopRequest, priorityRestored }) =>
+        priorityRestored
+          ? "中断请求未送达，队列顺序已恢复。"
+          : stopRequest?.status === "confirmed"
+            ? "原生停止已确认；队首仍需在派发前重新核验资格。"
+            : stopRequest?.status === "unknown"
+              ? "中断结果未知；请对账原执行，队列不会盲目重发。"
+              : stopRequest?.deliveryStatus === "unknown"
+                ? "中断请求是否送达尚未确认；队列会等待原执行的真实终态。"
+                : stopRequest && stopRequest.status !== "requested"
+                  ? "中断未获确认；队列优先级已更新，但不会仅凭请求回执派发。"
+                  : stopRequest
+                    ? "中断请求已提交；等待原生停止证据后处理队首。"
+                    : "已请求队首派发；仍需等待原生接纳与执行结果。",
+    );
+  };
+
+  const resumeQueuedInputs = async () => {
+    if (!visibleTask || busyAction || !queuePaused) return;
+    await runAction(
+      `queue-resume:${visibleTask.session.id}`,
+      () =>
+        service.resumeQueuedInputs({
+          taskId: visibleTask.id,
+          participantId: visibleTask.participant.id,
+          sessionId: visibleTask.session.id,
+          authorizationId: visibleTask.authorizationId,
+        }),
+      () => "队列恢复请求已受理；每项派发前仍会重新核验资格。",
     );
   };
 
@@ -2128,9 +2374,15 @@ export function EngineConversation({
                     text: input.text,
                     dispatch: { state: "queued" },
                   })),
-                  autoDrain: true,
+                  autoDrain: !queuePaused,
+                  ...(queuePaused ? { pauseReason: "manual" as const } : {}),
                 }}
                 onDeleteItem={cancelQueuedInput}
+                onEditItem={editQueuedInput}
+                pendingEditQueueItemId={pendingEditQueueItemId}
+                onMoveItem={runBlockedReason ? undefined : moveQueuedInput}
+                onSendNow={queuePaused ? undefined : sendQueuedInputNow}
+                onResume={queuePaused && !runBlockedReason ? resumeQueuedInputs : undefined}
               />
               <div className="chat-composer-input-surface w-full">
                 <ChatPromptEditor

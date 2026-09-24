@@ -182,6 +182,8 @@ export interface RuntimeSession {
   /** Native handle for diagnostics and hiding a duplicate adapter-owned sidebar row. */
   readonly nativeSessionId?: string | null;
   readonly status: RuntimeSessionStatus;
+  /** Persisted dispatch hold after Host restart; queued text is never replayed automatically. */
+  readonly queuePaused?: boolean;
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly environmentId: string;
@@ -216,6 +218,8 @@ export interface RuntimeInput {
   readonly participantId: string;
   readonly sessionId: string;
   readonly text: string;
+  /** Order among Inputs still waiting for native dispatch. */
+  readonly queuePosition?: number;
   /** A replacement turn preserves, rather than rewrites, the original product records. */
   readonly revisionOf?: {
     readonly kind: "edit" | "retry";
