@@ -184,9 +184,7 @@ function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashComman
       return [
         `${entry.usage} — ${entry.summary}`,
         ...entry.details,
-        ...(entry.name === "compact"
-          ? ["M1 Engine 通过 Host 支持可选 instructions。"]
-          : []),
+        ...(entry.name === "compact" ? ["M1 Engine 通过 Host 支持可选 instructions。"] : []),
         ...(isMapped ? [] : ["此原生命令当前没有对应的 Harness 操作。"]),
       ].join("\n");
     }
@@ -1387,10 +1385,7 @@ export function EngineConversation({
         return true;
       } else if (slashCommand.name === "skill") {
         const target = visibleTask;
-        if (
-          target.session.status !== "active" ||
-          target.status !== "active"
-        ) {
+        if (target.session.status !== "active" || target.status !== "active") {
           setNotice({
             kind: "info",
             message: "/skill 需要当前 Task 有可用的 Session；输入已保留。",

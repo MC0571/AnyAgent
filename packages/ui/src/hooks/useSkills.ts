@@ -53,10 +53,7 @@ function mapNativeSkillReference(skill: ZCodeSkillReferenceCatalogEntry): Compos
   return skill;
 }
 
-function mapTaskSkillReference(
-  skill: TaskSkillReference,
-  taskId: string,
-): ComposerSkillReference {
+function mapTaskSkillReference(skill: TaskSkillReference, taskId: string): ComposerSkillReference {
   return {
     id: `task-skill:${taskId}:${skill.name}`,
     name: skill.name,

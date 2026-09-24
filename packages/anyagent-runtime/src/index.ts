@@ -3863,7 +3863,10 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError(`Session ${session.id} is not active.`, "terminal");
     const nativeSessionId = session.data.nativeSessionId;
     if (!nativeSessionId || this.#liveSessions.get(session.id) !== nativeSessionId)
-      throw new RuntimeEligibilityError("The Task has no verified native Session identity.", "ownership");
+      throw new RuntimeEligibilityError(
+        "The Task has no verified native Session identity.",
+        "ownership",
+      );
     const qualifiedNativeSessionId = nativeSessionId as EngineSessionRef;
 
     const engine = this.#engineFor(task.data);

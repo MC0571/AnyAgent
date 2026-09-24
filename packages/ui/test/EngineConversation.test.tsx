@@ -2629,7 +2629,10 @@ test("an active ZCode Harness task switches models within its Session and submit
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/help compact"));
     await submitCurrentDraft();
     await waitFor(
-      () => assert.ok(document.body.textContent?.includes("M1 Engine 通过 Host 支持可选 instructions。")),
+      () =>
+        assert.ok(
+          document.body.textContent?.includes("M1 Engine 通过 Host 支持可选 instructions。"),
+        ),
       "/help compact should describe the Host instructions field accurately",
     );
     assert.equal(submissions.length, 0);
@@ -2883,7 +2886,11 @@ test("an active ZCode Harness task switches models within its Session and submit
     assert.equal(submissions[2]?.participantId, participantId);
     assert.equal(submissions[2]?.sessionId, sessionId);
     assert.equal(submissions[2]?.authorizationId, "authorization-engine-ui");
-    assert.equal(nativeSkillCatalogLookups.length, 0, "M1 suggestions must not read native catalog");
+    assert.equal(
+      nativeSkillCatalogLookups.length,
+      0,
+      "M1 suggestions must not read native catalog",
+    );
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("$rev"));
     const taskSkillMentionId = `skill:task-skill:${taskId}:review`;
@@ -3168,7 +3175,10 @@ test("an active ZCode Harness task switches models within its Session and submit
     );
     await waitFor(() => assert.equal(submissions.length, submissionsBeforePlan + 4));
     assert.match(String(submissions[submissionsBeforePlan + 3]?.text), /Review this element/);
-    assert.match(String(submissions[submissionsBeforePlan + 3]?.text), /https:\/\/example\.test\/review/);
+    assert.match(
+      String(submissions[submissionsBeforePlan + 3]?.text),
+      /https:\/\/example\.test\/review/,
+    );
     assert.match(String(submissions[submissionsBeforePlan + 3]?.text), /Approve/);
     await waitFor(
       () => assert.doesNotMatch(container.textContent ?? "", /网页元素|web page element/i),

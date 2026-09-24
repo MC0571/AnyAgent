@@ -738,7 +738,10 @@ test("Host Skill catalog reads require the matching active Task Session", async 
       return {
         status: "accepted" as const,
         commandId: envelope.commandId,
-        result: { type: "createSession" as const, sessionId: `native-skill-${nativeSessionSequence}` },
+        result: {
+          type: "createSession" as const,
+          sessionId: `native-skill-${nativeSessionSequence}`,
+        },
       };
     },
   } as unknown as IZCodeAgentService);

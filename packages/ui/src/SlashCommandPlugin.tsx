@@ -110,8 +110,9 @@ export function SlashCommandPlugin({
   }, [appCommands, commands, excludedCommandNames]);
   const subagentSuggestions = useMemo(() => buildSubagentSuggestions(agents), [agents]);
   const skillSuggestions = useMemo(() => {
-    const availableSkills = (hostTaskScoped ? skills : filterSkillsForProvider(skills, provider))
-      .filter((skill) => skill.enabled);
+    const availableSkills = (
+      hostTaskScoped ? skills : filterSkillsForProvider(skills, provider)
+    ).filter((skill) => skill.enabled);
     if (hostTaskScoped) {
       return availableSkills.map((skill) => ({
         id: `task-skill:${skill.name}`,
