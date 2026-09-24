@@ -1070,6 +1070,7 @@ export function createZCodeAdapter(options: {
     async run({
       session,
       input,
+      commandId,
       submissionConfig,
       attachments,
       revision,
@@ -1145,23 +1146,26 @@ export function createZCodeAdapter(options: {
               baseRevision: nativeRevisionTarget.baseRevision,
               baseLogEpoch: nativeRevisionTarget.baseLogEpoch,
             }
-          : command("sendText", session, {
-              text: input,
-              requestedDelivery: "startNow",
-              ...(mode ? { mode } : {}),
-              ...(planEnabled !== undefined ? { planEnabled } : {}),
-              ...(modelSelection ? { modelSelection } : {}),
-              ...(attachments?.length
-                ? {
-                    attachments: attachments.map((attachment) => ({
-                      ref: attachment.locator,
-                      fileName: attachment.fileName,
-                      mime: attachment.mimeType,
-                      bytes: attachment.sizeBytes,
-                    })),
-                  }
-                : {}),
-            });
+          : {
+              ...command("sendText", session, {
+                text: input,
+                requestedDelivery: "startNow",
+                ...(mode ? { mode } : {}),
+                ...(planEnabled !== undefined ? { planEnabled } : {}),
+                ...(modelSelection ? { modelSelection } : {}),
+                ...(attachments?.length
+                  ? {
+                      attachments: attachments.map((attachment) => ({
+                        ref: attachment.locator,
+                        fileName: attachment.fileName,
+                        mime: attachment.mimeType,
+                        bytes: attachment.sizeBytes,
+                      })),
+                    }
+                  : {}),
+              }),
+              ...(commandId ? { commandId } : {}),
+            };
       beforeDispatch?.();
       const executionId = envelope.commandId as EngineExecutionRef;
       let disposable: { dispose(): void } | undefined;
@@ -1623,6 +1627,7 @@ export function createZCodeAdapter(options: {
       executionId,
       messageId,
       feedback,
+      beforeDispatch,
     }): Promise<EngineAssistantFeedbackReceipt> {
       if (!sessions.has(session))
         return {
@@ -1701,6 +1706,9 @@ export function createZCodeAdapter(options: {
           reason: "No native assistant text row exists for this Execution message.",
         };
       if (target.feedback === feedback) return { status: "unchanged" };
+
+      // Row pagination is asynchronous; recheck product eligibility immediately before send.
+      beforeDispatch?.();
 
       const envelope = {
         ...command("setAssistantFeedback", session, {

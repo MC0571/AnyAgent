@@ -94,6 +94,48 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
   }
 });
 
+test("Host service forwards text queue intent and cancellation to persisted Runtime inputs", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-host-queue-"));
+  setDataBaseDir(directory);
+  const host = createAnyAgentService({} as IZCodeAgentService);
+  try {
+    const task = await host.service.createTask({ engineId: "fake" });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await Promise.all([
+      host.service.submitInput({ ...identity, text: "A" }),
+      host.service.submitInput({
+        ...identity,
+        text: "B",
+        delivery: "queue",
+        idempotencyKey: "service-queue-b",
+      }),
+    ]);
+    const queued = (await host.service.getHistory(task.id))?.inputs.find(
+      (input) => input.text === "B",
+    );
+    assert.ok(queued);
+    assert.equal(queued.status, "queued");
+    await host.service.cancelQueuedInput({ ...identity, inputId: queued.id });
+    assert.equal(
+      (await host.service.getHistory(task.id))?.inputs.find((input) => input.id === queued.id)
+        ?.status,
+      "cancelled",
+    );
+    const history = await waitForCompleted(host.service, task.id, 1);
+    assert.equal(history.inputs.length, 2);
+    assert.equal(history.executions.length, 1);
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("concurrent engine list refreshes share only the in-flight probe", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-engine-refresh-"));
   setDataBaseDir(directory);

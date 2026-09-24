@@ -10,6 +10,7 @@ import type {
   EngineUserInputPresentation,
 } from "@anyagent/engine-contract";
 import type {
+  SubmitInput,
   RuntimeAttachmentStageRequest,
   RuntimeCompactOperation,
 } from "./runtime-operation-types.js";
@@ -18,6 +19,7 @@ export type {
   CompactSession,
   RuntimeAttachmentStageRequest,
   RuntimeCompactOperation,
+  SubmitInput,
 } from "./runtime-operation-types.js";
 
 export type RuntimeSubmissionConfig = EngineJsonObject;
@@ -76,6 +78,7 @@ export type RuntimeTaskStatus =
   | "abandoned";
 export type RuntimeSessionStatus = "creating" | "active" | "unknown" | "failed" | "closed";
 export type RuntimeInputStatus =
+  | "queued"
   | "received"
   | "native-accepted"
   | "started"
@@ -83,7 +86,8 @@ export type RuntimeInputStatus =
   | "failed"
   | "stopped"
   | "unknown"
-  | "rejected";
+  | "rejected"
+  | "cancelled";
 export type RuntimeExecutionStatus =
   | "accepted"
   | "started"
@@ -388,16 +392,6 @@ export interface ForkTaskInput {
   readonly executionId: string;
   /** Fresh Host-issued grant for the child Task. */
   readonly authorization: RuntimeAuthorization;
-}
-
-export interface SubmitInput {
-  readonly taskId: string;
-  readonly participantId: string;
-  readonly sessionId: string;
-  readonly authorizationId: string;
-  readonly text: string;
-  readonly submissionConfig?: RuntimeSubmissionConfig;
-  readonly attachments?: readonly RuntimeAttachmentReference[];
 }
 
 export interface ReviseTurn {

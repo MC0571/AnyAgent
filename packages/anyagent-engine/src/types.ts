@@ -375,6 +375,8 @@ export interface EngineAdapter {
   run(input: {
     readonly session: EngineSessionRef;
     readonly input: string;
+    /** Stable product command identity for a persisted queued Input. */
+    readonly commandId?: string;
     readonly submissionConfig?: EngineJsonObject;
     readonly attachments?: readonly EngineAttachment[];
     /** Synchronous Host eligibility check immediately before native dispatch. */
@@ -403,6 +405,8 @@ export interface EngineAdapter {
     readonly executionId: EngineExecutionRef;
     readonly messageId: string;
     readonly feedback: "like" | "dislike" | null;
+    /** Revalidate Host ownership, authorization and current capability after Adapter I/O. */
+    readonly beforeDispatch?: () => void;
   }): Promise<EngineAssistantFeedbackReceipt>;
   interrupt(input: {
     readonly session: EngineSessionRef;

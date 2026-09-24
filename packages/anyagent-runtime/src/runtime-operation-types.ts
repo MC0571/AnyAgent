@@ -1,5 +1,10 @@
 import type { EngineEvidence, EngineSessionRef } from "@anyagent/engine-contract";
-import type { RuntimeEnvironment, StageRuntimeAttachmentInput } from "./types.js";
+import type {
+  RuntimeAttachmentReference,
+  RuntimeEnvironment,
+  RuntimeSubmissionConfig,
+  StageRuntimeAttachmentInput,
+} from "./types.js";
 
 /** Qualified Host staging call. The source path must not leave this Host callback. */
 export interface RuntimeAttachmentStageRequest extends StageRuntimeAttachmentInput {
@@ -14,6 +19,18 @@ export interface CompactSession {
   readonly participantId: string;
   readonly sessionId: string;
   readonly authorizationId: string;
+}
+
+export interface SubmitInput {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly authorizationId: string;
+  readonly text: string;
+  readonly delivery?: "startNow" | "queue";
+  readonly idempotencyKey?: string;
+  readonly submissionConfig?: RuntimeSubmissionConfig;
+  readonly attachments?: readonly RuntimeAttachmentReference[];
 }
 
 export interface RuntimeCompactOperation {

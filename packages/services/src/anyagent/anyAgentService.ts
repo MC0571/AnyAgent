@@ -46,6 +46,13 @@ export interface IAnyAgentService {
   forkTask(input: Omit<ForkTaskInput, "authorization">): Promise<RuntimeTask>;
   stageAttachment(input: StageRuntimeAttachmentInput): Promise<RuntimeAttachmentReference>;
   submitInput(input: SubmitInput): Promise<void>;
+  cancelQueuedInput(input: {
+    readonly taskId: string;
+    readonly participantId: string;
+    readonly sessionId: string;
+    readonly authorizationId: string;
+    readonly inputId: string;
+  }): Promise<void>;
   reviseTurn(input: ReviseTurn): Promise<void>;
   setAssistantFeedback(input: SetAssistantFeedback): Promise<RuntimeAssistantFeedbackResult>;
   compactSession(input: CompactSession): Promise<RuntimeCompactOperation>;

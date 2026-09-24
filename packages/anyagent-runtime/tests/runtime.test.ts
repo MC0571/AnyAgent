@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { EngineContractError } from "@anyagent/engine-contract";
 import type {
   EngineAdapter,
   EngineAttachment,
@@ -62,6 +63,7 @@ class ManualEngine implements EngineAdapter {
   readonly runs: {
     session: EngineSessionRef;
     input: string;
+    commandId?: string;
     submissionConfig?: EngineJsonObject;
     attachments?: readonly EngineAttachment[];
     revision?: Parameters<EngineAdapter["run"]>[0]["revision"];
@@ -119,6 +121,7 @@ class ManualEngine implements EngineAdapter {
   interrupts = 0;
   readonly feedbackCalls: Parameters<NonNullable<EngineAdapter["setAssistantFeedback"]>>[0][] = [];
   feedbackEffects = 0;
+  beforeFeedbackDispatch: (() => Promise<void>) | null = null;
   readonly feedbackByTarget = new Map<string, "like" | "dislike" | null>();
   interruptStatus: EngineCommandReceipt["status"] = "requested";
 
@@ -174,13 +177,14 @@ class ManualEngine implements EngineAdapter {
     await this.beforeRunDispatch?.();
     request.beforeDispatch?.();
     if (this.runFailure) throw this.runFailure;
-    const { session, input, submissionConfig, attachments, revision } = request;
+    const { session, input, commandId, submissionConfig, attachments, revision } = request;
     const executionId = (revision?.commandId ??
       `native-execution-${++this.#nextExecution}`) as EngineExecutionRef;
     const events = new EventQueue();
     this.runs.push({
       session,
       input,
+      ...(commandId ? { commandId } : {}),
       ...(submissionConfig ? { submissionConfig } : {}),
       ...(attachments ? { attachments } : {}),
       ...(revision ? { revision } : {}),
@@ -207,6 +211,8 @@ class ManualEngine implements EngineAdapter {
   async setAssistantFeedback(
     input: Parameters<NonNullable<EngineAdapter["setAssistantFeedback"]>>[0],
   ): Promise<EngineAssistantFeedbackReceipt> {
+    await this.beforeFeedbackDispatch?.();
+    input.beforeDispatch?.();
     this.feedbackCalls.push(input);
     const target = JSON.stringify([input.session, input.executionId, input.messageId]);
     const current = this.feedbackByTarget.get(target) ?? null;
@@ -277,6 +283,467 @@ test("Runtime persists and forwards generic submission JSON without interpreting
     assert.deepEqual(input.submissionConfig, submissionConfig);
     assert.deepEqual(runtime.getHistory(task.id)?.inputs[0]?.submissionConfig, submissionConfig);
     assert.deepEqual(engine.runs[0]?.submissionConfig, submissionConfig);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Runtime queues text as Input history and promotes FIFO only after terminal evidence", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "B",
+      delivery: "queue",
+      idempotencyKey: "request-b",
+    });
+    const duplicate = await runtime.submitInput({
+      ...identity,
+      text: "B",
+      delivery: "queue",
+      idempotencyKey: "request-b",
+    });
+    const third = await runtime.submitInput({
+      ...identity,
+      text: "C",
+      delivery: "queue",
+    });
+
+    assert.equal(duplicate.id, queued.id);
+    assert.equal(queued.status, "queued");
+    assert.equal(third.status, "queued");
+    assert.equal(engine.runs.length, 1);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 0);
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "different B",
+        delivery: "queue",
+        idempotencyKey: "request-b",
+      }),
+      /idempotency key was already used/i,
+    );
+
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "A-started" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "A-completed" },
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.input, "B");
+    assert.equal(engine.runs[1]?.commandId, queued.id);
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "received",
+    );
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === third.id)?.status,
+      "queued",
+    );
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
+
+    const executionA = runtime.getHistory(task.id)!.executions[0]!;
+    engine.emit(0, {
+      type: "message.delta",
+      text: "late A event",
+      messageId: "late-a-message",
+    });
+    await until(() =>
+      runtime
+        .getHistory(task.id)!
+        .events.some((event) => event.payload.messageId === "late-a-message"),
+    );
+    const lateEvent = runtime
+      .getHistory(task.id)!
+      .events.find((event) => event.payload.messageId === "late-a-message");
+    assert.equal(lateEvent?.executionId, executionA.id);
+
+    engine.emit(1, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "B-accepted" },
+    });
+    engine.emit(1, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "B-started" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 2);
+    engine.emit(1, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "B-completed" },
+    });
+    await until(() => engine.runs.length === 3);
+    assert.equal(engine.runs[2]?.input, "C");
+    assert.equal(engine.runs[2]?.commandId, third.id);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Runtime serializes duplicate idempotency keys in SQLite before creating another Input", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const request = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "same request",
+      delivery: "queue" as const,
+      idempotencyKey: "same-request-key",
+    };
+    const [first, duplicate] = await Promise.all([
+      runtime.submitInput(request),
+      runtime.submitInput(request),
+    ]);
+    assert.equal(first.id, duplicate.id);
+    assert.equal(runtime.getHistory(task.id)?.inputs.length, 1);
+    assert.equal(engine.runs.length, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("queued Input is rejected when its Task freezes or authorization expires before promotion", async () => {
+  {
+    const engine = new ManualEngine();
+    const runtime = createTaskRuntime({
+      databasePath: ":memory:",
+      engines: new Map([["manual", engine]]),
+    });
+    try {
+      const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+      const identity = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: task.authorizationId,
+      };
+      await runtime.submitInput({ ...identity, text: "A" });
+      const queued = await runtime.submitInput({ ...identity, text: "B", delivery: "queue" });
+      runtime.freezeTask({ ...identity, reason: "pause before promotion" });
+      assert.equal(
+        runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+        "rejected",
+      );
+      assert.match(
+        runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.error ?? "",
+        /Task frozen/i,
+      );
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "freeze-A-accepted" },
+      });
+      engine.emit(0, {
+        type: "execution.started",
+        evidence: { source: "engine", evidenceId: "freeze-A-started" },
+      });
+      engine.emit(0, {
+        type: "execution.completed",
+        evidence: { source: "engine", evidenceId: "freeze-A-completed" },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "completed");
+      assert.equal(engine.runs.length, 1);
+    } finally {
+      runtime.close();
+    }
+  }
+
+  {
+    const engine = new ManualEngine();
+    let now = 0;
+    const runtime = createTaskRuntime({
+      databasePath: ":memory:",
+      engines: new Map([["manual", engine]]),
+      now: () => now,
+    });
+    try {
+      const task = await runtime.createTask({
+        engineId: "manual",
+        environment,
+        authorization: { ...authorization, id: "expires-before-promotion", expiresAt: 5 },
+      });
+      const identity = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: task.authorizationId,
+      };
+      await runtime.submitInput({ ...identity, text: "A" });
+      const queued = await runtime.submitInput({ ...identity, text: "B", delivery: "queue" });
+      now = 10;
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "expiry-A-accepted" },
+      });
+      engine.emit(0, {
+        type: "execution.started",
+        evidence: { source: "engine", evidenceId: "expiry-A-started" },
+      });
+      engine.emit(0, {
+        type: "execution.completed",
+        evidence: { source: "engine", evidenceId: "expiry-A-completed" },
+      });
+      await until(
+        () =>
+          runtime.getHistory(task.id)!.inputs.find((input) => input.id === queued.id)?.status ===
+          "rejected",
+      );
+      assert.match(
+        runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.error ?? "",
+        /expired/i,
+      );
+      assert.equal(engine.runs.length, 1);
+    } finally {
+      runtime.close();
+    }
+  }
+});
+
+test("Runtime restart marks dispatched Input unknown and rejects queued text without resending", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-queue-restart-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+  });
+  let taskId = "";
+  let queuedId = "";
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    taskId = task.id;
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    queuedId = (await runtime.submitInput({ ...identity, text: "B", delivery: "queue" })).id;
+    runtime.close();
+
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", engine]]),
+    });
+    const history = runtime.getHistory(taskId)!;
+    assert.equal(history.inputs.find((input) => input.text === "A")?.status, "unknown");
+    assert.equal(history.inputs.find((input) => input.id === queuedId)?.status, "rejected");
+    assert.match(
+      history.inputs.find((input) => input.id === queuedId)?.error ?? "",
+      /before this queued Input was dispatched/i,
+    );
+    assert.equal(engine.runs.length, 1);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("queued Input rechecks the current Engine capability after the preceding turn ends", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const queued = await runtime.submitInput({ ...identity, text: "B", delivery: "queue" });
+    engine.setCapability("execution.run", {
+      support: "unsupported",
+      availability: "available",
+      reason: "execution was disabled while B waited",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "capability-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "capability-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "capability-A-completed" },
+    });
+    await until(
+      () =>
+        runtime.getHistory(task.id)!.inputs.find((input) => input.id === queued.id)?.status ===
+        "rejected",
+    );
+    assert.match(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.error ?? "",
+      /execution was disabled/i,
+    );
+    assert.equal(engine.runs.length, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("an unknown queued dispatch blocks later Inputs without resending the command", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "B",
+      delivery: "queue",
+      idempotencyKey: "unknown-b",
+    });
+    const later = await runtime.submitInput({ ...identity, text: "C", delivery: "queue" });
+    engine.runFailure = new EngineContractError({
+      kind: "result-unknown",
+      operation: "execution.run",
+      message: "native sendText ACK was lost",
+      sideEffects: "possible",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "unknown-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "unknown-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "unknown-A-completed" },
+    });
+    await until(
+      () =>
+        runtime.getHistory(task.id)!.inputs.find((input) => input.id === queued.id)?.status ===
+        "unknown",
+    );
+    const history = runtime.getHistory(task.id)!;
+    assert.equal(history.inputs.find((input) => input.id === later.id)?.status, "rejected");
+    assert.match(
+      history.inputs.find((input) => input.id === queued.id)?.error ?? "",
+      /ACK was lost/i,
+    );
+    assert.match(
+      history.inputs.find((input) => input.id === later.id)?.error ?? "",
+      /unknown native result/i,
+    );
+    assert.equal(engine.runs.length, 1);
+    assert.equal(history.executions.length, 1);
+    assert.equal(
+      (
+        await runtime.submitInput({
+          ...identity,
+          text: "B",
+          delivery: "queue",
+          idempotencyKey: "unknown-b",
+        })
+      ).status,
+      "unknown",
+    );
+    assert.equal(engine.runs.length, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Runtime rejects busy queued attachments and records queue cancellation", async () => {
+  const engine = new ManualEngine();
+  let now = 0;
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+  });
+  try {
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: { ...authorization, id: "expiring-queue-grant", expiresAt: 5 },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "queued with file",
+        delivery: "queue",
+        attachments: [
+          { id: "attachment-1", fileName: "note.txt", mimeType: "text/plain", sizeBytes: 4 },
+        ],
+      }),
+      /support text only/i,
+    );
+    const queued = await runtime.submitInput({ ...identity, text: "cancel me", delivery: "queue" });
+    now = 10;
+    const cancelled = runtime.cancelQueuedInput({ ...identity, inputId: queued.id });
+    assert.equal(cancelled.status, "cancelled");
+    assert.equal(cancelled.error, "Cancelled before native dispatch.");
+    assert.equal(engine.runs.length, 1);
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "A-completed" },
+    });
+    await until(
+      () =>
+        runtime.getHistory(task.id)!.inputs.find((input) => input.id === queued.id)?.status ===
+        "cancelled",
+    );
+    assert.equal(engine.runs.length, 1);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
   } finally {
     runtime.close();
   }
@@ -1355,6 +1822,65 @@ test("assistant feedback requires its own authorization and current Engine capab
     assert.equal(engine.feedbackCalls.length, 0);
   } finally {
     engine.closeEvents(0);
+    runtime.close();
+  }
+});
+
+test("assistant feedback requalifies Task state after asynchronous Adapter row lookup", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  let queryEntered!: () => void;
+  let finishQuery!: () => void;
+  const started = new Promise<void>((resolve) => (queryEntered = resolve));
+  const delayed = new Promise<void>((resolve) => (finishQuery = resolve));
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "produce a reply" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "feedback-race-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "feedback-race-started" },
+    });
+    engine.emit(0, {
+      type: "message.delta",
+      text: "answer",
+      messageId: "feedback-race-message",
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "feedback-race-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "completed");
+    const execution = runtime.getHistory(task.id)!.executions[0]!;
+    engine.beforeFeedbackDispatch = async () => {
+      queryEntered();
+      await delayed;
+    };
+    const pending = runtime.setAssistantFeedback({
+      ...identity,
+      executionId: execution.id,
+      messageId: "feedback-race-message",
+      feedback: "like",
+    });
+    await started;
+    runtime.freezeTask({ ...identity, reason: "freeze during native row lookup" });
+    finishQuery();
+    await assert.rejects(pending, /Task .* is frozen/i);
+    assert.equal(engine.feedbackCalls.length, 0);
+    assert.equal(engine.feedbackEffects, 0);
+  } finally {
     runtime.close();
   }
 });

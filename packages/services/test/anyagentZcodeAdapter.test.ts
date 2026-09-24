@@ -311,6 +311,72 @@ async function waitUntil(predicate: () => boolean): Promise<void> {
   assert.fail("Timed out waiting for ZCode adapter state to update.");
 }
 
+test("Runtime promotes queued ZCode text with its persisted command ID using startNow", async () => {
+  const fixture = harness();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "host-grant",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "B",
+      delivery: "queue",
+      idempotencyKey: "queued-b",
+    });
+    assert.equal(queued.status, "queued");
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+
+    completeNativeSource(fixture);
+    await waitUntil(
+      () => fixture.commands.filter((entry) => entry.type === "sendText").length === 2,
+    );
+    const second = fixture.commands.filter((entry) => entry.type === "sendText")[1]!;
+    assert.equal(second.commandId, queued.id);
+    assert.deepEqual(second.payload, {
+      text: "B",
+      requestedDelivery: "startNow",
+      modelSelection: DEFAULT_MODEL_SELECTION,
+    });
+    await waitUntil(
+      () =>
+        runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status ===
+        "native-accepted",
+    );
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "native-accepted",
+    );
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 2);
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+  }
+});
+
 test("ZCode compaction waits for lifecycle evidence after a duplicate ACK", async () => {
   const fixture = harness({ compactAckStatus: "duplicate" });
   try {
@@ -1131,6 +1197,42 @@ test("ZCode assistant feedback resolves and updates the exact current native row
         .filter((entry) => entry.type === "setAssistantFeedback")
         .map((entry) => (entry.payload as { feedback: unknown }).feedback),
       ["like", "dislike", null],
+    );
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("ZCode feedback rechecks Host eligibility after asynchronous row pagination", async () => {
+  let queryEntered!: () => void;
+  let finishQuery!: () => void;
+  const started = new Promise<void>((resolve) => (queryEntered = resolve));
+  const delayed = new Promise<void>((resolve) => (finishQuery = resolve));
+  const fixture = harness({
+    rows: [{ rowId: 13, entityId: "assistant-message-13", kind: "assistantText" }],
+    beforeRows: async () => {
+      queryEntered();
+      await delayed;
+    },
+  });
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({ session, input: "produce a reply" });
+    const pending = fixture.adapter.setAssistantFeedback!({
+      session,
+      executionId: run.executionId,
+      messageId: "assistant-message-13",
+      feedback: "like",
+      beforeDispatch: () => {
+        throw new Error("Task is frozen");
+      },
+    });
+    await started;
+    finishQuery();
+    await assert.rejects(pending, /Task is frozen/);
+    assert.equal(
+      fixture.commands.some((entry) => entry.type === "setAssistantFeedback"),
+      false,
     );
   } finally {
     fixture.adapter.dispose();

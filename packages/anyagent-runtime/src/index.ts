@@ -109,6 +109,9 @@ interface SessionData {
 
 type Mutable<T> = { -readonly [Key in keyof T]: T[Key] };
 type InputData = Mutable<RuntimeInput> & {
+  readonly authorizationId: string;
+  readonly idempotencyKey?: string;
+  readonly requestedDelivery?: SubmitInput["delivery"];
   nativeExecutionId: string | null;
   nativeRevisionCommandId?: string;
 };
@@ -142,7 +145,14 @@ interface RunTarget {
   readonly nativeExecutionId: EngineExecutionRef;
 }
 
-const ACTIVE_INPUT_STATUSES = new Set(["received", "native-accepted", "started", "unknown"]);
+const ACTIVE_INPUT_STATUSES = new Set([
+  "queued",
+  "received",
+  "native-accepted",
+  "started",
+  "unknown",
+]);
+const DISPATCHED_INPUT_STATUSES = new Set(["received", "native-accepted", "started"]);
 const ACTIVE_COMPACT_STATUSES = new Set(["requested", "accepted", "unknown"]);
 const TERMINAL_EXECUTION_STATUSES = new Set(["completed", "failed", "stopped"]);
 const MAX_SUBMISSION_CONFIG_BYTES = 16 * 1024;
@@ -346,6 +356,7 @@ export class TaskRuntime {
   readonly #idFactory: (kind: RuntimeIdKind) => string;
   readonly #listeners = new Set<(change: RuntimeChange) => void>();
   readonly #runs = new Map<string, RunTarget>();
+  readonly #queueDrainingSessions = new Set<string>();
   readonly #liveSessions = new Map<string, EngineSessionRef>();
   readonly #commandLocks = new Set<string>();
   readonly #assistantFeedbackInFlight = new Map<
@@ -826,6 +837,64 @@ export class TaskRuntime {
     return this.#submitInput(input);
   }
 
+  cancelQueuedInput(input: TaskLifecycleRequest & { readonly inputId: string }): RuntimeInput {
+    this.#assertOpen();
+    const task = this.#require<TaskData>("task", input.taskId);
+    const participant = this.#store.get<RuntimeParticipant>("participant", task.data.participantId);
+    const session = this.#store.get<SessionData>("session", task.data.sessionId);
+    if (
+      !participant ||
+      !session ||
+      task.data.participantId !== input.participantId ||
+      task.data.sessionId !== input.sessionId ||
+      participant.id !== input.participantId ||
+      participant.taskId !== task.id ||
+      session.id !== input.sessionId ||
+      session.taskId !== task.id ||
+      task.data.authorization.id !== input.authorizationId ||
+      task.data.authorization.environmentId !== task.data.environment.id ||
+      session.data.projection.environmentId !== task.data.environment.id
+    )
+      throw new RuntimeEligibilityError(
+        "Task, participant, Session, and authorization ownership do not match.",
+        "ownership",
+      );
+    const record = this.#require<InputData>("input", input.inputId);
+    this.#assertRelated(
+      record.data.taskId,
+      record.data.participantId,
+      record.data.sessionId,
+      input,
+    );
+    if (record.taskId !== task.id || record.sessionId !== session.id)
+      throw new RuntimeEligibilityError(
+        "Queued Input belongs to a different Task or Session.",
+        "ownership",
+      );
+    if (record.data.status !== "queued")
+      throw new RuntimeEligibilityError(
+        `Input ${input.inputId} is ${record.data.status}; only a queued Input can be cancelled.`,
+        "terminal",
+      );
+    const cancelledAt = this.#now();
+    record.data.status = "cancelled";
+    record.data.error = "Cancelled before native dispatch.";
+    record.data.terminalAt = cancelledAt;
+    this.#save(
+      "input",
+      record.id,
+      task.id,
+      session.id,
+      record.id,
+      record.data,
+      "cancelled",
+      record.createdAt,
+      cancelledAt,
+    );
+    this.#publish(task.id, "input", record.id);
+    return this.#publicInput(record.data);
+  }
+
   async reviseTurn(input: ReviseTurn): Promise<RuntimeInput> {
     this.#assertOpen();
     const { task, session } = this.#qualify(
@@ -889,6 +958,7 @@ export class TaskRuntime {
       readonly revisionOf: NonNullable<RuntimeInput["revisionOf"]>;
       readonly historicalAttachments?: readonly RuntimeAttachmentReference[];
     },
+    promotedInputId?: string,
   ): Promise<RuntimeInput> {
     this.#assertOpen();
     const capability = revision ? "execution.revise" : "execution.run";
@@ -909,65 +979,223 @@ export class TaskRuntime {
       );
     if (typeof input.text !== "string" || input.text.length === 0)
       throw new RuntimeEligibilityError("Input text must not be empty.");
+    if (input.delivery !== undefined && input.delivery !== "startNow" && input.delivery !== "queue")
+      throw new RuntimeEligibilityError("Input delivery must be startNow or queue.");
+    if (revision && input.delivery === "queue")
+      throw new RuntimeEligibilityError("Revision inputs cannot be queued.", "unsupported");
     const submissionConfig = normalizeSubmissionConfig(input.submissionConfig);
     const attachments = normalizeAttachmentReferences(input.attachments);
+    const idempotencyKey = input.idempotencyKey;
+    if (
+      idempotencyKey !== undefined &&
+      (typeof idempotencyKey !== "string" ||
+        idempotencyKey.length === 0 ||
+        idempotencyKey.length > 256 ||
+        idempotencyKey.trim() !== idempotencyKey)
+    )
+      throw new RuntimeEligibilityError("Input idempotency key is invalid.");
+    if (idempotencyKey && !promotedInputId) {
+      const duplicate = this.#store.findByNativeKey<InputData>("input", session.id, idempotencyKey);
+      if (duplicate) {
+        if (
+          duplicate.data.participantId !== input.participantId ||
+          duplicate.data.sessionId !== session.id ||
+          duplicate.data.authorizationId !== input.authorizationId ||
+          duplicate.data.text !== input.text ||
+          (duplicate.data.requestedDelivery ?? "startNow") !== (input.delivery ?? "startNow") ||
+          JSON.stringify(duplicate.data.submissionConfig ?? null) !==
+            JSON.stringify(submissionConfig ?? null) ||
+          JSON.stringify(duplicate.data.attachments ?? null) !== JSON.stringify(attachments ?? null)
+        )
+          throw new RuntimeEligibilityError(
+            "Input idempotency key was already used for a different request.",
+          );
+        return this.#publicInput(duplicate.data);
+      }
+    }
     const engine = this.#engineFor(task.data);
-    const snapshot = await this.#capabilities(engine);
-    this.#assertCapability(
-      snapshot,
-      task.data.engineId,
-      task.data.environment.id,
-      capability,
-      task.data.engine.configurationVersion,
-      task.data.engine.adapterVersion,
-    );
-
-    this.#assertSessionIdle(task.id, session.id);
-
-    const id = this.#newId("input");
+    const id = promotedInputId ?? this.#newId("input");
     const receivedAt = this.#now();
-    const data: InputData = {
-      id,
-      taskId: task.id,
-      participantId: input.participantId,
-      sessionId: input.sessionId,
-      text: input.text,
-      ...(revision
-        ? { revisionOf: revision.revisionOf, nativeRevisionCommandId: revision.commandId }
-        : {}),
-      ...(submissionConfig ? { submissionConfig } : {}),
-      ...(attachments
-        ? { attachments }
-        : revision?.historicalAttachments
-          ? { attachments: revision.historicalAttachments }
-          : {}),
-      status: "received",
-      receivedAt,
-      acceptedAt: null,
-      startedAt: null,
-      terminalAt: null,
-      error: null,
-      nativeExecutionId: null,
-    };
+    let queued = false;
+    let data: InputData | null = null;
+    const duplicateResult: { input: InputData | null } = { input: null };
     let resolvedAttachments: EngineAttachment[] | undefined;
     let attachmentClaimError: unknown;
     this.#store.transaction(() => {
-      // Check and insert under one SQLite write transaction to serialize concurrent submissions.
-      this.#assertSessionIdle(task.id, session.id);
-      this.#store.insert(
-        this.#record("input", id, task.id, input.sessionId, id, data, data.status, receivedAt),
-      );
-      if (attachments) {
-        try {
-          resolvedAttachments = this.#claimAttachments(task, session, id, attachments);
-        } catch (error) {
-          attachmentClaimError = error;
+      if (!promotedInputId && idempotencyKey) {
+        const duplicate = this.#store.findByNativeKey<InputData>(
+          "input",
+          session.id,
+          idempotencyKey,
+        );
+        if (duplicate) {
+          duplicateResult.input = duplicate.data;
+          data = duplicate.data;
+          return;
+        }
+      }
+      const records = this.#store
+        .list<InputData>("input", task.id)
+        .filter((record) => record.data.sessionId === session.id);
+      if (promotedInputId) {
+        const queuedRecords = records.filter((record) => record.data.status === "queued");
+        const queuedRecord = this.#require<InputData>("input", promotedInputId);
+        if (
+          queuedRecord.taskId !== task.id ||
+          queuedRecord.sessionId !== session.id ||
+          queuedRecord.data.participantId !== input.participantId ||
+          queuedRecord.data.authorizationId !== input.authorizationId ||
+          queuedRecord.data.status !== "queued"
+        )
+          throw new RuntimeEligibilityError(
+            "Queued Input ownership or state changed before promotion.",
+            "ownership",
+          );
+        if (queuedRecords[0]?.id !== promotedInputId)
+          throw new RuntimeEligibilityError("Queued Inputs must be promoted in FIFO order.");
+        const unknown = records.find(
+          (record) => record.id !== promotedInputId && record.data.status === "unknown",
+        );
+        if (unknown)
+          throw new RuntimeEligibilityError(
+            `Queued Input is blocked by unresolved Input ${unknown.id}; its native result is unknown.`,
+            "result-unknown",
+          );
+        const unresolved = records.filter(
+          (record) =>
+            record.id !== promotedInputId && DISPATCHED_INPUT_STATUSES.has(record.data.status),
+        );
+        if (unresolved.length)
+          throw new RuntimeEligibilityError(
+            `Queued Input cannot be promoted while Input ${unresolved[0]!.id} is unresolved.`,
+          );
+        this.#assertNoActiveCompact(task.id, session.id);
+        queuedRecord.data.status = "received";
+        queuedRecord.data.error = null;
+        data = queuedRecord.data;
+        this.#save(
+          "input",
+          id,
+          task.id,
+          session.id,
+          id,
+          data,
+          data.status,
+          queuedRecord.createdAt,
+          receivedAt,
+        );
+      } else {
+        const queuedRecords = records.filter((record) => record.data.status === "queued");
+        const dispatchedRecords = records.filter((record) =>
+          DISPATCHED_INPUT_STATUSES.has(record.data.status),
+        );
+        const unknown = records.find((record) => record.data.status === "unknown");
+        const compactRecords = this.#store
+          .list<RuntimeCompactOperation>("compact-operation", task.id)
+          .filter(
+            (record) =>
+              record.data.sessionId === session.id &&
+              ACTIVE_COMPACT_STATUSES.has(record.data.status),
+          );
+        const mustQueue = queuedRecords.length > 0 || dispatchedRecords.length > 0;
+        if (mustQueue && input.delivery === "queue") {
+          if (unknown)
+            throw new RuntimeEligibilityError(
+              `Cannot queue behind Input ${unknown.id}; its native result is unknown.`,
+              "result-unknown",
+            );
+          if (dispatchedRecords.length > 1)
+            throw new RuntimeEligibilityError(
+              "Cannot queue because the Session has multiple unresolved Inputs.",
+            );
+          if (compactRecords.length)
+            throw new RuntimeEligibilityError(
+              `Cannot queue while compaction ${compactRecords[0]!.id} is unresolved.`,
+            );
+          if (attachments?.length)
+            throw new RuntimeEligibilityError(
+              "Queued Inputs currently support text only; attachments cannot be queued.",
+              "unsupported",
+            );
+          queued = true;
+        } else {
+          if (queuedRecords.length)
+            throw new RuntimeEligibilityError(
+              `Session has queued Input ${queuedRecords[0]!.id}; new input must also request queue delivery.`,
+            );
+          this.#assertSessionIdle(task.id, session.id);
+        }
+        data = {
+          id,
+          taskId: task.id,
+          participantId: input.participantId,
+          sessionId: session.id,
+          text: input.text,
+          authorizationId: input.authorizationId,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+          requestedDelivery: input.delivery ?? "startNow",
+          ...(revision
+            ? { revisionOf: revision.revisionOf, nativeRevisionCommandId: revision.commandId }
+            : {}),
+          ...(submissionConfig ? { submissionConfig } : {}),
+          ...(attachments
+            ? { attachments }
+            : revision?.historicalAttachments
+              ? { attachments: revision.historicalAttachments }
+              : {}),
+          status: queued ? "queued" : "received",
+          receivedAt,
+          acceptedAt: null,
+          startedAt: null,
+          terminalAt: null,
+          error: null,
+          nativeExecutionId: null,
+        };
+        this.#store.insert(
+          this.#record(
+            "input",
+            id,
+            task.id,
+            session.id,
+            id,
+            data,
+            data.status,
+            receivedAt,
+            receivedAt,
+            idempotencyKey ?? null,
+          ),
+        );
+        if (attachments && !queued) {
+          try {
+            resolvedAttachments = this.#claimAttachments(task, session, id, attachments);
+          } catch (error) {
+            attachmentClaimError = error;
+          }
         }
       }
     });
+    if (!data) throw new Error("Input was not persisted before dispatch.");
+    const duplicateInput = duplicateResult.input;
+    if (duplicateInput) {
+      if (
+        duplicateInput.participantId !== input.participantId ||
+        duplicateInput.sessionId !== session.id ||
+        duplicateInput.authorizationId !== input.authorizationId ||
+        duplicateInput.text !== input.text ||
+        (duplicateInput.requestedDelivery ?? "startNow") !== (input.delivery ?? "startNow") ||
+        JSON.stringify(duplicateInput.submissionConfig ?? null) !==
+          JSON.stringify(submissionConfig ?? null) ||
+        JSON.stringify(duplicateInput.attachments ?? null) !== JSON.stringify(attachments ?? null)
+      )
+        throw new RuntimeEligibilityError(
+          "Input idempotency key was already used for a different request.",
+        );
+      return this.#publicInput(duplicateInput);
+    }
     if (resolvedAttachments)
       for (const attachment of resolvedAttachments) this.#attachmentLocators.delete(attachment.id);
     this.#publish(task.id, "input", id);
+    if (queued) return this.#publicInput(data);
 
     try {
       if (attachmentClaimError) throw attachmentClaimError;
@@ -1041,6 +1269,7 @@ export class TaskRuntime {
       const run = await engine.run({
         session: nativeSessionId as EngineSessionRef,
         input: input.text,
+        ...(promotedInputId || input.delivery === "queue" ? { commandId: id } : {}),
         beforeDispatch: checkDispatch,
         ...(submissionConfig ? { submissionConfig } : {}),
         ...(resolvedAttachments ? { attachments: resolvedAttachments } : {}),
@@ -1090,6 +1319,13 @@ export class TaskRuntime {
           `Input result is unknown: ${errorMessage(error)}`,
         );
       this.#publish(task.id, "input", id);
+      if (status === "rejected") void this.#drainQueuedInputs(session.id);
+      else
+        void this.#rejectQueuedInputs(
+          task.id,
+          session.id,
+          `Queue stopped because Input ${id} has an unknown native result.`,
+        );
       throw error;
     }
     return this.#publicInput(this.#require<InputData>("input", id).data);
@@ -1824,11 +2060,22 @@ export class TaskRuntime {
           reason: "The native Session attachment changed before feedback was sent.",
         };
       }
+      const beforeDispatch = this.#dispatchGuard({
+        taskId: input.taskId,
+        participantId: input.participantId,
+        sessionId: input.sessionId,
+        authorizationId: input.authorizationId,
+        capability: "assistant.feedback",
+        engine,
+        nativeSessionId: nativeSession,
+      });
+      beforeDispatch();
       return engine.setAssistantFeedback({
         session: nativeSession,
         executionId: latestExecution.data.nativeExecutionId as EngineExecutionRef,
         messageId,
         feedback: input.feedback,
+        beforeDispatch,
       });
     });
   }
@@ -1860,6 +2107,11 @@ export class TaskRuntime {
       task.data.status,
       task.createdAt,
       task.data.updatedAt,
+    );
+    this.#rejectQueuedInputs(
+      task.id,
+      task.data.sessionId,
+      "Task frozen before queued Input dispatch.",
     );
     this.#publish(task.id, "task", task.id);
     return this.#requireTaskProjection(input.taskId);
@@ -1901,6 +2153,12 @@ export class TaskRuntime {
       }
     }
     const closedAt = this.#now();
+    if (input.outcome === "abandoned")
+      this.#rejectQueuedInputs(
+        task.id,
+        task.data.sessionId,
+        "Task abandoned before queued Input dispatch.",
+      );
     task.data.status = input.outcome;
     task.data.updatedAt = closedAt;
     task.data.closedAt = closedAt;
@@ -1939,7 +2197,10 @@ export class TaskRuntime {
     try {
       for await (const event of events) {
         const terminal = this.#processEvent(target, event);
-        if (terminal) gotTerminal = true;
+        if (terminal) {
+          gotTerminal = true;
+          void this.#drainQueuedInputs(target.sessionId);
+        }
       }
       const input = this.#store.get<InputData>("input", target.inputId);
       if (!gotTerminal && input && ACTIVE_INPUT_STATUSES.has(input.status ?? "")) {
@@ -1968,6 +2229,11 @@ export class TaskRuntime {
           "Engine event stream ended without terminal evidence.",
         );
         this.#publish(target.taskId, "input", target.inputId);
+        this.#rejectQueuedInputs(
+          target.taskId,
+          target.sessionId,
+          `Queue stopped because Input ${target.inputId} ended without terminal evidence and is unknown.`,
+        );
       }
     } catch (error) {
       if (!this.#closed) {
@@ -1995,9 +2261,144 @@ export class TaskRuntime {
           null,
           `Event stream failed: ${errorMessage(error)}`,
         );
+        this.#rejectQueuedInputs(
+          target.taskId,
+          target.sessionId,
+          `Queue stopped because Input ${target.inputId} has an unknown native result.`,
+        );
       }
     } finally {
       this.#runs.delete(runKey(target.sessionId, target.nativeExecutionId));
+    }
+  }
+
+  async #drainQueuedInputs(sessionId: string): Promise<void> {
+    if (this.#closed || this.#queueDrainingSessions.has(sessionId)) return;
+    this.#queueDrainingSessions.add(sessionId);
+    try {
+      const queued = this.#store
+        .listInSession<InputData>("input", sessionId)
+        .find((record) => record.data.status === "queued");
+      if (!queued) return;
+
+      const { taskId } = queued;
+      const task = this.#store.get<TaskData>("task", taskId);
+      const session = this.#store.get<SessionData>("session", sessionId);
+      if (!task || task.data.status !== "active") {
+        this.#rejectQueuedInputs(
+          taskId,
+          sessionId,
+          `Queued Input was not sent because Task is ${task?.data.status ?? "missing"}.`,
+        );
+        return;
+      }
+      if (!session || session.data.projection.status !== "active") {
+        this.#rejectQueuedInputs(
+          taskId,
+          sessionId,
+          `Queued Input was not sent because Session is ${session?.data.projection.status ?? "missing"}.`,
+        );
+        return;
+      }
+      const records = this.#store.listInSession<InputData>("input", sessionId);
+      const unknown = records.find(
+        (record) => record.id !== queued.id && record.data.status === "unknown",
+      );
+      if (unknown) {
+        this.#rejectQueuedInputs(
+          taskId,
+          sessionId,
+          `Queue stopped because Input ${unknown.id} has an unknown native result; queued Inputs were not resent.`,
+        );
+        return;
+      }
+      const unresolved = records.find(
+        (record) => record.id !== queued.id && DISPATCHED_INPUT_STATUSES.has(record.data.status),
+      );
+      if (unresolved) return;
+      const compact = this.#store
+        .list<RuntimeCompactOperation>("compact-operation", taskId)
+        .find(
+          (record) =>
+            record.data.sessionId === sessionId && ACTIVE_COMPACT_STATUSES.has(record.data.status),
+        );
+      if (compact) {
+        this.#rejectQueuedInputs(
+          taskId,
+          sessionId,
+          `Queued Input was not sent because compaction ${compact.id} is unresolved.`,
+        );
+        return;
+      }
+      const data = queued.data;
+      try {
+        await this.#submitInput(
+          {
+            taskId,
+            participantId: data.participantId,
+            sessionId,
+            authorizationId: data.authorizationId,
+            text: data.text,
+            delivery: "queue",
+            ...(data.idempotencyKey ? { idempotencyKey: data.idempotencyKey } : {}),
+            ...(data.submissionConfig ? { submissionConfig: data.submissionConfig } : {}),
+          },
+          undefined,
+          queued.id,
+        );
+      } catch (error) {
+        const latest = this.#store.get<InputData>("input", queued.id);
+        const reason = errorMessage(error);
+        if (latest?.data.status === "unknown") {
+          this.#rejectQueuedInputs(
+            taskId,
+            sessionId,
+            `Queue stopped because Input ${queued.id} has an unknown native result; queued Inputs were not resent.`,
+          );
+        } else {
+          this.#rejectQueuedInputs(
+            taskId,
+            sessionId,
+            `Queue stopped because Input ${queued.id} could not be dispatched: ${reason}`,
+          );
+        }
+      }
+    } catch (error) {
+      if (!this.#closed) {
+        const queued = this.#store
+          .listInSession<InputData>("input", sessionId)
+          .find((record) => record.data.status === "queued");
+        if (queued)
+          this.#rejectQueuedInputs(
+            queued.taskId,
+            sessionId,
+            `Queued Input could not be requalified: ${errorMessage(error)}`,
+          );
+      }
+    } finally {
+      this.#queueDrainingSessions.delete(sessionId);
+    }
+  }
+
+  #rejectQueuedInputs(taskId: string, sessionId: string, reason: string): void {
+    for (const record of this.#store.list<InputData>("input", taskId)) {
+      if (record.data.sessionId !== sessionId || record.data.status !== "queued") continue;
+      const rejectedAt = this.#now();
+      record.data.status = "rejected";
+      record.data.error = reason;
+      record.data.terminalAt = rejectedAt;
+      this.#save(
+        "input",
+        record.id,
+        taskId,
+        sessionId,
+        record.id,
+        record.data,
+        "rejected",
+        record.createdAt,
+        rejectedAt,
+      );
+      this.#publish(taskId, "input", record.id);
     }
   }
 
@@ -3066,10 +3467,16 @@ export class TaskRuntime {
         "Runtime restarted without Engine session reattachment or execution reconciliation support.",
       );
       for (const input of this.#store.list<InputData>("input", session.taskId)) {
-        if (input.data.sessionId !== session.id || !ACTIVE_INPUT_STATUSES.has(input.data.status))
-          continue;
-        input.data.status = "unknown";
-        input.data.error = "Runtime restarted; Engine state cannot be reattached or reconciled.";
+        if (input.data.sessionId !== session.id) continue;
+        if (input.data.status === "queued") {
+          input.data.status = "rejected";
+          input.data.error =
+            "Runtime restarted before this queued Input was dispatched; it was not sent.";
+          input.data.terminalAt = recoveredAt;
+        } else if (ACTIVE_INPUT_STATUSES.has(input.data.status)) {
+          input.data.status = "unknown";
+          input.data.error = "Runtime restarted; Engine state cannot be reattached or reconciled.";
+        } else continue;
         this.#save(
           "input",
           input.id,
@@ -3077,7 +3484,7 @@ export class TaskRuntime {
           session.id,
           input.id,
           input.data,
-          "unknown",
+          input.data.status,
           input.createdAt,
           recoveredAt,
         );
@@ -3207,6 +3614,9 @@ export class TaskRuntime {
     const {
       nativeExecutionId: _nativeExecutionId,
       nativeRevisionCommandId: _nativeRevisionCommandId,
+      authorizationId: _authorizationId,
+      idempotencyKey: _idempotencyKey,
+      requestedDelivery: _requestedDelivery,
       ...projection
     } = data;
     return projection;
@@ -3645,7 +4055,11 @@ function eventPayload(event: EngineEvent): Record<string, unknown> {
 
 function TERMINAL_INPUT(status: RuntimeInput["status"]): boolean {
   return (
-    status === "completed" || status === "failed" || status === "stopped" || status === "rejected"
+    status === "completed" ||
+    status === "failed" ||
+    status === "stopped" ||
+    status === "rejected" ||
+    status === "cancelled"
   );
 }
 

@@ -205,6 +205,9 @@ export function createAnyAgentService(
     async submitInput(input) {
       await runtime.submitInput(input);
     },
+    async cancelQueuedInput(input) {
+      runtime.cancelQueuedInput(input);
+    },
     async reviseTurn(input) {
       await runtime.reviseTurn(input);
     },
