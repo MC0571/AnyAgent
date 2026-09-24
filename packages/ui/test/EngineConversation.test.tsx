@@ -2069,6 +2069,16 @@ test("an active ZCode Harness task switches models within its Session and submit
       executionId: "execution-native-feedback",
     },
   };
+  const newTask = {
+    ...zcodeTask,
+    id: "task-zcode-new-from-slash",
+    participant: { ...zcodeTask.participant, id: "participant-zcode-new-from-slash" },
+    session: {
+      ...zcodeTask.session,
+      id: "session-zcode-new-from-slash",
+      nativeSessionId: "native-zcode-new-from-slash",
+    },
+  };
   const workspacePath = "/tmp/anyagent-ui";
   const zcodeSlashCommands = [
     { name: "compact", description: "Compact", source: "builtin" as const },
@@ -2076,6 +2086,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     { name: "init", description: "Initialize", source: "builtin" as const },
     { name: "skill", description: "Use a skill", source: "builtin" as const },
     { name: "custom-note", description: "Custom prompt", source: "custom" as const },
+    { name: "future-native", description: "Future native command", source: "builtin" as const },
   ];
   const zcodeSessionStore = useZCodeSessionStore.getState();
   const originalSlashCommands = zcodeSessionStore.getWorkspaceState(workspacePath).slashCommands;
@@ -2118,6 +2129,9 @@ test("an active ZCode Harness task switches models within its Session and submit
   };
   const submissions: Array<Record<string, unknown>> = [];
   const compactRequests: Array<Record<string, unknown>> = [];
+  const createTaskRequests: Array<Record<string, unknown>> = [];
+  const selectedTaskIds: string[] = [];
+  let createTaskError: Error | null = null;
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
   const feedbackRequests: Array<Record<string, unknown>> = [];
   const forkRequests: Array<Record<string, unknown>> = [];
@@ -2149,11 +2163,23 @@ test("an active ZCode Harness task switches models within its Session and submit
     error: null,
   });
   const service = {
-    listTasks: async () => [zcodeTask, zcodeTaskB, forkTask],
+    listTasks: async () => [zcodeTask, zcodeTaskB, forkTask, newTask],
     getTask: async (id: string) =>
-      id === forkTask.id ? forkTask : id === zcodeTaskB.id ? zcodeTaskB : zcodeTask,
+      id === newTask.id
+        ? newTask
+        : id === forkTask.id
+          ? forkTask
+          : id === zcodeTaskB.id
+            ? zcodeTaskB
+            : zcodeTask,
     getHistory: async (id: string) =>
-      id === forkTask.id ? forkHistory : id === zcodeTaskB.id ? historyB : history,
+      id === newTask.id
+        ? emptyHistory(newTask.id)
+        : id === forkTask.id
+          ? forkHistory
+          : id === zcodeTaskB.id
+            ? historyB
+            : history,
     getExecutionFileChanges: async () => null,
     getAssistantFeedback: async (id: string) => ({
       state: "current",
@@ -2170,6 +2196,11 @@ test("an active ZCode Harness task switches models within its Session and submit
     compactSession: async (input: Record<string, unknown>) => {
       compactRequests.push(input);
       return { status: "completed", reason: null };
+    },
+    createTask: async (input: Record<string, unknown>) => {
+      createTaskRequests.push(input);
+      if (createTaskError) throw createTaskError;
+      return newTask;
     },
     setAssistantFeedback: async (input: Record<string, unknown>) => {
       feedbackRequests.push(input);
@@ -2226,7 +2257,9 @@ test("an active ZCode Harness task switches models within its Session and submit
               createElement(EngineConversation, {
                 service: service as never,
                 selectedTaskId,
-                onSelectTask: () => {},
+                onSelectTask: (id) => {
+                  if (id) selectedTaskIds.push(id);
+                },
               }),
             ),
           ),
@@ -2452,11 +2485,92 @@ test("an active ZCode Harness task switches models within its Session and submit
       "/help model should show local CLI help without submitting to the model",
     );
     assert.equal(submissions.length, 0);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help skill"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("此原生命令当前没有对应的 Harness 操作")),
+      "/help skill should disclose the missing M0 CLI prompt mapping",
+    );
+    assert.equal(submissions.length, 0);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.ok(document.body.textContent?.includes("固定 CLI 命令暂不支持：/login、/logout")),
+      "/help should distinguish the fixed M0 catalog from M1-supported commands",
+    );
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/goal status"));
     await submitCurrentDraft();
     assert.equal(submissions.length, 0, "unmapped native /goal must not become an ordinary prompt");
     assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/goal status");
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("没有对应的 Host 操作；输入已保留")),
+      "a fixed but unmapped M0 command should explain its limitation",
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/custom-note take notes"));
+    await submitCurrentDraft();
+    assert.equal(submissions.length, 0, "a CLI custom command must not be sent as ordinary input");
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/custom-note take notes");
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("不执行此类命令，输入已保留")),
+      "a custom CLI command should explain that M1 does not execute it",
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/future-native arg"));
+    await submitCurrentDraft();
+    assert.equal(submissions.length, 0, "a dynamic future command must not be dispatched");
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/future-native arg");
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("不在固定 ZCode v0.16.9 支持范围内")),
+      "a command added outside the fixed M0 catalog should remain unsupported",
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/not-in-catalog arg"));
+    await submitCurrentDraft();
+    assert.equal(submissions.length, 0, "an unknown slash command must not become a prompt");
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/not-in-catalog arg");
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("未知斜杠命令 /not-in-catalog")),
+      "an unknown slash command should be reported and preserved",
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/new"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="app-slash:new"]')),
+      "the product /new command should be available when the M1 protocol catalog omits it",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="app-slash:new"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await waitFor(
+      () => assert.match(input.__zcodeLexicalInputE2E!.getText(), /\/new/),
+      "selecting /new should fill the composer before creating a Task",
+    );
+    await submitCurrentDraft();
+    await waitFor(() => {
+      assert.equal(createTaskRequests.length, 1);
+      assert.equal(selectedTaskIds.length, 1);
+    }, "/new should create and select a fresh Host Task");
+    assert.deepEqual(createTaskRequests[0], { engineId: "zcode", workspacePath });
+    assert.equal(selectedTaskIds[0], newTask.id);
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "");
+
+    createTaskError = new Error("Host rejected new Task");
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/new"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(createTaskRequests.length, 2));
+    assert.equal(selectedTaskIds.length, 1, "a failed /new must not change selection");
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/new", "a failed /new keeps its draft");
+    createTaskError = null;
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/clear"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(createTaskRequests.length, 3));
+    assert.equal(selectedTaskIds[1], newTask.id, "/clear should retain /new alias behavior");
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("Use the selected model"));
     await act(async () =>
@@ -2514,17 +2628,24 @@ test("an active ZCode Harness task switches models within its Session and submit
     );
     assert.equal(container.querySelector('[role="status"]'), null);
 
-    await act(async () => input.__zcodeLexicalInputE2E!.setText("/skill"));
-    await waitFor(
-      () => assert.ok(container.querySelector('[data-option-id="slash:skill"]')),
-      "safe native Skill prompt command should remain available",
-    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/skill review inspect changes"));
     await waitFor(
       () =>
         assert.ok(
           skillCatalogLookups.some((lookup) => lookup.sessionId === "native-zcode-session-ui"),
         ),
       "native Skill catalog did not receive the verified native Session ID",
+    );
+    await submitCurrentDraft();
+    assert.equal(
+      submissions.length,
+      1,
+      "M0 /skill must not be sent without its CLI prompt mapping",
+    );
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/skill review inspect changes");
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("没有对应的 Host 操作；输入已保留")),
+      "M1 should state that the CLI manual Skill expansion is not mapped",
     );
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/plan"));
@@ -2710,6 +2831,15 @@ test("an active ZCode Harness task switches models within its Session and submit
     });
     await waitFor(() => assert.equal(submissions.length, 6));
     assert.equal(submissions[5]?.text, "Send only once");
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/init keep workspace notes"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(submissions.length, 7));
+    assert.equal(
+      submissions[6]?.text,
+      "/init keep workspace notes",
+      "/init should submit through the product Runtime input path",
+    );
+    assert.equal(submissions[6]?.taskId, forkTask.id);
     await act(async () => {
       input.blur();
       await new Promise((resolve) => setTimeout(resolve, 0));

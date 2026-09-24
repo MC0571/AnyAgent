@@ -19,6 +19,7 @@ import type { LexicalChatInputHandle } from "@/LexicalChatInput.js";
 import {
   EngineCapabilityList,
   canActOnTask,
+  capabilityBlockReason,
   jsonLabel,
   shortId,
   timeLabel,
@@ -96,48 +97,40 @@ const zcodeBuiltinSlashCommandByName = new Map(
     [entry.name, ...(entry.aliases ?? [])].map((name) => [name.toLowerCase(), entry.name] as const),
   ),
 );
-const nativePromptBuiltinSlashCommands = new Set(["init", "skill"]);
+const nativePromptBuiltinSlashCommands = new Set(["init"]);
 const rendererMappedSlashCommands = new Set([
   "compact",
   "effort",
   "help",
   "mode",
   "model",
+  "new",
   "plan",
   "variant",
 ]);
-const appMappedSlashCommandNames = ["effort", "help", "mode", "model", "variant"] as const;
 
 function parseLeadingSlashCommand(text: string): { name: string; args: string } | null {
   const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/u.exec(text.trim());
   const rawName = match?.[1];
   if (!rawName) return null;
+  const normalizedName = normalizeSlashCommandValue(rawName).toLowerCase();
   return {
-    name: normalizeSlashCommandValue(rawName).toLowerCase(),
+    name: zcodeBuiltinSlashCommandByName.get(normalizedName) ?? normalizedName,
     args: match?.[2]?.trim() ?? "",
   };
 }
 
-function nativeBuiltinForSlashCommand(
-  name: string,
-  commands: readonly ZCodeSlashCommand[],
-): string | null {
-  const knownBuiltin = zcodeBuiltinSlashCommandByName.get(name);
-  if (knownBuiltin) return knownBuiltin;
-  const catalogCommand = commands.find(
-    (command) => normalizeSlashCommandValue(command.name).toLowerCase() === name,
-  );
-  return catalogCommand && catalogCommand.source !== "custom" ? name : null;
+function nativeBuiltinForSlashCommand(name: string): string | null {
+  return zcodeBuiltinSlashCommandByName.get(name) ?? null;
 }
 
 function excludedNativeSlashCommandNames(commands: readonly ZCodeSlashCommand[]): string[] {
   return commands
     .map((command) => normalizeSlashCommandValue(command.name).toLowerCase())
-    .filter((name) => {
-      if (nativePromptBuiltinSlashCommands.has(name) || rendererMappedSlashCommands.has(name))
-        return false;
-      return nativeBuiltinForSlashCommand(name, commands) !== null;
-    });
+    .filter(
+      (name) =>
+        !nativePromptBuiltinSlashCommands.has(name) && !rendererMappedSlashCommands.has(name),
+    );
 }
 
 function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashCommand[]): string {
@@ -149,11 +142,13 @@ function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashComman
     if (entry) {
       const isMapped =
         rendererMappedSlashCommands.has(entry.name) ||
-        nativePromptBuiltinSlashCommands.has(entry.name) ||
-        entry.name === "skill";
+        nativePromptBuiltinSlashCommands.has(entry.name);
       return [
         `${entry.usage} — ${entry.summary}`,
         ...entry.details,
+        ...(entry.name === "compact"
+          ? ["M1 Engine 当前只支持无参数压缩；CLI 的可选 instructions 尚无 Host 字段。"]
+          : []),
         ...(isMapped ? [] : ["此原生命令当前没有对应的 Harness 操作。"]),
       ].join("\n");
     }
@@ -161,20 +156,34 @@ function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashComman
       (command) => normalizeSlashCommandValue(command.name).toLowerCase() === requestedName,
     );
     if (custom) {
-      return [custom.inputHint?.trim() || `/${custom.name}`, custom.description].join("\n");
+      return [
+        custom.inputHint?.trim() || `/${custom.name}`,
+        custom.description,
+        "M1 Engine 对话暂不执行 ZCode CLI 自定义命令；输入会保留。",
+      ].join("\n");
     }
-    return `未找到 /${requestedName}。输入 /help 查看当前命令目录。`;
+    return `未找到固定 ZCode v0.16.9 命令 /${requestedName}。输入已保留。`;
   }
 
-  const commandNames = new Map<string, string>();
-  for (const command of commands) {
-    const name = normalizeSlashCommandValue(command.name);
-    if (name) commandNames.set(name.toLowerCase(), `/${name}`);
-  }
-  for (const name of appMappedSlashCommandNames) {
-    if (!commandNames.has(name)) commandNames.set(name, `/${name}`);
-  }
-  return `当前命令：${[...commandNames.values()].join("、")}。输入 /help <命令> 查看说明。`;
+  const supportedNames = new Set([
+    ...rendererMappedSlashCommands,
+    ...nativePromptBuiltinSlashCommands,
+  ]);
+  const unsupportedBuiltins = BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES.filter(
+    (entry) => !supportedNames.has(entry.name),
+  ).map((entry) => `/${entry.name}`);
+  const customNames = commands
+    .filter((command) => command.source === "custom")
+    .map((command) => `/${normalizeSlashCommandValue(command.name)}`);
+  const supportedCommands = [...supportedNames].map((name) => `/${name}`);
+  return [
+    `M1 Engine 对话支持：${supportedCommands.join("、")}。`,
+    `固定 CLI 命令暂不支持：${unsupportedBuiltins.join("、")}。`,
+    ...(customNames.length > 0
+      ? [`ZCode CLI 自定义命令暂不支持：${customNames.join("、")}。`]
+      : []),
+    "输入 /help <命令> 查看说明。",
+  ].join("\n");
 }
 
 function errorText(error: unknown): string {
@@ -779,6 +788,15 @@ export function EngineConversation({
         run: openModelPicker,
       },
       {
+        value: "new",
+        description:
+          locale === "zh-CN"
+            ? "在当前工作区开始新对话"
+            : "Start a new conversation in this workspace",
+        keywords: ["new", "clear", "新对话", "清空"],
+        run: () => inputApiRef.current?.setText("/new "),
+      },
+      {
         value: "effort",
         description: "查看或切换当前模型的推理档位",
         keywords: ["effort", "推理", "档位"],
@@ -988,7 +1006,8 @@ export function EngineConversation({
         if (slashCommand.args || selectedAttachments.length > 0) {
           setNotice({
             kind: "info",
-            message: "/compact 是独立维护操作，不接受正文或附件；输入已保留。",
+            message:
+              "/compact 当前只支持无参数维护操作；可选 instructions 尚无 Host 字段，且不接受附件；输入已保留。",
           });
           return false;
         }
@@ -1037,6 +1056,62 @@ export function EngineConversation({
         ).then((accepted) => {
           if (accepted && inputApiRef.current === editor) editor?.clear();
         });
+        return false;
+      } else if (slashCommand.name === "new") {
+        if (slashCommand.args) {
+          setNotice({ kind: "info", message: "/new 不接受参数；输入已保留。" });
+          return false;
+        }
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
+          setNotice({ kind: "info", message: "/new 不接受附件或网页上下文；输入已保留。" });
+          return false;
+        }
+        const createEngine = engines?.find(
+          (engine) => engine.engineId === visibleTask.engine.engineId,
+        );
+        const createBlockedReason =
+          refreshFailed || engines === null
+            ? "暂时无法确认新对话是否可创建，请刷新状态。"
+            : !createEngine || createEngine.state !== "current"
+              ? "暂时无法确认新对话是否可创建，请刷新状态。"
+              : capabilityBlockReason(createEngine.capabilities["session.create"]);
+        if (createBlockedReason || busyAction) {
+          setNotice({
+            kind: "info",
+            message: createBlockedReason ?? "当前操作尚未完成。",
+          });
+          return false;
+        }
+        const workspacePath = visibleTask.environment.workDirectory;
+        if (!workspacePath) {
+          setNotice({ kind: "info", message: "/new 需要已确认的本地工作区；输入已保留。" });
+          return false;
+        }
+        void runAction(
+          "new",
+          async () => {
+            const created = await service.createTask({
+              engineId: visibleTask.engine.engineId,
+              workspacePath,
+            });
+            if (
+              created.id === visibleTask.id ||
+              created.engine.engineId !== visibleTask.engine.engineId ||
+              created.environment.id !== visibleTask.environment.id ||
+              created.participant.id === visibleTask.participant.id ||
+              created.participant.status !== "active" ||
+              created.session.status !== "active" ||
+              created.session.id === visibleTask.session.id ||
+              created.session.nativeSessionId === visibleTask.session.nativeSessionId
+            )
+              throw new Error("Host 新建对话结果的 Task、Participant 或 Session 身份不匹配。");
+            const editor = inputApiRef.current;
+            if (editor) editor.clear();
+            onSelectTask(created.id);
+            return created;
+          },
+          () => null,
+        );
         return false;
       } else if (slashCommand.name === "plan") {
         if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
@@ -1210,18 +1285,28 @@ export function EngineConversation({
         }));
         setNotice(null);
         return true;
-      } else {
-        const nativeBuiltin = nativeBuiltinForSlashCommand(slashCommand.name, nativeSlashCommands);
-        if (nativeBuiltin && !nativePromptBuiltinSlashCommands.has(nativeBuiltin)) {
-          setNotice({
-            kind: "info",
-            message:
-              locale === "zh-CN"
-                ? `/${slashCommand.name} 是 ZCode 原生命令；当前 Harness 没有对应操作，输入已保留。`
-                : `/${slashCommand.name} is a native ZCode command with no matching Harness operation. Your draft is preserved.`,
-          });
-          return false;
-        }
+      } else if (!nativePromptBuiltinSlashCommands.has(slashCommand.name)) {
+        const nativeBuiltin = nativeBuiltinForSlashCommand(slashCommand.name);
+        const catalogCommand = nativeSlashCommands.find(
+          (command) => normalizeSlashCommandValue(command.name).toLowerCase() === slashCommand.name,
+        );
+        const message = nativeBuiltin
+          ? locale === "zh-CN"
+            ? `/${slashCommand.name} 属于固定 ZCode CLI 命令目录，但当前 M1 Engine 对话没有对应的 Host 操作；输入已保留。`
+            : `/${slashCommand.name} is in the fixed ZCode CLI catalog, but M1 Engine conversations have no matching Host action. Your draft is preserved.`
+          : catalogCommand?.source === "custom"
+            ? locale === "zh-CN"
+              ? `/${slashCommand.name} 是 ZCode CLI 自定义命令；当前 M1 Engine 对话不执行此类命令，输入已保留。`
+              : `/${slashCommand.name} is a ZCode CLI custom command; M1 Engine conversations do not run these commands. Your draft is preserved.`
+            : catalogCommand
+              ? locale === "zh-CN"
+                ? `/${slashCommand.name} 不在固定 ZCode v0.16.9 支持范围内；输入已保留。`
+                : `/${slashCommand.name} is outside the fixed ZCode v0.16.9 support set. Your draft is preserved.`
+              : locale === "zh-CN"
+                ? `未知斜杠命令 /${slashCommand.name}；输入已保留。`
+                : `Unknown slash command /${slashCommand.name}. Your draft is preserved.`;
+        setNotice({ kind: "info", message });
+        return false;
       }
     }
 
