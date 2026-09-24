@@ -53,6 +53,7 @@ import {
   modelSelectionSchema,
   ZCODE_AGENT_PROVIDER,
   type ModelSelection,
+  type ZCodeSkillReferenceCatalogEntry,
   type ZCodeSlashCommand,
   type ZCodeConfigOption,
 } from "@zcode/shared";
@@ -106,6 +107,7 @@ const rendererMappedSlashCommands = new Set([
   "model",
   "new",
   "plan",
+  "skill",
   "variant",
 ]);
 
@@ -122,6 +124,44 @@ function parseLeadingSlashCommand(text: string): { name: string; args: string } 
 
 function nativeBuiltinForSlashCommand(name: string): string | null {
   return zcodeBuiltinSlashCommandByName.get(name) ?? null;
+}
+
+function parseManualSkillArgs(args: string): { skillName: string; task: string } | null {
+  const trimmed = args.trim();
+  if (!trimmed) return null;
+  const firstWhitespace = trimmed.search(/\s/u);
+  if (firstWhitespace === -1) return { skillName: trimmed, task: "" };
+  return {
+    skillName: trimmed.slice(0, firstWhitespace),
+    task: trimmed.slice(firstWhitespace + 1).trim(),
+  };
+}
+
+/** Keep the fixed v0.16.9 CLI `/skill` rewrite before submitting through Host/Runtime. */
+function buildManualSkillPrompt(skillName: string, task: string): string {
+  const trimmedTask = task.trim();
+  const taskBlock = trimmedTask
+    ? `User request:\n${trimmedTask}`
+    : "No additional user request was provided. Load the skill and respond according to its instructions.";
+  return [
+    `Use the skill named \`${skillName}\` for this turn.`,
+    `First call the \`Skill\` tool with name \`${skillName}\` before doing the task.`,
+    "After the skill content is loaded, follow its instructions and continue.",
+    "",
+    taskBlock,
+  ].join("\n");
+}
+
+function formatSessionSkillCatalog(skills: readonly ZCodeSkillReferenceCatalogEntry[]): string {
+  if (skills.length === 0) return "No skills found.";
+  const lines = [`Available skills (${skills.length})`];
+  for (const skill of skills) {
+    lines.push(`- ${skill.name} (${skill.scope}${skill.pluginName ? `/${skill.pluginName}` : ""})`);
+    lines.push(`  ${skill.description}`);
+    lines.push(`  ${skill.path}`);
+  }
+  lines.push("", "Use /skill <name> [task] to load one.");
+  return lines.join("\n");
 }
 
 function excludedNativeSlashCommandNames(commands: readonly ZCodeSlashCommand[]): string[] {
@@ -333,6 +373,8 @@ export function EngineConversation({
   const submitPendingRef = useRef(false);
   const conversationScrollRef = useRef<HTMLDivElement | null>(null);
   const followConversationTailRef = useRef(true);
+  const selectedTaskIdRef = useRef(selectedTaskId);
+  selectedTaskIdRef.current = selectedTaskId;
   const { intl, locale } = useZCodeIntl();
   const platform = usePlatform();
   const unavailableControlValue = intl.formatMessage({
@@ -354,7 +396,7 @@ export function EngineConversation({
     currentValue: "engine-unavailable",
     options: [{ value: "engine-unavailable", name: unavailableControlValue }],
   };
-  const { modelSelectionService } = useServices();
+  const { modelSelectionService, zcodeAgentService } = useServices();
   const modelSelectionRead = useModelSelectionServiceView(modelSelectionService);
 
   const refresh = useCallback(async () => {
@@ -992,6 +1034,63 @@ export function EngineConversation({
     })();
   };
 
+  const importSharedContext = async (request: {
+    shareCode: string;
+    clientRequestId: string;
+  }): Promise<boolean> => {
+    const target = visibleTask;
+    if (
+      !target ||
+      target.engine.engineId !== "zcode" ||
+      target.id !== selectedTaskIdRef.current ||
+      busyAction
+    )
+      return false;
+    const workspacePath = target.environment.workDirectory;
+    if (!workspacePath) {
+      setNotice({ kind: "error", message: "共享上下文导入需要当前 Task 的本地工作区。" });
+      return false;
+    }
+
+    const importedTaskRef: {
+      current: Awaited<ReturnType<IAnyAgentService["importSharedContext"]>> | null;
+    } = { current: null };
+    const accepted = await runAction(
+      "import-shared-context",
+      async () => {
+        const imported = await service.importSharedContext({
+          ...request,
+          workspacePath,
+          locale,
+        });
+        if (
+          imported.id === target.id ||
+          imported.status !== "active" ||
+          imported.engine.engineId !== "zcode" ||
+          imported.environment.id !== target.environment.id ||
+          imported.environment.workDirectory !== workspacePath ||
+          imported.participant.id === target.participant.id ||
+          imported.participant.status !== "active" ||
+          imported.session.id === target.session.id ||
+          imported.session.nativeSessionId === target.session.nativeSessionId ||
+          imported.session.status !== "active" ||
+          !imported.session.nativeSessionId ||
+          !imported.sharedContext?.contextId.trim() ||
+          !imported.sharedContext.title.trim() ||
+          !imported.sharedContext.shareUrl.trim()
+        )
+          throw new Error("Host 返回的共享上下文 Task 身份或来源校验不完整。");
+        importedTaskRef.current = imported;
+        return imported;
+      },
+      () => "共享上下文已导入。",
+    );
+    const importedTask = importedTaskRef.current;
+    if (!accepted || !importedTask) return false;
+    if (selectedTaskIdRef.current === target.id) onSelectTask(importedTask.id);
+    return true;
+  };
+
   const submitInput = (text: string): boolean => {
     const cleanText = text.trim();
     if (!visibleTask || !cleanText) return false;
@@ -1000,6 +1099,9 @@ export function EngineConversation({
     const slashCommand = parseLeadingSlashCommand(cleanText);
     let submittedText = cleanText;
     let submission = zcodeSubmission;
+    let submitActionId = "input";
+    let submitPreflight: (() => Promise<void>) | null = null;
+    let submitSuccessMessage: (() => string | null) | null = null;
 
     if (isZCodeHarness && slashCommand) {
       if (slashCommand.name === "compact") {
@@ -1285,6 +1387,102 @@ export function EngineConversation({
         }));
         setNotice(null);
         return true;
+      } else if (slashCommand.name === "skill") {
+        const target = visibleTask;
+        const workspacePath = target.environment.workDirectory;
+        const skillSessionId = target.session.nativeSessionId;
+        if (
+          !workspacePath ||
+          !skillSessionId ||
+          target.session.status !== "active" ||
+          target.status !== "active"
+        ) {
+          setNotice({
+            kind: "info",
+            message: "/skill 需要当前 Task 已连接的原生 Session；输入已保留。",
+          });
+          return false;
+        }
+        if (busyAction || submitPendingRef.current) {
+          setNotice({ kind: "info", message: "当前操作尚未完成；输入已保留。" });
+          return false;
+        }
+        const editor = inputApiRef.current;
+        const readSessionCatalog = async () => {
+          const catalog = await zcodeAgentService.getSkillReferenceCatalog({
+            workspacePath,
+            sessionId: skillSessionId,
+          });
+          if (catalog.authority !== "session")
+            throw new Error("无法核实当前原生 Session 的 Skill 快照；输入已保留。");
+          const currentTask = await service.getTask(target.id);
+          if (
+            selectedTaskIdRef.current !== target.id ||
+            !currentTask ||
+            currentTask.id !== target.id ||
+            currentTask.participant.id !== target.participant.id ||
+            currentTask.session.id !== target.session.id ||
+            currentTask.session.nativeSessionId !== skillSessionId ||
+            currentTask.authorizationId !== target.authorizationId ||
+            currentTask.status !== "active" ||
+            currentTask.session.status !== "active"
+          )
+            throw new Error("Skill 请求的 Task 或原生 Session 已变化；输入已保留。");
+          return catalog;
+        };
+
+        if (!slashCommand.args) {
+          void runAction(
+            "skill-list",
+            async () => formatSessionSkillCatalog((await readSessionCatalog()).skills),
+            (result) => result,
+          ).then((accepted) => {
+            if (
+              accepted &&
+              selectedTaskIdRef.current === target.id &&
+              inputApiRef.current === editor &&
+              editor?.getText().trim() === cleanText
+            )
+              editor?.clear();
+          });
+          return false;
+        }
+
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
+          setNotice({
+            kind: "info",
+            message: "/skill 当前只接受文本任务；请先移除附件或网页上下文，输入已保留。",
+          });
+          return false;
+        }
+        if (runBlockedReason || submitBlockedReason || !submission) {
+          setNotice({
+            kind: "info",
+            message:
+              runBlockedReason ??
+              submitBlockedReason ??
+              "请先选择当前可用的模型与推理档位；输入已保留。",
+          });
+          return false;
+        }
+        const parsedSkill = parseManualSkillArgs(slashCommand.args);
+        if (!parsedSkill) {
+          setNotice({ kind: "info", message: "用法：/skill <名称> [任务]；输入已保留。" });
+          return false;
+        }
+        submittedText = buildManualSkillPrompt(parsedSkill.skillName, parsedSkill.task);
+        submitActionId = "skill";
+        submitPreflight = async () => {
+          const catalog = await readSessionCatalog();
+          if (!catalog.skills.some((skill) => skill.name === parsedSkill.skillName))
+            throw new Error(
+              `Skill “${parsedSkill.skillName}” is not available in this Session's Skill catalog.`,
+            );
+          if (selectedTaskIdRef.current !== target.id)
+            throw new Error("Skill 请求的 Task 已切换；输入已保留。");
+        };
+        submitSuccessMessage = () =>
+          shouldQueue ? "Skill 请求已加入输入队列。" : "Skill 请求已提交。";
       } else if (!nativePromptBuiltinSlashCommands.has(slashCommand.name)) {
         const nativeBuiltin = nativeBuiltinForSlashCommand(slashCommand.name);
         const catalogCommand = nativeSlashCommands.find(
@@ -1341,8 +1539,9 @@ export function EngineConversation({
     const editor = inputApiRef.current;
     submitPendingRef.current = true;
     void runAction(
-      "input",
+      submitActionId,
       async () => {
+        if (submitPreflight) await submitPreflight();
         const attachments = await Promise.all(
           selectedAttachments.map((attachment) =>
             service.stageAttachment({
@@ -1384,7 +1583,7 @@ export function EngineConversation({
             : {}),
         });
       },
-      () => null,
+      () => submitSuccessMessage?.() ?? null,
     )
       .then((accepted) => {
         if (!accepted) return;
@@ -1400,7 +1599,8 @@ export function EngineConversation({
         } catch {
           // History is optional; an unavailable browser store must not undo an accepted input.
         }
-        if (inputApiRef.current === editor) editor?.clear();
+        if (inputApiRef.current === editor && editor?.getText().trim() === cleanText)
+          editor?.clear();
         if (selectedAttachments.length > 0) {
           setAttachmentsByTask((current) => ({
             ...current,
@@ -1960,6 +2160,7 @@ export function EngineConversation({
                   taskId={activeNativeSessionId}
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
+                  onImportSharedContext={isZCodeHarness ? importSharedContext : undefined}
                   attachmentAction={platform.canSelectFilePath ? attachmentAction : undefined}
                   showMentionButton={isZCodeHarness}
                   fileReferencesOnly={isZCodeHarness}

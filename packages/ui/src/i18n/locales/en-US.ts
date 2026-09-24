@@ -146,12 +146,26 @@ const enUS: Record<string, string> = {
   "chat.previewCards.openExternalFailed": "Could not open this file in the browser",
   "settings.modelProvider.connectionMode.switchToStartPlan": "Switch to Start Plan",
   "chat.composer.contextSearchHint": "Type to search plugins, files, and chats",
+  "chat.composer.contextSearchHint.files": "Type @ in the editor to search workspace files",
+  "chat.composer.contextSearchHint.fileAndShare":
+    "Type @ in the editor to search files; imported shares open as new tasks",
   "chat.composer.contextShortcut": "Add context",
   "chat.composer.capabilityShortcut": "Choose capabilities",
   "chat.composer.skillShortcut": "Choose skills",
   "chat.composer.addSection": "Add",
   "chat.composer.addWorkflow": "Workflow",
   "chat.composer.attachment": "Attachments",
+  "chat.composer.importSharedContext.menuItem": "Import shared conversation",
+  "chat.composer.importSharedContext.title": "Import shared conversation context",
+  "chat.composer.importSharedContext.description":
+    "Paste a share page link, an AnyAgent import link, or a share code. Import creates a new task and leaves the current task unchanged.",
+  "chat.composer.importSharedContext.label": "Share link or code",
+  "chat.composer.importSharedContext.placeholder": "https://zcode.z.ai/cn/share/…",
+  "chat.composer.importSharedContext.invalid": "Enter a valid share link or code.",
+  "chat.composer.importSharedContext.failed": "Import failed. Check the notification and retry.",
+  "chat.composer.importSharedContext.submitting": "Importing…",
+  "chat.composer.importSharedContext.submit": "Import and open",
+  "chat.composer.importSharedContext.cancel": "Cancel",
   "chat.permission.feedback.ariaLabel": "Optional feedback for the model when denying",
   "chat.permission.feedback.placeholder": "Tell the model what to do instead...",
   "offPeak.chatCreated.defaultTitle": "Idle-time task",
@@ -4525,7 +4539,7 @@ const enUS: Record<string, string> = {
   "chat.toolbar.mode.label": "Switch mode",
   "engine.composer.unavailableValue": "Not mapped",
   "engine.composer.textOnly":
-    "Shared conversation-context shortcuts are not mapped in the current Harness integration.",
+    "Use the + menu to reference workspace files or import a shared conversation.",
   "engine.composer.attachmentLocalPathRequired":
     "Harness attachments must be selected as local files that the Host can verify.",
   "engine.composer.modeUnavailable":

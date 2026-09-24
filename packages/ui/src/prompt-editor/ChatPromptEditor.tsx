@@ -31,6 +31,7 @@ import {
   ChatPromptActionMenu,
   ChatPromptActionMenuDisabledTrigger,
 } from "@/prompt-editor/ChatPromptActionMenu.js";
+import type { SharedContextImportRequest } from "@/prompt-editor/SharedContextImportDialog.js";
 import { useComposerToolbarFit } from "@/prompt-editor/useComposerToolbarFit.js";
 
 function runAfterFrame(callback: () => void) {
@@ -95,6 +96,7 @@ export function ChatPromptEditor({
   appSlashCommands,
   enableMentionPanel,
   fileReferencesOnly = false,
+  onImportSharedContext,
 }: {
   workspacePath: string;
   workspaceIdentity?: string;
@@ -161,6 +163,8 @@ export function ChatPromptEditor({
   enableMentionPanel?: boolean;
   /** Restrict the + menu's context catalog to Host-searched workspace files. */
   fileReferencesOnly?: boolean;
+  /** Route share-code import through the current Task's Host/Runtime service. */
+  onImportSharedContext?: (request: SharedContextImportRequest) => Promise<boolean>;
 }) {
   const { intl } = useZCodeIntl();
   const toolbarRef = useComposerToolbarFit();
@@ -422,6 +426,7 @@ export function ChatPromptEditor({
                     container={resolvedTriggerPanelContainer}
                     showPlugins={enableMentionPanel !== false}
                     fileReferencesOnly={fileReferencesOnly}
+                    onImportSharedContext={onImportSharedContext}
                   />
                 )
               ) : null}
