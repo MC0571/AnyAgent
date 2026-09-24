@@ -37,6 +37,12 @@ macOS Darwin arm64，Node 24.14.0、pnpm 10.33.2、Electron 41.0.3、固定真�
 
 产品身份示例：首个冷恢复 Task `task_6b939111-1648-428c-802c-dd1ab0afe7e9`，产品 Session `session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76`，原生 Session `sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a`；满足退出前至少两轮的严格复测 Task `task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0`、原生 Session `sess_418b065d-7596-481c-982e-273f7ab1afc7`；中断 Task `task_f46d7224-cb85-44b7-bdab-5436da143af4`。完整 ID 和每轮配置见对应 JSON。没有将同 Task 的合法恢复当作跨 Task 复用；跨 Task 防护由 Runtime/Service 测试覆盖，桌面组合仍在矩阵 D 项。
 
+真实 CLI 原生 `AskUserQuestion` 在正式消息流给 A/B 选项；UI 选择 B 后，同一 Execution 返回 `QUESTION_B0_B`。产品 `user-input` 的 Task / Participant / Session / Execution、原始事件和原生请求 ID 与该轮相符：[提问](native-question-pending.png)、[答复](native-question-answered.png)、[身份](fork-question-crosscheck.json)。迟到答复和过期防串执行尚未做最终桌面负例。对该回答点踩，切到独立 Fake Task 再返回，已踩状态仍在；撤回后 UI 回到未踩：[点踩](question-feedback-disliked.png)、[撤回](question-feedback-withdrawn.png)。此处未核对原生反馈持久值，矩阵反馈整项仍为 D。
+
+从上述原生回答的操作条分叉，新 Task `task_c26b32e2-fe4d-456e-860f-7cc067c09fa6` 有不同的 Participant、产品 Session、原生 Session 与授权，`forkedFrom` 指向源 Task / Input / Execution；源历史只读，子 Task 新一轮返回 `FORK_CHILD_B0`，源 Task 历史仍在。[新 Task 的只读来源](native-fork-readonly-source.png)、[子轮完成](native-fork-child-completed.png)、[身份与授权](fork-question-crosscheck.json)。
+
+该子 Task 再从原“添加上下文”菜单引用隔离项目的 `pr25-db192-context.txt`，真实 CLI Read 返回 `ATTACHMENT_MARKER_DB192`：[文件 mention](native-file-mention.png)。然后经 macOS 原生文件选择器上传同文件：[源轮](native-attachment-source.png)。产品 Input 和原生 user message 的 file part 都指向该文件并含正确预览内容，但模型首次自行读取了无关的 `m1-attachment.txt`，返回另一个 marker；这一次模型结果**不算附件读取成功**。编辑源轮时 UI 草稿保留原附件，明确要求读取目标文件后真实结果为 `ATTACHMENT_MARKER_DB192`：[保留草稿](native-attachment-edit-keep-draft.png)、[保留并成功](native-attachment-edit-keep.png)。再编辑移除旧附件、经文件选择器加入 `pr25-db192-context-two.txt`，模型返回 `SECOND_ATTACHMENT_MARKER_DB192`：[替换草稿](native-attachment-edit-replace-draft.png)、[替换结果](native-attachment-edit-replace.png)。第三次编辑移除全部附件，纯文本返回 `EDIT_NO_ATTACHMENT_B0`：[无附件草稿](native-edit-no-attachment-draft.png)、[结果](native-edit-no-attachment-result.png)。[产品 revision 链、附件 ID 与原生 text / file parts 选取字段](attachment-edit-crosscheck.json)显示原轮不变、每轮新 Input 对应预期附件，最后一轮没有 file part。
+
 ## Fake 与 M0 对照
 
 Fake Engine 在当前候选上走原侧栏：A 三轮、B 独立一轮，A→B→A 后又离开到自动化并返回；A 的三轮仍归同一产品 Task / Session，B 的身份不同。[A→B→A](fake-a-b-a.png)、[再次返回](fake-return-from-automation.png)、[产品选取字段](runtime-native-crosscheck.json)。Fake 分片/工具及故障测试属于模拟层，不代表模型或真实 CLI。
