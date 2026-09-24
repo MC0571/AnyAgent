@@ -4525,7 +4525,7 @@ const enUS: Record<string, string> = {
   "chat.toolbar.mode.label": "Switch mode",
   "engine.composer.unavailableValue": "Not mapped",
   "engine.composer.textOnly":
-    "Workspace file and shared-context shortcuts are not available in the current Harness integration.",
+    "Shared conversation-context shortcuts are not mapped in the current Harness integration.",
   "engine.composer.attachmentLocalPathRequired":
     "Harness attachments must be selected as local files that the Host can verify.",
   "engine.composer.modeUnavailable":

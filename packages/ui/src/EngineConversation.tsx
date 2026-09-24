@@ -1003,11 +1003,10 @@ export function EngineConversation({
 
     if (isZCodeHarness && slashCommand) {
       if (slashCommand.name === "compact") {
-        if (slashCommand.args || selectedAttachments.length > 0) {
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
           setNotice({
             kind: "info",
-            message:
-              "/compact 当前只支持无参数维护操作；可选 instructions 尚无 Host 字段，且不接受附件；输入已保留。",
+            message: "/compact 不接受附件或网页上下文；输入已保留。",
           });
           return false;
         }
@@ -1037,6 +1036,7 @@ export function EngineConversation({
               participantId: visibleTask.participant.id,
               sessionId: visibleTask.session.id,
               authorizationId: visibleTask.authorizationId,
+              ...(slashCommand.args ? { instructions: slashCommand.args } : {}),
             });
             if (operation.status === "failed" || operation.status === "cancelled")
               throw new Error(
@@ -1588,6 +1588,23 @@ export function EngineConversation({
     );
   };
 
+  const retryExecution = (executionId: string) => {
+    if (!visibleTask || revisionBlockedReason || busyAction) return;
+    void runAction(
+      `retry:${executionId}`,
+      () =>
+        service.reviseTurn({
+          taskId: visibleTask.id,
+          participantId: visibleTask.participant.id,
+          sessionId: visibleTask.session.id,
+          authorizationId: visibleTask.authorizationId,
+          sourceExecutionId: executionId,
+          kind: "retry",
+        }),
+      () => null,
+    );
+  };
+
   const editExecution = async (
     executionId: string,
     text: string,
@@ -1720,6 +1737,7 @@ export function EngineConversation({
               onForkExecution={forkExecution}
               revisionBlockedReason={revisionBlockedReason}
               onEditExecution={editExecution}
+              onRetryExecution={retryExecution}
               fileRewindBlockedReason={fileRewindBlockedReason}
               onLoadFileChanges={isZCodeHarness ? loadFileChanges : undefined}
               onPreviewFileRewind={isZCodeHarness ? previewFileRewind : undefined}
@@ -1942,13 +1960,10 @@ export function EngineConversation({
                   taskId={activeNativeSessionId}
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
-                  attachmentAction={attachmentAction}
-                  actionMenuDisabled={
-                    !platform.canSelectFilePath ||
-                    shouldQueue ||
-                    !!runBlockedReason ||
-                    busyAction !== null
-                  }
+                  attachmentAction={platform.canSelectFilePath ? attachmentAction : undefined}
+                  showMentionButton={isZCodeHarness}
+                  fileReferencesOnly={isZCodeHarness}
+                  actionMenuDisabled={shouldQueue || !!runBlockedReason || busyAction !== null}
                   actionMenuDisabledReason={
                     runBlockedReason ??
                     (busyAction !== null

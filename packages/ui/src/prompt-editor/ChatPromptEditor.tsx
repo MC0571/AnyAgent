@@ -94,6 +94,7 @@ export function ChatPromptEditor({
   excludedSlashCommandNames,
   appSlashCommands,
   enableMentionPanel,
+  fileReferencesOnly = false,
 }: {
   workspacePath: string;
   workspaceIdentity?: string;
@@ -158,6 +159,8 @@ export function ChatPromptEditor({
   appSlashCommands?: readonly AppSlashCommand[];
   /** mention 面板开关（透传 LexicalChatInput）。 */
   enableMentionPanel?: boolean;
+  /** Restrict the + menu's context catalog to Host-searched workspace files. */
+  fileReferencesOnly?: boolean;
 }) {
   const { intl } = useZCodeIntl();
   const toolbarRef = useComposerToolbarFit();
@@ -418,6 +421,7 @@ export function ChatPromptEditor({
                     sessionId={taskId}
                     container={resolvedTriggerPanelContainer}
                     showPlugins={enableMentionPanel !== false}
+                    fileReferencesOnly={fileReferencesOnly}
                   />
                 )
               ) : null}

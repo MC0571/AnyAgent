@@ -25,6 +25,8 @@ export interface CompactSession {
   readonly participantId: string;
   readonly sessionId: string;
   readonly authorizationId: string;
+  /** Optional native summary instructions; never recorded as a product Input. */
+  readonly instructions?: string;
 }
 
 export interface TaskLifecycleRequest {

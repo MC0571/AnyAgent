@@ -17,6 +17,7 @@ interface NativeAssistantRow {
   turnId?: string;
   sourceCommandId?: string;
   state?: string;
+  historyRoundCount?: number;
   text?: string;
   marker?: { type: string; status?: string };
   actions?: { canFork?: true; canEdit?: true; canRetry?: true; canRewindFiles?: true };
@@ -44,6 +45,8 @@ function harness({
   compactAckStatus = "accepted",
   compactSendFails = false,
   compactQueryUnknown = false,
+  nativeCompactState = "accepted",
+  nativeCompactFails = false,
   interactionAck = "delivered",
   nativeActiveTurnId = null,
   nativePendingRequestIds = [],
@@ -66,6 +69,8 @@ function harness({
   compactAckStatus?: "accepted" | "duplicate";
   compactSendFails?: boolean;
   compactQueryUnknown?: boolean;
+  nativeCompactState?: "accepted" | "already_running";
+  nativeCompactFails?: boolean;
   interactionAck?: "delivered" | "already-resolved" | "not-found" | "accepted-no-result";
   nativeActiveTurnId?: string | null;
   nativePendingRequestIds?: string[];
@@ -88,6 +93,7 @@ function harness({
     baseLogEpoch?: string;
   }> = [];
   const resumeCalls: string[] = [];
+  const nativeCompactCalls: Parameters<AgentPort["compactSession"]>[0][] = [];
   const rowQueries: Array<{ beforeRowId?: number; limit: number }> = [];
   const remainingWatermarks = [...pageWatermarks];
   const agent = {
@@ -114,6 +120,18 @@ function harness({
         session: { sessionId: resumeSessionId },
         settings: { model: { current: { providerId: "provider-a" } } },
       } as Awaited<ReturnType<AgentPort["resumeSession"]>>;
+    },
+    compactSession: async (params: Parameters<AgentPort["compactSession"]>[0]) => {
+      nativeCompactCalls.push(params);
+      if (nativeCompactFails) throw new Error("native compact response lost");
+      return {
+        response: "",
+        snapshot: {} as Awaited<ReturnType<AgentPort["compactSession"]>>["snapshot"],
+        compact: {
+          state: nativeCompactState,
+          ...(params.inputId ? { inputId: params.inputId } : {}),
+        },
+      } as Awaited<ReturnType<AgentPort["compactSession"]>>;
     },
     sendConversationCommandV4: async ({
       envelope,
@@ -369,6 +387,7 @@ function harness({
   return {
     adapter,
     commands,
+    nativeCompactCalls,
     rowQueries,
     resumeCalls,
     rows,
@@ -421,7 +440,7 @@ test("ZCode cold resume keeps the native Session ID and reconciliation uses exac
   const states = [
     { state: "completedSuccess", expected: "completed" },
     { state: "running", expected: "running" },
-    { state: "completedInterrupted", expected: "stopped" },
+    { state: "completedInterrupted", expected: "unknown" },
     { state: "failed", expected: "failed" },
   ] as const;
   for (const scenario of states) {
@@ -433,6 +452,7 @@ test("ZCode cold resume keeps the native Session ID and reconciliation uses exac
           turnId: "turn-persisted",
           sourceCommandId: "execution-persisted",
           state: scenario.state,
+          historyRoundCount: 1,
         },
         {
           rowId: 2,
@@ -473,6 +493,54 @@ test("ZCode cold resume keeps the native Session ID and reconciliation uses exac
     if (reconciliation.status !== "unknown") assert.equal(reconciliation.evidence.source, "engine");
     freshAdapter.dispose();
   }
+});
+
+test("ZCode reconciliation keeps cold-hydrated interrupted and empty-success rows unknown", async () => {
+  const interrupted = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-interrupted-after-restart",
+        sourceCommandId: "execution-interrupted-after-restart",
+        state: "completedInterrupted",
+        historyRoundCount: 1,
+      },
+    ],
+  });
+  const interruptedAdapter = interrupted.createFreshAdapter();
+  const interruptedResult = await interruptedAdapter.reconcileExecution!({
+    session: "native-session" as never,
+    executionId: "execution-interrupted-after-restart" as never,
+  });
+  assert.equal(interruptedResult.status, "unknown");
+  assert.equal(interruptedResult.evidence.source, "engine");
+  assert.match(interruptedResult.reason ?? "", /stop is unconfirmed/i);
+  assert.equal(interrupted.commands.length, 0);
+  interruptedAdapter.dispose();
+
+  const emptySuccess = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-empty-after-restart",
+        sourceCommandId: "execution-empty-after-restart",
+        state: "completedSuccess",
+        historyRoundCount: 0,
+      },
+    ],
+  });
+  const emptySuccessAdapter = emptySuccess.createFreshAdapter();
+  const emptySuccessResult = await emptySuccessAdapter.reconcileExecution!({
+    session: "native-session" as never,
+    executionId: "execution-empty-after-restart" as never,
+  });
+  assert.equal(emptySuccessResult.status, "unknown");
+  assert.equal(emptySuccessResult.evidence.source, "engine");
+  assert.match(emptySuccessResult.reason ?? "", /completion is unconfirmed/i);
+  assert.equal(emptySuccess.commands.length, 0);
+  emptySuccessAdapter.dispose();
 });
 
 test("ZCode reconciles a persisted Session read-only before cold reattachment", async () => {
@@ -702,6 +770,7 @@ test("ZCode compaction waits for lifecycle evidence after a duplicate ACK", asyn
     assert.equal(settled, false, "ACK must not be treated as compaction completion");
     const command = fixture.commands.find((entry) => entry.type === "compact");
     assert.equal(command?.commandId, commandId);
+    assert.deepEqual(command?.payload, {});
     fixture.rows.push({
       rowId: 1,
       kind: "timelineMarker",
@@ -715,6 +784,90 @@ test("ZCode compaction waits for lifecycle evidence after a duplicate ACK", asyn
     assert.equal(fixture.commands.filter((entry) => entry.type === "compact").length, 1);
   } finally {
     fixture.adapter.dispose();
+  }
+});
+
+test("ZCode forwards compact instructions through M0 session/compact and correlates by operation ID", async () => {
+  const fixture = harness();
+  try {
+    const session = await fixture.adapter.createSession();
+    let accepted = 0;
+    const commandId = "product-compact-with-instructions";
+    const pending = fixture.adapter.compactSession!({
+      session,
+      commandId,
+      instructions: "Keep decisions and open questions",
+      onAccepted: () => accepted++,
+    });
+    await waitUntil(() => accepted === 1);
+
+    assert.deepEqual(fixture.nativeCompactCalls, [
+      {
+        workspacePath: "/tmp/workspace",
+        sessionId: "native-session",
+        inputId: commandId,
+        instructions: "Keep decisions and open questions",
+      },
+    ]);
+    assert.equal(
+      fixture.commands.some((entry) => entry.type === "compact"),
+      false,
+    );
+
+    fixture.rows.push({
+      rowId: 1,
+      kind: "timelineMarker",
+      sourceCommandId: commandId,
+      marker: { type: "compact", status: "success" },
+    });
+    fixture.emit({ type: "session.event", event: { sessionId: "native-session", seq: 1 } });
+    const receipt = await pending;
+    assert.equal(receipt.status, "completed");
+    assert.equal(receipt.evidence?.evidenceId, commandId);
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("ZCode does not misattribute an existing or unknown M0 compact result", async () => {
+  const alreadyRunning = harness({ nativeCompactState: "already_running" });
+  try {
+    const session = await alreadyRunning.adapter.createSession();
+    let accepted = false;
+    const receipt = await alreadyRunning.adapter.compactSession!({
+      session,
+      commandId: "compact-already-running",
+      instructions: "Preserve constraints",
+      onAccepted: () => (accepted = true),
+    });
+    assert.equal(receipt.status, "skipped");
+    assert.equal(accepted, false);
+    assert.match(receipt.reason ?? "", /already had a compaction running/i);
+    assert.equal(
+      alreadyRunning.commands.some((entry) => entry.type === "compact"),
+      false,
+    );
+  } finally {
+    alreadyRunning.adapter.dispose();
+  }
+
+  const lost = harness({ nativeCompactFails: true });
+  try {
+    const session = await lost.adapter.createSession();
+    const receipt = await lost.adapter.compactSession!({
+      session,
+      commandId: "compact-lost-response",
+      instructions: "Preserve constraints",
+    });
+    assert.equal(receipt.status, "unknown");
+    assert.match(receipt.reason ?? "", /will not be resent/i);
+    assert.equal(lost.nativeCompactCalls.length, 1);
+    assert.equal(
+      lost.commands.some((entry) => entry.type === "compact"),
+      false,
+    );
+  } finally {
+    lost.adapter.dispose();
   }
 });
 

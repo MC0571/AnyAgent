@@ -1310,11 +1310,26 @@ export class TaskRuntime {
       sourceExecution.taskId !== task.id ||
       sourceExecution.sessionId !== session.id ||
       sourceExecution.data.participantId !== input.participantId ||
-      sourceExecution.data.status !== "completed" ||
+      (sourceExecution.data.status !== "completed" &&
+        !(input.kind === "retry" && sourceExecution.data.status === "failed")) ||
       !sourceExecution.data.nativeExecutionId
     )
       throw new RuntimeEligibilityError(
-        "Revision requires a completed Execution owned by this Task.",
+        "Revision requires a completed Execution, or a failed Execution for retry, owned by this Task.",
+      );
+    if (
+      input.kind === "retry" &&
+      this.#store
+        .listInSession<RuntimeEvent>("event", session.id)
+        .some(
+          (record) =>
+            record.data.executionId === sourceExecution.id &&
+            ["tool.started", "tool.completed", "tool.failed"].includes(record.data.type),
+        )
+    )
+      throw new RuntimeEligibilityError(
+        "Retry cannot safely replay an Execution that may have run tools.",
+        "unsupported",
       );
     const sourceInput = this.#require<InputData>("input", sourceExecution.data.inputId);
     if (
@@ -1671,12 +1686,27 @@ export class TaskRuntime {
             source.taskId !== task.id ||
             source.sessionId !== session.id ||
             source.data.participantId !== input.participantId ||
-            source.data.status !== "completed" ||
+            (source.data.status !== "completed" &&
+              !(revision.kind === "retry" && source.data.status === "failed")) ||
             source.data.nativeExecutionId !== revision.sourceExecutionId
           )
             throw new RuntimeEligibilityError(
               "The source Execution changed before revision dispatch.",
               "ownership",
+            );
+          if (
+            revision.kind === "retry" &&
+            this.#store
+              .listInSession<RuntimeEvent>("event", session.id)
+              .some(
+                (record) =>
+                  record.data.executionId === source.id &&
+                  ["tool.started", "tool.completed", "tool.failed"].includes(record.data.type),
+              )
+          )
+            throw new RuntimeEligibilityError(
+              "Retry cannot safely replay an Execution that may have run tools.",
+              "unsupported",
             );
         }
         for (const attachment of resolvedAttachments ?? []) {
@@ -2220,6 +2250,7 @@ export class TaskRuntime {
 
   async compactSession(input: CompactSession): Promise<RuntimeCompactOperation> {
     this.#assertOpen();
+    const instructions = input.instructions?.trim();
     const { task, session } = this.#qualify(
       input.taskId,
       input.participantId,
@@ -2323,6 +2354,7 @@ export class TaskRuntime {
       const receipt = await engine.compactSession({
         session: nativeSessionId as EngineSessionRef,
         commandId: operationId,
+        ...(instructions ? { instructions } : {}),
         beforeDispatch: checkDispatch,
         onAccepted: (evidence) => {
           const current = this.#require<RuntimeCompactOperation>("compact-operation", operationId);

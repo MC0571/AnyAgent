@@ -110,6 +110,7 @@ function installDom() {
     document: win.document,
     navigator: win.navigator,
     customElements: win.customElements,
+    Image: win.Image,
     HTMLElement: win.HTMLElement,
     HTMLInputElement: win.HTMLInputElement,
     HTMLTextAreaElement: win.HTMLTextAreaElement,
@@ -2040,7 +2041,12 @@ test("an active ZCode Harness task switches models within its Session and submit
   const zcodeEngine = {
     ...currentEngine,
     engineId: "zcode",
-    capabilities: { ...capabilities, "session.compact": available, "session.fork": available },
+    capabilities: {
+      ...capabilities,
+      "session.compact": available,
+      "session.fork": available,
+      "execution.revise": available,
+    },
   };
   const zcodeTask = {
     ...task,
@@ -2134,7 +2140,9 @@ test("an active ZCode Harness task switches models within its Session and submit
   let createTaskError: Error | null = null;
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
   const feedbackRequests: Array<Record<string, unknown>> = [];
+  const workspaceFileSearches: Array<Record<string, unknown>> = [];
   const forkRequests: Array<Record<string, unknown>> = [];
+  const revisionRequests: Array<Record<string, unknown>> = [];
   let nativeFeedback: "like" | "dislike" | null = null;
   const changes = new Set<(change: Record<string, unknown>) => void>();
   let history = emptyHistory();
@@ -2211,10 +2219,25 @@ test("an active ZCode Harness task switches models within its Session and submit
       forkRequests.push(input);
       return forkTask;
     },
+    reviseTurn: async (input: Record<string, unknown>) => {
+      revisionRequests.push(input);
+    },
   };
   const services = {
     clientConfigService: { getSnapshot: async () => ({ pluginStoreOrder: null }) },
-    fileService: { searchWorkspaceFiles: async () => [] },
+    fileService: {
+      searchWorkspaceFiles: async (params: Record<string, unknown>) => {
+        workspaceFileSearches.push(params);
+        return [
+          {
+            name: "notes.md",
+            path: `${workspacePath}/notes.md`,
+            relativePath: "notes.md",
+            type: "file" as const,
+          },
+        ];
+      },
+    },
     subagentsService: {
       list: async () => ({
         agents: [],
@@ -2247,7 +2270,12 @@ test("an active ZCode Harness task switches models within its Session and submit
         { services: services as never },
         createElement(
           PlatformProvider,
-          { platform: { onSettingsChanged: () => () => {} } as never },
+          {
+            platform: {
+              canSelectFilePath: false,
+              onSettingsChanged: () => () => {},
+            } as never,
+          },
           createElement(
             ZCodeIntlProvider,
             { initialLocale: "zh-CN" },
@@ -2278,6 +2306,46 @@ test("an active ZCode Harness task switches models within its Session and submit
         false,
       );
     }, "ZCode Harness model did not become ready");
+    const addContextTrigger = container
+      .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
+      ?.closest<HTMLButtonElement>("button");
+    assert.ok(addContextTrigger, "the M1 ZCode composer should expose its context menu");
+    assert.equal(addContextTrigger.disabled, false);
+    await act(async () => addContextTrigger.click());
+    const workspaceFileOption = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((option) =>
+        option.textContent?.includes("notes.md"),
+      );
+    await waitFor(
+      () => assert.ok(workspaceFileOption(), "the + menu should expose Host-searched files"),
+      "workspace file reference did not appear in the native composer menu",
+    );
+    assert.equal(
+      document.querySelector('[data-testid="prompt-suggestion-section-plugins"]'),
+      null,
+      "the M1 file-reference menu should not expose unsupported Plugin context routes",
+    );
+    assert.ok(workspaceFileSearches.length > 0);
+    assert.equal(workspaceFileSearches[0]?.rootPath, workspacePath);
+    const workspaceFileInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E: { getText: () => string; setText: (text: string) => void };
+    };
+    await act(async () => {
+      workspaceFileOption()?.dispatchEvent(
+        new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }),
+      );
+    });
+    await waitFor(
+      () =>
+        assert.equal(
+          workspaceFileInput.__zcodeLexicalInputE2E.getText(),
+          "[notes.md](./notes.md) ",
+        ),
+      "selecting a workspace result should insert the canonical file reference into the product composer",
+    );
+    await act(async () => workspaceFileInput.__zcodeLexicalInputE2E.setText(""));
     await act(async () => {
       const trigger = modelTrigger()!;
       trigger.dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
@@ -2604,18 +2672,24 @@ test("an active ZCode Harness task switches models within its Session and submit
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
     assert.equal(submissions.length, 1, "/compact must not become submitInput text");
-    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/compact instructions");
-    assert.equal(container.querySelector('[role="status"]'), null);
-    assert.equal(compactRequests.length, 0);
+    await waitFor(() => assert.equal(compactRequests.length, 1));
+    assert.deepEqual(compactRequests[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+      instructions: "instructions",
+    });
+    await waitFor(() => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""));
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/compact"));
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
     await waitFor(
-      () => assert.equal(compactRequests.length, 1),
+      () => assert.equal(compactRequests.length, 2),
       "compact must use the separate maintenance API",
     );
-    assert.deepEqual(compactRequests[0], {
+    assert.deepEqual(compactRequests[1], {
       taskId,
       participantId,
       sessionId,
@@ -2764,6 +2838,20 @@ test("an active ZCode Harness task switches models within its Session and submit
       feedbackRequests.map((entry) => entry.feedback),
       ["like", null],
     );
+    const retry = container.querySelector<HTMLButtonElement>(
+      '[data-testid="v4-retry-execution-native-feedback"]',
+    );
+    assert.ok(retry && !retry.disabled, "latest native answer should expose the retry action");
+    await act(async () => retry.click());
+    await waitFor(() => assert.equal(revisionRequests.length, 1));
+    assert.deepEqual(revisionRequests[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+      sourceExecutionId: "execution-native-feedback",
+      kind: "retry",
+    });
     const fork = container.querySelector<HTMLButtonElement>('button[aria-label="分叉"]');
     assert.ok(fork && !fork.disabled);
     await act(async () => fork.click());

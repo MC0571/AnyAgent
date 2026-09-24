@@ -106,6 +106,7 @@ export function ChatPromptActionMenu({
   sessionId,
   container,
   showPlugins,
+  fileReferencesOnly = false,
   excludedSlashCommandNames,
 }: {
   actionMenuTitle: string;
@@ -123,6 +124,7 @@ export function ChatPromptActionMenu({
   sessionId: string | null;
   container: HTMLElement | null;
   showPlugins: boolean;
+  fileReferencesOnly?: boolean;
   excludedSlashCommandNames?: readonly string[];
 }) {
   const { intl } = useZCodeIntl();
@@ -140,12 +142,13 @@ export function ChatPromptActionMenu({
     }),
     [container],
   );
+  const showReferenceProviders = open && !disabled && showPlugins;
   const plugins = usePluginsMentionProvider(
     workspacePath,
     workspaceIdentity,
     sessionId,
     "",
-    open && !disabled && showPlugins,
+    showReferenceProviders && !fileReferencesOnly,
     intl.formatMessage({ id: "chat.mention.plugins.empty" }),
     intl.formatMessage({ id: "chat.mention.plugins.title" }),
   );
@@ -155,7 +158,7 @@ export function ChatPromptActionMenu({
     workspacePath,
     workspaceIdentity,
     "",
-    open && !disabled && showPlugins,
+    showReferenceProviders || (open && !disabled && fileReferencesOnly),
     intl.formatMessage({ id: "chat.mention.files.empty" }),
     intl.formatMessage({ id: "chat.mention.files.title" }),
     MENTION_FILES_ONLY_DEFAULT_PREVIEW_LIMIT,
@@ -165,21 +168,24 @@ export function ChatPromptActionMenu({
     workspacePath,
     workspaceIdentity,
     "",
-    open && !disabled && showPlugins,
+    showReferenceProviders && !fileReferencesOnly,
     getSessionMentionWorkspaceScope("@"),
     intl.formatMessage({ id: "chat.mention.sessions.empty" }),
     intl.formatMessage({ id: "chat.mention.sessions.title" }),
   );
+  const referenceGroups = fileReferencesOnly
+    ? [{ id: "files", ...files }]
+    : [
+        { id: "files", ...files },
+        { id: "sessions", ...sessions },
+      ];
   const contextGroups = buildVisibleMentionGroups(
-    [
-      { id: "files", ...files },
-      { id: "sessions", ...sessions },
-    ].map((group) => ({
-      ...group,
-      errorText: group.error?.message ?? null,
-    })),
+    referenceGroups.map((group) => ({ ...group, errorText: group.error?.message ?? null })),
   );
-  const mentionItems = [...plugins.items, ...contextGroups.flatMap((group) => group.items)];
+  const mentionItems = [
+    ...(fileReferencesOnly ? [] : plugins.items),
+    ...contextGroups.flatMap((group) => group.items),
+  ];
   const attachmentCount = attachmentAction ? 1 : 0;
   const options = [
     ...(attachmentAction ? [{ disabled: false }] : []),
@@ -229,19 +235,23 @@ export function ChatPromptActionMenu({
         }),
       ],
     },
-    {
-      id: "plugins",
-      title: plugins.title,
-      emptyText: plugins.emptyText,
-      loading: plugins.loading,
-      loadingText: intl.formatMessage({ id: "chat.mention.category.loading" }),
-      errorText: plugins.error?.message,
-      options: plugins.items.map((item) => ({
-        ...item,
-        label: item.displayLabel ?? item.label,
-        content: <PluginMentionOptionContent item={item} />,
-      })),
-    },
+    ...(!fileReferencesOnly
+      ? [
+          {
+            id: "plugins",
+            title: plugins.title,
+            emptyText: plugins.emptyText,
+            loading: plugins.loading,
+            loadingText: intl.formatMessage({ id: "chat.mention.category.loading" }),
+            errorText: plugins.error?.message,
+            options: plugins.items.map((item) => ({
+              ...item,
+              label: item.displayLabel ?? item.label,
+              content: <PluginMentionOptionContent item={item} />,
+            })),
+          },
+        ]
+      : []),
     ...contextGroups.map((group) => ({
       id: group.id,
       title: group.title,
@@ -255,6 +265,13 @@ export function ChatPromptActionMenu({
       })),
     })),
   ].filter((section) => section.id !== "add" || section.options.length > 0);
+  const footerShortcuts = fileReferencesOnly
+    ? ([["@", "chat.composer.contextShortcut"]] as const)
+    : ([
+        ["@", "chat.composer.contextShortcut"],
+        ["/", "chat.composer.capabilityShortcut"],
+        ["$", "chat.composer.skillShortcut"],
+      ] as const);
 
   const selectOption = (index: number) => {
     if (disabled || !options[index] || options[index].disabled) return;
@@ -362,13 +379,7 @@ export function ChatPromptActionMenu({
           listMaxHeight="min(24rem, max(8rem, calc(var(--radix-popover-content-available-height, 32rem) - 6rem)))"
           footer={
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-ui-sm text-foreground-subtle">
-              {(
-                [
-                  ["@", "chat.composer.contextShortcut"],
-                  ["/", "chat.composer.capabilityShortcut"],
-                  ["$", "chat.composer.skillShortcut"],
-                ] as const
-              ).map(([trigger, id]) => (
+              {footerShortcuts.map(([trigger, id]) => (
                 <div key={trigger} className="flex shrink-0 items-center gap-1.5">
                   <code className="flex size-5 shrink-0 items-center justify-center rounded bg-tooltip-tag font-mono text-foreground">
                     {trigger}

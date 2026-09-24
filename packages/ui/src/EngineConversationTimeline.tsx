@@ -931,6 +931,7 @@ export function EngineConversationTimeline({
   onForkExecution,
   revisionBlockedReason = null,
   onEditExecution,
+  onRetryExecution,
   fileRewindBlockedReason,
   onLoadFileChanges,
   onPreviewFileRewind,
@@ -972,6 +973,7 @@ export function EngineConversationTimeline({
     retainedAttachmentIds: readonly string[],
     addedAttachments: readonly EngineLocalAttachment[],
   ) => Promise<boolean>;
+  onRetryExecution?: (executionId: string) => void;
   fileRewindBlockedReason?: string | null;
   onLoadFileChanges?: (executionId: string) => Promise<EngineFileChanges | null>;
   onPreviewFileRewind?: (executionId: string) => Promise<EngineFileRewindPreview>;
@@ -993,6 +995,13 @@ export function EngineConversationTimeline({
   const latestEditableExecutionId = [...(projection.turns.at(-1)?.executions ?? [])]
     .reverse()
     .find((turn) => turn.execution.status === "completed")?.execution.id;
+  const latestRetryableTurn = projection.turns.at(-1)?.executions.at(-1);
+  const latestRetryableExecutionId =
+    latestRetryableTurn &&
+    ["completed", "failed"].includes(latestRetryableTurn.execution.status) &&
+    toolEvents(latestRetryableTurn).length === 0
+      ? latestRetryableTurn.execution.id
+      : undefined;
   if (historyLoading) {
     return <p className="py-4 text-sm text-foreground-subtle">正在读取对话…</p>;
   }
@@ -1247,6 +1256,16 @@ export function EngineConversationTimeline({
                                 : undefined
                             }
                             forkActionId={execution.id}
+                            onRetryAction={
+                              !readOnlySource &&
+                              !revisionBlockedReason &&
+                              !busyAction &&
+                              execution.id === latestRetryableExecutionId &&
+                              onRetryExecution
+                                ? () => onRetryExecution(execution.id)
+                                : undefined
+                            }
+                            retryActionId={execution.id}
                             className="mt-1 opacity-0 transition-opacity group-hover/assistant-row:opacity-100 focus-within:opacity-100"
                           />
                         ) : null}
@@ -1342,6 +1361,16 @@ export function EngineConversationTimeline({
                             : undefined
                         }
                         forkActionId={execution.id}
+                        onRetryAction={
+                          !readOnlySource &&
+                          !revisionBlockedReason &&
+                          !busyAction &&
+                          execution.id === latestRetryableExecutionId &&
+                          onRetryExecution
+                            ? () => onRetryExecution(execution.id)
+                            : undefined
+                        }
+                        retryActionId={execution.id}
                         className="mt-1 opacity-0 transition-opacity group-hover/assistant-row:opacity-100 focus-within:opacity-100"
                       />
                     ) : null}

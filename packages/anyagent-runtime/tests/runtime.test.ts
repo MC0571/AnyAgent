@@ -1222,6 +1222,7 @@ test("Session compaction requires Task ownership and scope, records native termi
       participantId: task.participant.id,
       sessionId: task.session.id,
       authorizationId: task.authorizationId,
+      instructions: "Keep decisions and open questions",
     };
 
     await assert.rejects(
@@ -1273,6 +1274,8 @@ test("Session compaction requires Task ownership and scope, records native termi
     );
     assert.equal(engine.compactCalls.length, 4);
     assert.equal(engine.compactCalls[0]?.commandId, history.compactOperations[0]?.id);
+    assert.equal(engine.compactCalls[0]?.instructions, "Keep decisions and open questions");
+    assert.equal("instructions" in history.compactOperations[0]!, false);
   } finally {
     runtime.close();
   }
@@ -2023,6 +2026,76 @@ test("edit and retry create new product Input and Execution in the same Task and
     assert.deepEqual(final.executions[2]?.revisionOf, retried.revisionOf);
     assert.equal(runtime.listTasks().length, 1);
     assert.equal(engine.createSessionCalls, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("retry preserves a failed source but rejects a turn that may have run tools", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const fail = async (index: number, withTool: boolean) => {
+      await runtime.submitInput({ ...identity, text: `failed turn ${index}` });
+      engine.emit(index, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: `accepted-${index}` },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions.length === index + 1);
+      if (withTool)
+        engine.emit(index, { type: "tool.started", toolCallId: `tool-${index}`, name: "Write" });
+      engine.emit(index, {
+        type: "execution.failed",
+        failure: {
+          kind: "execution-failed",
+          operation: "execution.run",
+          message: "model failed",
+          sideEffects: withTool ? "possible" : "none",
+        },
+        evidence: { source: "engine", evidenceId: `failed-${index}` },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions[index]!.status === "failed");
+      return runtime.getHistory(task.id)!.executions[index]!;
+    };
+    const source = await fail(0, false);
+    const retry = await runtime.reviseTurn({
+      ...identity,
+      sourceExecutionId: source.id,
+      kind: "retry",
+    });
+    assert.deepEqual(retry.revisionOf, {
+      kind: "retry",
+      inputId: source.inputId,
+      executionId: source.id,
+    });
+    assert.equal(runtime.getHistory(task.id)!.executions[0]!.status, "failed");
+    engine.emit(1, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "retry-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 2);
+    engine.emit(1, {
+      type: "execution.completed",
+      result: "retry answer",
+      evidence: { source: "engine", evidenceId: "retry-complete" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[1]!.status === "completed");
+    const unsafe = await fail(2, true);
+    await assert.rejects(
+      () => runtime.reviseTurn({ ...identity, sourceExecutionId: unsafe.id, kind: "retry" }),
+      /may have run tools/u,
+    );
+    assert.equal(engine.runs.length, 3);
   } finally {
     runtime.close();
   }

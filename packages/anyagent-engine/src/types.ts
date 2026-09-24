@@ -398,6 +398,8 @@ export interface EngineAdapter {
     readonly session: EngineSessionRef;
     /** Product-owned, persisted idempotency key; retries must reuse this value. */
     readonly commandId: string;
+    /** Optional native summary instructions; the Adapter maps them to its supported command path. */
+    readonly instructions?: string;
     /** Synchronous Host eligibility check immediately before native dispatch. */
     readonly beforeDispatch?: () => void;
     /** Command acceptance is evidence, never compaction completion. */

@@ -40,6 +40,7 @@ type AgentPort = Pick<
   | "readSession"
   | "resumeSession"
   | "initialize"
+  | "compactSession"
   | "sendConversationCommandV4"
   | "conversationRowsRangeV4"
   | "onDynamicSessionEvent"
@@ -1181,13 +1182,20 @@ export function createZCodeAdapter(options: {
       return session;
     },
     async reconcileExecution({ session, executionId, beforeDispatch }) {
-      const unknown = (reason: string) => ({
-        status: "unknown" as const,
-        reason,
+      const unknown = (
+        reason: string,
         evidence: {
-          source: "adapter" as const,
+          source: "adapter" | "engine";
+          evidenceId: string;
+          detail?: string;
+        } = {
+          source: "adapter",
           evidenceId: `${executionId}:reconciliation-unknown`,
         },
+      ) => ({
+        status: "unknown" as const,
+        reason,
+        evidence,
       });
       if (!executionId || !executionId.trim())
         return unknown("The native Execution identity is missing.");
@@ -1199,7 +1207,7 @@ export function createZCodeAdapter(options: {
       let beforeRowId: number | undefined;
       let baseRevision: number | undefined;
       let baseLogEpoch: string | undefined;
-      const headers: Array<{ turnId: string; state: string }> = [];
+      const headers: Array<{ turnId: string; state: string; historyRoundCount?: number }> = [];
       const assistantRows: Array<{ turnId: string; rowId: number; text: string }> = [];
       try {
         while (true) {
@@ -1217,7 +1225,13 @@ export function createZCodeAdapter(options: {
           }
           for (const row of page.rows) {
             if (row.kind === "turnHeader" && row.sourceCommandId === executionId)
-              headers.push({ turnId: row.turnId, state: row.state });
+              headers.push({
+                turnId: row.turnId,
+                state: row.state,
+                ...(row.historyRoundCount === undefined
+                  ? {}
+                  : { historyRoundCount: row.historyRoundCount }),
+              });
             if (row.kind === "assistantText")
               assistantRows.push({ turnId: row.turnId, rowId: row.rowId, text: row.text });
           }
@@ -1250,16 +1264,27 @@ export function createZCodeAdapter(options: {
         detail: `Native turn state is ${header.state}.`,
       };
       if (header.state === "running") return { status: "running" as const, evidence };
-      if (header.state === "completedInterrupted") return { status: "stopped" as const, evidence };
+      if (header.state === "completedInterrupted")
+        return unknown(
+          "The native turn is marked interrupted, but cold transcript hydration can synthesize this state; execution stop is unconfirmed.",
+          evidence,
+        );
       if (header.state === "failed")
         return { status: "failed" as const, error: "Native turn failed.", evidence };
       if (header.state !== "completedSuccess")
         return unknown(`Unrecognized native turn state: ${header.state}.`);
-      const result = assistantRows
+      const turnAssistantRows = assistantRows
         .filter((row) => row.turnId === header.turnId)
-        .sort((left, right) => left.rowId - right.rowId)
-        .map((row) => row.text)
-        .join("");
+        .sort((left, right) => left.rowId - right.rowId);
+      if (
+        header.historyRoundCount === 0 ||
+        (header.historyRoundCount === undefined && turnAssistantRows.length === 0)
+      )
+        return unknown(
+          "The native turn is marked successful without persisted model history or assistant output; completion is unconfirmed.",
+          evidence,
+        );
+      const result = turnAssistantRows.map((row) => row.text).join("");
       return { status: "completed" as const, result: result || null, evidence };
     },
     async forkSession({
@@ -1727,6 +1752,7 @@ export function createZCodeAdapter(options: {
     async compactSession({
       session,
       commandId,
+      instructions,
       beforeDispatch,
       onAccepted,
     }): Promise<EngineCompactReceipt> {
@@ -1871,6 +1897,67 @@ export function createZCodeAdapter(options: {
       } catch (error) {
         abandon();
         throw error;
+      }
+
+      const summaryInstructions = instructions?.trim();
+      if (summaryInstructions) {
+        const sent = options.agent
+          .compactSession({
+            ...workspace,
+            sessionId: session,
+            inputId: commandId,
+            instructions: summaryInstructions,
+          })
+          .then(
+            (ack) => ({ kind: "ack" as const, ack }),
+            () => ({ kind: "error" as const }),
+          );
+        const first = await Promise.race([
+          sent,
+          result.then((receipt) => ({ kind: "terminal" as const, receipt })),
+        ]);
+        if (first.kind === "terminal") return first.receipt;
+        if (first.kind === "error") {
+          await observe();
+          if (!settled)
+            markUnknown("Native compact result is unknown; command will not be resent.");
+          return result;
+        }
+
+        const compact = first.ack.compact;
+        if (
+          compact?.state === "accepted" &&
+          (compact.inputId === undefined || compact.inputId === commandId)
+        ) {
+          accept({
+            source: "engine",
+            evidenceId: commandId,
+            detail: "M0 session/compact accepted ACK",
+          });
+          await observe();
+          return result;
+        }
+        if (compact?.state === "already_running") {
+          await observe();
+          if (!settled)
+            finish({
+              status: "skipped",
+              evidence: {
+                source: "adapter",
+                evidenceId: `${commandId}:already-running`,
+                detail:
+                  "Native Session already had a compaction running; no new command was accepted.",
+              },
+              reason: "Native Session already had a compaction running.",
+            });
+          return result;
+        }
+        await observe();
+        if (!settled)
+          markUnknown(
+            "Native compact ACK did not confirm this command ID; command will not be resent.",
+          );
+        return result;
       }
 
       const envelope = { ...command("compact", session, {}), commandId };

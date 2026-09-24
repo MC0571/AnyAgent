@@ -11,6 +11,7 @@ import {
   GitBranchIcon,
   GoalIcon,
   PencilIcon,
+  RotateCcwIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   TrendingUpDownIcon,
@@ -26,6 +27,7 @@ import {
   TID_V4_FEEDBACK_DISLIKE,
   TID_V4_FEEDBACK_LIKE,
   TID_V4_FORK,
+  TID_V4_RETRY,
   TID_V4_ROW,
   TID_V4_ROW_ATTACHMENTS,
   testId,
@@ -1333,6 +1335,9 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   onFork,
   onForkAction,
   forkActionId,
+  onRetry,
+  onRetryAction,
+  retryActionId,
   onFeedbackChange,
   onFeedbackAction,
   unsupportedFeedbackReason,
@@ -1352,6 +1357,9 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   onForkAction?: () => void;
   forkActionId?: string;
   onRetry?: (target: ConversationRowTarget) => void;
+  /** Product-backed retry action; the Adapter resolves the native row target. */
+  onRetryAction?: () => void;
+  retryActionId?: string;
   onFeedbackChange?: AssistantFeedbackHandler;
   /** Harness-backed message action with Runtime-owned identity and authorization. */
   onFeedbackAction?: (
@@ -1372,6 +1380,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
     id: localFeedback === "dislike" ? "chat.message.disliked" : "chat.message.dislike",
   });
   const forkLabel = intl.formatMessage({ id: "chat.message.fork" });
+  const retryLabel = intl.formatMessage({ id: "chat.message.retry" });
   const timeLabel = formatMessageTimeLabel(createdAt ?? 0, locale, intl);
   const resolveTooltip = (label: string): string | undefined => label;
   const feedbackActionId = rowId === undefined ? entityId : String(rowId);
@@ -1440,6 +1449,18 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
       });
     }
   }, [entityId, onFork, onForkAction, rowId]);
+  const handleRetry = useCallback(() => {
+    if (onRetryAction || (entityId && rowId !== undefined)) {
+      runUserAction({
+        input: { featureId: "conversation.history.branch", action: "retry", trigger: "button" },
+        operation: () =>
+          onRetryAction?.() ??
+          (entityId && rowId !== undefined ? onRetry?.({ rowId, entityId }) : undefined),
+        completed: { resultSource: "optimistic_projection" },
+        failureStage: "retry",
+      });
+    }
+  }, [entityId, onRetry, onRetryAction, rowId]);
   return (
     <MessageActions className={cn(className)}>
       <CopyRowAction
@@ -1535,6 +1556,17 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
           className="cursor-not-allowed opacity-50"
         >
           <TrendingUpDownIcon className="size-3.5" />
+        </MessageAction>
+      ) : null}
+      {onRetryAction || (onRetry && entityId && rowId !== undefined) ? (
+        <MessageAction
+          aria-label={retryLabel}
+          label={retryLabel}
+          tooltip={resolveTooltip(retryLabel)}
+          data-testid={testId(TID_V4_RETRY, retryActionId ?? String(rowId))}
+          onClick={handleRetry}
+        >
+          <RotateCcwIcon className="size-3.5" />
         </MessageAction>
       ) : null}
       {turnId && hookInvocations ? (
