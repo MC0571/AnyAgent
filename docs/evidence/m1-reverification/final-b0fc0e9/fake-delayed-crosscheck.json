@@ -1,0 +1,87 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "fakeStepDelayMs": 5000,
+  "taskId": "task_1d939351-7c86-4f17-9d6c-80adb6b85644",
+  "records": [
+    {
+      "kind": "input",
+      "id": "input_09b3945b-d7f1-4217-970a-2e8d56e787cb",
+      "status": "completed",
+      "createdAt": 1790286754759,
+      "eventType": null,
+      "text": "FAKE_B0_DELAY_STREAM：观察完成前分片与工具。"
+    },
+    {
+      "kind": "event",
+      "id": "event_32de04a8-664c-4dea-90fd-36659c378c49",
+      "status": "observed",
+      "createdAt": 1790286759763,
+      "eventType": "input.accepted",
+      "text": null
+    },
+    {
+      "kind": "execution",
+      "id": "execution_b2164dac-7064-4ac8-927a-a49550dd6688",
+      "status": "completed",
+      "createdAt": 1790286759763,
+      "eventType": null,
+      "text": null
+    },
+    {
+      "kind": "event",
+      "id": "event_1ef044db-2ded-4332-bddf-81221e9707f5",
+      "status": "observed",
+      "createdAt": 1790286764764,
+      "eventType": "execution.started",
+      "text": null
+    },
+    {
+      "kind": "event",
+      "id": "event_7f75206f-1416-4024-82ec-1dfb21856d5a",
+      "status": "observed",
+      "createdAt": 1790286769764,
+      "eventType": "message.delta",
+      "text": null
+    },
+    {
+      "kind": "event",
+      "id": "event_5d6f79c0-aa07-4513-8c5b-eb307e442d03",
+      "status": "observed",
+      "createdAt": 1790286774766,
+      "eventType": "tool.started",
+      "text": null
+    },
+    {
+      "kind": "event",
+      "id": "event_b3894a6d-3f48-4361-8317-52836ad19b9b",
+      "status": "observed",
+      "createdAt": 1790286779767,
+      "eventType": "file.changed",
+      "text": null
+    },
+    {
+      "kind": "event",
+      "id": "event_9eec1fd8-cf58-4845-8fe2-f95bd719d498",
+      "status": "observed",
+      "createdAt": 1790286784768,
+      "eventType": "tool.completed",
+      "text": null
+    },
+    {
+      "kind": "event",
+      "id": "event_ada1aa26-c5e6-4369-9916-590efa418150",
+      "status": "observed",
+      "createdAt": 1790286789770,
+      "eventType": "message.delta",
+      "text": null
+    },
+    {
+      "kind": "event",
+      "id": "event_6e706637-36ad-4988-85af-10090e41b864",
+      "status": "observed",
+      "createdAt": 1790286794771,
+      "eventType": "execution.completed",
+      "text": null
+    }
+  ]
+}

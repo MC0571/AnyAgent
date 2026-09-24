@@ -1,0 +1,11 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+  "nativeSessionId": "sess_418b065d-7596-481c-982e-273f7ab1afc7",
+  "nativeAssistantMessageId": "msg_mug219mf_3463b9dd-9108-4411-ada8-3c236f4146cb",
+  "readOnlyQuery": "select json_extract(data,'$.metadata.assistantFeedback') from message where id = 'msg_mug219mf_3463b9dd-9108-4411-ada8-3c236f4146cb'",
+  "uiObservedInOrder": ["dislike", null, "like", null, "dislike", null],
+  "nativeSqlObservedInOrder": ["like", null, "dislike", null],
+  "finalNativeFeedback": null,
+  "taskSwitchBetweenFirstDislikeAndFirstWithdraw": true
+}
