@@ -203,6 +203,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     executionId: string;
     attachments?: Array<Record<string, unknown>>;
   }> = [];
+  const queuedRequests: Array<{ text: string; delivery: string; idempotencyKey: string }> = [];
   const stagedAttachmentRequests: Array<Record<string, unknown>> = [];
   const selectedLocalPaths = ["/tmp/anyagent-ui/src/two.ts"];
   const replies: Array<{ approvalId: string; optionId: string }> = [];
@@ -246,16 +247,45 @@ test("EngineConversation sends through the product composer and renders ordered 
       taskId: submittedTaskId,
       text,
       attachments,
+      delivery,
+      idempotencyKey,
     }: {
       taskId: string;
       text: string;
       attachments?: Array<Record<string, unknown>>;
+      delivery?: string;
+      idempotencyKey?: string;
     }) => {
       if (failNextSubmit) {
         failNextSubmit = false;
         throw new Error("Fake host rejected this input");
       }
       if (submittedTaskId !== taskId) throw new Error(`Unexpected task ${submittedTaskId}`);
+      if (delivery === "queue") {
+        assert.ok(idempotencyKey, "a queued request needs a stable retry identity");
+        queuedRequests.push({ text, delivery, idempotencyKey });
+        history = {
+          ...history,
+          inputs: [
+            ...history.inputs,
+            {
+              id: "input-queued-test",
+              taskId,
+              participantId,
+              sessionId,
+              text,
+              status: "queued",
+              receivedAt: 1_001,
+              acceptedAt: null,
+              startedAt: null,
+              terminalAt: null,
+              error: null,
+            },
+          ],
+        };
+        emit();
+        return;
+      }
       nextRound += 1;
       const round = nextRound;
       const inputId = round === 1 ? "input-z-first" : "input-a-second";
@@ -297,6 +327,15 @@ test("EngineConversation sends through the product composer and renders ordered 
       };
       emit();
       submissions.push({ text, inputId, executionId, ...(attachments ? { attachments } : {}) });
+    },
+    cancelQueuedInput: async ({ inputId }: { inputId: string }) => {
+      history = {
+        ...history,
+        inputs: history.inputs.map((input) =>
+          input.id === inputId ? { ...input, status: "cancelled", terminalAt: 1_002 } : input,
+        ),
+      };
+      emit();
     },
     replyToApproval: async ({ approvalId, optionId }: { approvalId: string; optionId: string }) => {
       replies.push({ approvalId, optionId });
@@ -661,8 +700,46 @@ test("EngineConversation sends through the product composer and renders ordered 
     assert.equal(
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
         ?.disabled,
-      true,
-      "another turn must wait while the current Execution is active",
+      false,
+      "the same native composer should accept a queued next turn while Execution is active",
+    );
+    assert.equal(composerSubmit()?.getAttribute("aria-label"), "加入队列");
+    const queueDraft = document.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & { __zcodeLexicalInputE2E: { setText: (value: string) => void } };
+    await act(async () => queueDraft.__zcodeLexicalInputE2E.setText("Queued while running"));
+    await act(async () => composerSubmit()?.click());
+    await waitFor(
+      () => assert.equal(queuedRequests.length, 1),
+      "busy send should be admitted as a queued product Input",
+    );
+    assert.equal(queuedRequests[0]?.text, "Queued while running");
+    await waitFor(
+      () =>
+        assert.match(
+          container.querySelector('[data-testid="v4-queue"]')?.textContent ?? "",
+          /Queued while running/,
+        ),
+      "queued Input should use the native queue panel",
+    );
+    assert.equal(
+      container.querySelector('[data-testid="engine-input-input-queued-test"]'),
+      null,
+      "a queued Input has not reached the Engine and is not a conversation message",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-delete-input-queued-test"]')
+        ?.click(),
+    );
+    await waitFor(
+      () => assert.equal(container.querySelector('[data-testid="v4-queue"]'), null),
+      "cancelled queue item should leave the native queue panel",
+    );
+    assert.equal(
+      container.querySelector('[data-testid="engine-input-input-queued-test"]'),
+      null,
+      "cancelled pre-dispatch Input should not become a user message",
     );
     assert.equal(container.querySelector(".chat-composer-region"), composer);
     assert.equal(
@@ -861,8 +938,8 @@ test("EngineConversation sends through the product composer and renders ordered 
       JSON.parse(
         dom.window.localStorage.getItem("zcode-chat-prompt-history:/tmp/anyagent-ui") ?? "[]",
       ),
-      [structuredMentionPrompt],
-      "an accepted Engine input should use the existing workspace prompt history",
+      [structuredMentionPrompt, "Queued while running"],
+      "accepted direct and queued inputs should reuse the existing workspace prompt history",
     );
     const historyInput = document.querySelector('[data-testid="engine-composer-input"]') as
       | (HTMLElement & {
@@ -870,6 +947,12 @@ test("EngineConversation sends through the product composer and renders ordered 
         })
       | null;
     assert.ok(historyInput);
+    await act(async () => {
+      historyInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    assert.equal(historyInput.__zcodeLexicalInputE2E.getText(), "Queued while running");
     await act(async () => {
       historyInput.dispatchEvent(
         new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
@@ -1944,7 +2027,11 @@ test("an active ZCode Harness task switches models within its Session and submit
     import("../src/components/ui/tooltip.js"),
     import("../src/store/zcodeSessionStore.js"),
   ]);
-  const zcodeEngine = { ...currentEngine, engineId: "zcode" };
+  const zcodeEngine = {
+    ...currentEngine,
+    engineId: "zcode",
+    capabilities: { ...capabilities, "session.compact": available },
+  };
   const zcodeTask = {
     ...task,
     engine: { ...task.engine, engineId: "zcode" },
@@ -2001,6 +2088,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     },
   };
   const submissions: Array<Record<string, unknown>> = [];
+  const compactRequests: Array<Record<string, unknown>> = [];
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
   const history = emptyHistory();
   history.inputs.push({
@@ -2033,6 +2121,10 @@ test("an active ZCode Harness task switches models within its Session and submit
     onDidChange: () => ({ dispose: () => {} }),
     submitInput: async (input: Record<string, unknown>) => {
       submissions.push(input);
+    },
+    compactSession: async (input: Record<string, unknown>) => {
+      compactRequests.push(input);
+      return { status: "completed", reason: null };
     },
   };
   const services = {
@@ -2187,21 +2279,41 @@ test("an active ZCode Harness task switches models within its Session and submit
       () => assert.ok(container.querySelector('[data-testid="prompt-suggestion-panel"]')),
       "native slash suggestions did not open",
     );
-    assert.equal(
+    assert.ok(
       container.querySelector('[data-option-id="slash:compact"]'),
-      null,
-      "the native-only compact command must not be advertised as a Harness action",
+      "the native compact command should remain in the shared slash suggestions",
     );
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/compact instructions"));
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
-    assert.equal(submissions.length, 1, "unmapped /compact must not become submitInput text");
+    assert.equal(submissions.length, 1, "/compact must not become submitInput text");
     assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/compact instructions");
     assert.match(
       container.querySelector('[role="status"]')?.textContent ?? "",
-      /独立的上下文维护操作.*没有对应操作.*输入已保留/,
+      /独立维护操作.*不接受正文或附件.*输入已保留/,
     );
+    assert.equal(compactRequests.length, 0);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/compact"));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
+    );
+    await waitFor(
+      () => assert.equal(compactRequests.length, 1),
+      "compact must use the separate maintenance API",
+    );
+    assert.deepEqual(compactRequests[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+    });
+    assert.equal(submissions.length, 1, "maintenance must not create a user Input");
+    await waitFor(
+      () => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""),
+      "completed maintenance should clear the slash draft",
+    );
+    assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /上下文压缩已完成/);
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/skill"));
     await waitFor(

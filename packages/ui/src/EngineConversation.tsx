@@ -22,6 +22,7 @@ import {
 } from "@/EngineUiParts.js";
 import type { EngineHistory, EngineTask } from "@/EngineUiParts.js";
 import { EngineConversationTimeline } from "@/EngineConversationTimeline.js";
+import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
 import {
   projectEngineConversation,
   type EngineConversationProjection,
@@ -87,7 +88,7 @@ const zcodeBuiltinSlashCommandByName = new Map(
   ),
 );
 const nativePromptBuiltinSlashCommands = new Set(["init", "skill"]);
-const rendererMappedSlashCommands = new Set(["mode", "plan"]);
+const rendererMappedSlashCommands = new Set(["compact", "mode", "plan"]);
 
 function parseLeadingSlashCommand(text: string): { name: string; args: string } | null {
   const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/u.exec(text.trim());
@@ -256,6 +257,13 @@ export function EngineConversation({
   const requestVersionRef = useRef(0);
   const changeVersionRef = useRef(0);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
+  const queuedSubmissionRef = useRef<{
+    taskId: string;
+    authorizationId: string;
+    text: string;
+    config: string;
+    key: string;
+  } | null>(null);
   const conversationScrollRef = useRef<HTMLDivElement | null>(null);
   const followConversationTailRef = useRef(true);
   const { intl, locale } = useZCodeIntl();
@@ -401,18 +409,30 @@ export function EngineConversation({
   useEffect(() => {
     if (visibleTask) onTitleChange?.(visibleTask.id, visibleTitle);
   }, [onTitleChange, visibleTask?.id, visibleTitle]);
-  const hasPendingRound =
+  const queuedInputs = visibleHistory?.inputs.filter((input) => input.status === "queued") ?? [];
+  const activeRound =
     visibleHistory?.inputs.some((input) =>
-      ["received", "native-accepted", "started", "unknown"].includes(input.status),
+      ["received", "native-accepted", "started"].includes(input.status),
     ) ||
     visibleHistory?.executions.some((execution) =>
-      ["accepted", "started", "unknown"].includes(execution.status),
+      ["accepted", "started"].includes(execution.status),
     );
+  const unknownRound =
+    visibleHistory?.inputs.some((input) => input.status === "unknown") ||
+    visibleHistory?.executions.some((execution) => execution.status === "unknown");
+  const hasPendingRound = activeRound || unknownRound || queuedInputs.length > 0;
+  const shouldQueue = activeRound || queuedInputs.length > 0;
+  const currentAttachments = visibleTask ? (attachmentsByTask[visibleTask.id] ?? []) : [];
   const runBlockedReason = visibleTask
-    ? hasPendingRound
-      ? "当前轮次尚未结束，暂不能发送下一轮输入。"
+    ? unknownRound
+      ? "当前轮次的原生结果未知，无法安全发送或排队。"
       : currentTaskBlock(visibleTask, "execution.run", engines, refreshFailed)
     : "请选择或创建一个 Engine Task。";
+  const submitBlockedReason =
+    runBlockedReason ??
+    (shouldQueue && currentAttachments.length > 0
+      ? "当前轮次未结束，附件不能安全排队；请等待后发送。"
+      : null);
   const approvalBlockedReason = visibleTask
     ? currentTaskBlock(visibleTask, "approval.respond", engines, refreshFailed)
     : "当前 Task 不可用。";
@@ -463,7 +483,8 @@ export function EngineConversation({
   const modelView =
     modelSelectionRead.state.status === "ready" ? modelSelectionRead.state.view : null;
   const savedConfig = visibleHistory?.inputs.findLast(
-    (input) => input.status !== "rejected" && input.submissionConfig,
+    (input) =>
+      input.status !== "rejected" && input.status !== "cancelled" && input.submissionConfig,
   )?.submissionConfig;
   const savedMode = typeof savedConfig?.mode === "string" ? savedConfig.mode : undefined;
   const savedModelResult = modelSelectionSchema.safeParse(savedConfig?.modelSelection);
@@ -587,7 +608,61 @@ export function EngineConversation({
     let submission = zcodeSubmission;
 
     if (isZCodeHarness && slashCommand) {
-      if (slashCommand.name === "plan") {
+      if (slashCommand.name === "compact") {
+        if (slashCommand.args || selectedAttachments.length > 0) {
+          setNotice({
+            kind: "info",
+            message: "/compact 是独立维护操作，不接受正文或附件；输入已保留。",
+          });
+          return false;
+        }
+        const compactBlockedReason = currentTaskBlock(
+          visibleTask,
+          "session.compact",
+          engines,
+          refreshFailed,
+        );
+        if (compactBlockedReason || hasPendingRound || busyAction) {
+          setNotice({
+            kind: "info",
+            message:
+              compactBlockedReason ??
+              (hasPendingRound
+                ? "当前 Session 尚有未完成的输入或队列，暂不能压缩。"
+                : "当前操作尚未完成。"),
+          });
+          return false;
+        }
+        const editor = inputApiRef.current;
+        void runAction(
+          "compact",
+          async () => {
+            const operation = await service.compactSession({
+              taskId: visibleTask.id,
+              participantId: visibleTask.participant.id,
+              sessionId: visibleTask.session.id,
+              authorizationId: visibleTask.authorizationId,
+            });
+            if (operation.status === "failed" || operation.status === "cancelled")
+              throw new Error(
+                operation.reason ??
+                  `上下文压缩${operation.status === "failed" ? "失败" : "已取消"}。`,
+              );
+            return operation;
+          },
+          (operation) =>
+            operation.status === "completed"
+              ? "上下文压缩已完成。"
+              : operation.status === "skipped"
+                ? "原生 Session 跳过了本次压缩。"
+                : operation.status === "unknown"
+                  ? "上下文压缩结果未知；不会自动重试。"
+                  : "上下文压缩请求已记录，仍需等待原生结果。",
+        ).then((accepted) => {
+          if (accepted && inputApiRef.current === editor) editor?.clear();
+        });
+        return false;
+      } else if (slashCommand.name === "plan") {
         if (selectedAttachments.length > 0) {
           setNotice({
             kind: "info",
@@ -665,24 +740,37 @@ export function EngineConversation({
       } else {
         const nativeBuiltin = nativeBuiltinForSlashCommand(slashCommand.name, nativeSlashCommands);
         if (nativeBuiltin && !nativePromptBuiltinSlashCommands.has(nativeBuiltin)) {
-          const commandName = nativeBuiltin === "compact" ? "compact" : slashCommand.name;
           setNotice({
             kind: "info",
             message:
-              commandName === "compact"
-                ? locale === "zh-CN"
-                  ? "/compact 是独立的上下文维护操作；当前 Harness 没有对应操作，输入已保留。"
-                  : "/compact is a separate context maintenance operation that this Harness does not expose. Your draft is preserved."
-                : locale === "zh-CN"
-                  ? `/${commandName} 是 ZCode 原生命令；当前 Harness 没有对应操作，输入已保留。`
-                  : `/${commandName} is a native ZCode command with no matching Harness operation. Your draft is preserved.`,
+              locale === "zh-CN"
+                ? `/${slashCommand.name} 是 ZCode 原生命令；当前 Harness 没有对应操作，输入已保留。`
+                : `/${slashCommand.name} is a native ZCode command with no matching Harness operation. Your draft is preserved.`,
           });
           return false;
         }
       }
     }
 
-    if (runBlockedReason || busyAction || (isZCodeHarness && !submission)) return false;
+    if (submitBlockedReason || busyAction || (isZCodeHarness && !submission)) return false;
+    const delivery = shouldQueue ? "queue" : "startNow";
+    const configKey = JSON.stringify(submission ?? null);
+    const queueKey = shouldQueue
+      ? queuedSubmissionRef.current?.taskId === visibleTask.id &&
+        queuedSubmissionRef.current.authorizationId === visibleTask.authorizationId &&
+        queuedSubmissionRef.current.text === submittedText &&
+        queuedSubmissionRef.current.config === configKey
+        ? queuedSubmissionRef.current.key
+        : globalThis.crypto.randomUUID()
+      : null;
+    if (queueKey)
+      queuedSubmissionRef.current = {
+        taskId: visibleTask.id,
+        authorizationId: visibleTask.authorizationId,
+        text: submittedText,
+        config: configKey,
+        key: queueKey,
+      };
     const editor = inputApiRef.current;
     void runAction(
       "input",
@@ -704,6 +792,8 @@ export function EngineConversation({
           sessionId: visibleTask.session.id,
           authorizationId: visibleTask.authorizationId,
           text: submittedText,
+          delivery,
+          ...(queueKey ? { idempotencyKey: queueKey } : {}),
           ...(attachments.length > 0 ? { attachments } : {}),
           ...(isZCodeHarness && submission
             ? {
@@ -729,6 +819,7 @@ export function EngineConversation({
       () => null,
     ).then((accepted) => {
       if (!accepted) return;
+      if (queuedSubmissionRef.current?.key === queueKey) queuedSubmissionRef.current = null;
       try {
         const nextHistory = appendPromptHistoryEntry(
           readPromptHistoryEntries(promptHistoryWorkspacePath),
@@ -834,6 +925,22 @@ export function EngineConversation({
     );
   };
 
+  const cancelQueuedInput = (inputId: string) => {
+    if (!visibleTask || busyAction) return;
+    void runAction(
+      `queue:${inputId}`,
+      () =>
+        service.cancelQueuedInput({
+          taskId: visibleTask.id,
+          participantId: visibleTask.participant.id,
+          sessionId: visibleTask.session.id,
+          authorizationId: visibleTask.authorizationId,
+          inputId,
+        }),
+      () => null,
+    );
+  };
+
   const forkExecution = (executionId: string) => {
     if (!visibleTask || forkBlockedReason || busyAction) return;
     void runAction(
@@ -898,7 +1005,6 @@ export function EngineConversation({
       setNotice({ kind: "error", message: errorText(error) });
     }
   }, [platform, visibleTask]);
-  const currentAttachments = visibleTask ? (attachmentsByTask[visibleTask.id] ?? []) : [];
   const attachmentAction = useMemo(
     () => ({
       label: intl.formatMessage({ id: "chat.composer.attachment" }),
@@ -1079,8 +1185,8 @@ export function EngineConversation({
       {visibleTask ? (
         <div className="shrink-0 px-4 pb-4">
           <div className={`mx-auto ${contentWidthClassName}`}>
-            {runBlockedReason ? (
-              <p className="mb-2 text-xs text-warning">{runBlockedReason}</p>
+            {submitBlockedReason ? (
+              <p className="mb-2 text-xs text-warning">{submitBlockedReason}</p>
             ) : null}
             {isZCodeHarness && !runBlockedReason && !zcodeSubmission ? (
               <p className="mb-2 text-xs text-warning">请选择当前可用的模型与推理档位。</p>
@@ -1096,6 +1202,18 @@ export function EngineConversation({
               </p>
             ) : null}
             <div className="chat-composer-region z-20 w-full shrink-0 @container/composer">
+              <ConversationQueuePanel
+                queue={{
+                  items: queuedInputs.map((input) => ({
+                    queueItemId: input.id,
+                    kind: "sendText",
+                    text: input.text,
+                    dispatch: { state: "queued" },
+                  })),
+                  autoDrain: true,
+                }}
+                onDeleteItem={cancelQueuedInput}
+              />
               <div className="chat-composer-input-surface w-full">
                 <ChatPromptEditor
                   key={visibleTask.id}
@@ -1105,12 +1223,16 @@ export function EngineConversation({
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
                   attachmentAction={attachmentAction}
-                  actionMenuDisabled={!platform.canSelectFilePath}
-                  actionMenuDisabledReason={intl.formatMessage({
-                    id: platform.canSelectFilePath
-                      ? "engine.composer.textOnly"
-                      : "engine.composer.attachmentLocalPathRequired",
-                  })}
+                  actionMenuDisabled={!platform.canSelectFilePath || shouldQueue}
+                  actionMenuDisabledReason={
+                    shouldQueue
+                      ? "附件不能排队；请等待当前轮次完成后发送。"
+                      : intl.formatMessage({
+                          id: platform.canSelectFilePath
+                            ? "engine.composer.textOnly"
+                            : "engine.composer.attachmentLocalPathRequired",
+                        })
+                  }
                   leadingActions={
                     <ConfigSelect
                       option={modeOption}
@@ -1267,11 +1389,11 @@ export function EngineConversation({
                   disabledReason={runBlockedReason ?? undefined}
                   submitting={busyAction === "input"}
                   submitDisabled={
-                    !!runBlockedReason ||
+                    !!submitBlockedReason ||
                     busyAction !== null ||
                     (isZCodeHarness && !zcodeSubmission)
                   }
-                  submitLabel="发送"
+                  submitLabel={shouldQueue ? "加入队列" : "发送"}
                   topContent={
                     currentAttachments.length > 0 ? (
                       <Attachments

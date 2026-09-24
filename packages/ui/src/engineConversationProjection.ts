@@ -140,7 +140,12 @@ export function projectEngineConversation(
     };
   }
   const inputs = history.inputs
-    .filter((input) => belongsToTask(input, task))
+    // Pending queue items live in the native queue panel until dispatch; deleting one
+    // must not turn it into a user message that the Engine never received.
+    .filter(
+      (input) =>
+        belongsToTask(input, task) && input.status !== "queued" && input.status !== "cancelled",
+    )
     .sort((a, b) => a.receivedAt - b.receivedAt);
   const executions = history.executions
     .filter((execution) => belongsToTask(execution, task))
