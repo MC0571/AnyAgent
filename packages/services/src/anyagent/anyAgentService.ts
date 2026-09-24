@@ -38,6 +38,13 @@ export interface IAnyAgentService {
   listTasks(): Promise<readonly RuntimeTask[]>;
   getTask(taskId: string): Promise<RuntimeTask | null>;
   getHistory(taskId: string): Promise<TaskHistory | null>;
+  /** Read-only feedback projection from the native Session, not a second product authority. */
+  getAssistantFeedback(
+    taskId: string,
+  ): Promise<
+    | { state: "current"; values: Record<string, "like" | "dislike" | null> }
+    | { state: "unknown"; reason: string }
+  >;
   createTask(input: {
     engineId: string;
     workspacePath?: string;

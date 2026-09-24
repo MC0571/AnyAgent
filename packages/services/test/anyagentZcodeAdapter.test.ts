@@ -1173,6 +1173,13 @@ test("ZCode assistant feedback resolves and updates the exact current native row
       target: { rowId: 13, entityId: "assistant-message-13" },
       feedback: "like",
     });
+    assert.deepEqual(
+      await fixture.adapter.readAssistantFeedback(session, ["assistant-message-13"]),
+      {
+        state: "current",
+        values: { "assistant-message-13": "like" },
+      },
+    );
     assert.equal((await fixture.adapter.setAssistantFeedback!(request)).status, "unchanged");
     assert.equal(
       fixture.commands.filter((entry) => entry.type === "setAssistantFeedback").length,
@@ -1192,6 +1199,13 @@ test("ZCode assistant feedback resolves and updates the exact current native row
       "unchanged",
     );
     assert.equal(rows[0]?.feedback, undefined);
+    assert.deepEqual(
+      await fixture.adapter.readAssistantFeedback(session, ["assistant-message-13"]),
+      {
+        state: "current",
+        values: { "assistant-message-13": null },
+      },
+    );
     assert.deepEqual(
       fixture.commands
         .filter((entry) => entry.type === "setAssistantFeedback")

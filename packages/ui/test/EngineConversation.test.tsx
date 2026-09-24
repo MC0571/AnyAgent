@@ -2038,6 +2038,12 @@ test("an active ZCode Harness task switches models within its Session and submit
     currentEngine: zcodeEngine,
     session: { ...task.session, nativeSessionId: "native-zcode-session-ui" },
   };
+  const zcodeTaskB = {
+    ...zcodeTask,
+    id: "task-zcode-feedback-b",
+    participant: { ...zcodeTask.participant, id: "participant-zcode-feedback-b" },
+    session: { ...zcodeTask.session, id: "session-zcode-feedback-b", nativeSessionId: "native-b" },
+  };
   const workspacePath = "/tmp/anyagent-ui";
   const zcodeSlashCommands = [
     { name: "compact", description: "Compact", source: "builtin" as const },
@@ -2090,7 +2096,10 @@ test("an active ZCode Harness task switches models within its Session and submit
   const submissions: Array<Record<string, unknown>> = [];
   const compactRequests: Array<Record<string, unknown>> = [];
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
+  const feedbackRequests: Array<Record<string, unknown>> = [];
+  let nativeFeedback: "like" | "dislike" | null = null;
   const history = emptyHistory();
+  const historyB = emptyHistory(zcodeTaskB.id);
   history.inputs.push({
     id: "input-initial",
     taskId,
@@ -2114,9 +2123,13 @@ test("an active ZCode Harness task switches models within its Session and submit
     error: null,
   });
   const service = {
-    listTasks: async () => [zcodeTask],
-    getTask: async () => zcodeTask,
-    getHistory: async () => history,
+    listTasks: async () => [zcodeTask, zcodeTaskB],
+    getTask: async (id: string) => (id === zcodeTaskB.id ? zcodeTaskB : zcodeTask),
+    getHistory: async (id: string) => (id === zcodeTaskB.id ? historyB : history),
+    getAssistantFeedback: async (id: string) => ({
+      state: "current",
+      values: id === zcodeTaskB.id ? {} : { "native-feedback-message": nativeFeedback },
+    }),
     listEngines: async () => [zcodeEngine],
     onDidChange: () => ({ dispose: () => {} }),
     submitInput: async (input: Record<string, unknown>) => {
@@ -2125,6 +2138,11 @@ test("an active ZCode Harness task switches models within its Session and submit
     compactSession: async (input: Record<string, unknown>) => {
       compactRequests.push(input);
       return { status: "completed", reason: null };
+    },
+    setAssistantFeedback: async (input: Record<string, unknown>) => {
+      feedbackRequests.push(input);
+      nativeFeedback = input.feedback as "like" | "dislike" | null;
+      return { status: "updated" };
     },
   };
   const services = {
@@ -2153,36 +2171,34 @@ test("an active ZCode Harness task switches models within its Session and submit
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  try {
-    await act(async () =>
-      root.render(
+  const appFor = (selectedTaskId: string) =>
+    createElement(
+      TooltipProvider,
+      null,
+      createElement(
+        ServiceProvider,
+        { services: services as never },
         createElement(
-          TooltipProvider,
-          null,
+          PlatformProvider,
+          { platform: { onSettingsChanged: () => () => {} } as never },
           createElement(
-            ServiceProvider,
-            { services: services as never },
+            ZCodeIntlProvider,
+            { initialLocale: "zh-CN" },
             createElement(
-              PlatformProvider,
-              { platform: { onSettingsChanged: () => () => {} } as never },
-              createElement(
-                ZCodeIntlProvider,
-                { initialLocale: "zh-CN" },
-                createElement(
-                  TabStoreProvider,
-                  null,
-                  createElement(EngineConversation, {
-                    service: service as never,
-                    selectedTaskId: taskId,
-                    onSelectTask: () => {},
-                  }),
-                ),
-              ),
+              TabStoreProvider,
+              null,
+              createElement(EngineConversation, {
+                service: service as never,
+                selectedTaskId,
+                onSelectTask: () => {},
+              }),
             ),
           ),
         ),
       ),
     );
+  try {
+    await act(async () => root.render(appFor(taskId)));
     const modelTrigger = () =>
       container.querySelector<HTMLButtonElement>('[data-testid="chat-model-select-trigger"]');
     await waitFor(() => {
@@ -2370,6 +2386,73 @@ test("an active ZCode Harness task switches models within its Session and submit
       submissions[2]?.text,
       structuredMentionPrompt,
       "structured @ Plugin mention markdown should survive Harness submission",
+    );
+    history.executions.push({
+      id: "execution-native-feedback",
+      taskId,
+      participantId,
+      sessionId,
+      inputId: "input-initial",
+      status: "completed",
+      acceptedAt: 910,
+      startedAt: 911,
+      terminalAt: 950,
+      result: "Native feedback answer",
+      error: null,
+    });
+    history.events.push({
+      id: "event-native-feedback",
+      taskId,
+      participantId,
+      sessionId,
+      inputId: "input-initial",
+      executionId: "execution-native-feedback",
+      nativeEventId: "native-feedback-event",
+      streamId: "stream-native-feedback",
+      sourceSequence: 1,
+      deliverySequence: 1,
+      observedAt: 930,
+      source: "engine",
+      type: "message.delta",
+      payload: {
+        text: "Native feedback answer",
+        messageId: "native-feedback-message",
+        blockId: "native-feedback-block",
+      },
+      duplicateOf: null,
+    });
+    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    await waitFor(
+      () =>
+        assert.equal(container.querySelector('[data-testid="engine-input-input-initial"]'), null),
+      "Task B must not show Task A's native message",
+    );
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(
+      () => assert.ok(container.querySelector('button[aria-label="赞"]')),
+      "Task A must read its native feedback row",
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="赞"]')!.click(),
+    );
+    await waitFor(() => assert.equal(nativeFeedback, "like"));
+    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(
+      () =>
+        assert.equal(
+          container.querySelector('button[aria-label="已赞"]')?.getAttribute("aria-pressed"),
+          "true",
+        ),
+      "A→B→A must restore the native feedback state",
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="已赞"]')!.click(),
+    );
+    await waitFor(() => assert.equal(nativeFeedback, null));
+    assert.deepEqual(
+      feedbackRequests.map((entry) => entry.feedback),
+      ["like", null],
     );
     await act(async () => {
       input.blur();

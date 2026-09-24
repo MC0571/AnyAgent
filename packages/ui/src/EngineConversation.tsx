@@ -236,6 +236,10 @@ export function EngineConversation({
 }) {
   const [task, setTask] = useState<EngineTask | null>(null);
   const [history, setHistory] = useState<EngineHistory | null>(null);
+  const [feedbackSnapshot, setFeedbackSnapshot] = useState<{
+    taskId: string;
+    read: Awaited<ReturnType<IAnyAgentService["getAssistantFeedback"]>>;
+  } | null>(null);
   const [inheritedSources, setInheritedSources] = useState<{
     childTaskId: string;
     sources: InheritedSource[];
@@ -306,6 +310,7 @@ export function EngineConversation({
         if (changeVersionRef.current === startedChangeVersion) {
           setTask(null);
           setHistory(null);
+          setFeedbackSnapshot(null);
           setInheritedSources(null);
         }
         return;
@@ -320,6 +325,21 @@ export function EngineConversation({
         setTask(nextTask);
         setHistory(nextHistory);
       }
+      if (nextTask?.engine.engineId === "zcode") {
+        void service.getAssistantFeedback(targetTaskId).then(
+          (read) => {
+            if (requestVersion === requestVersionRef.current)
+              setFeedbackSnapshot({ taskId: targetTaskId, read });
+          },
+          (error: unknown) => {
+            if (requestVersion === requestVersionRef.current)
+              setFeedbackSnapshot({
+                taskId: targetTaskId,
+                read: { state: "unknown", reason: errorText(error) },
+              });
+          },
+        );
+      } else if (requestVersion === requestVersionRef.current) setFeedbackSnapshot(null);
       if (nextTask) {
         try {
           const sources = await loadInheritedSources(service, nextTask);
@@ -386,6 +406,7 @@ export function EngineConversation({
     if (selectedTaskId && task?.id !== selectedTaskId) {
       setTask(null);
       setHistory(null);
+      setFeedbackSnapshot(null);
       setInheritedSources(null);
     }
   }, [selectedTaskId, task?.id]);
@@ -402,6 +423,10 @@ export function EngineConversation({
   }, [projection]);
   const visibleTask = task?.id === selectedTaskId ? task : null;
   const visibleHistory = visibleTask ? history : null;
+  const visibleFeedback =
+    visibleTask?.engine.engineId === "zcode" && feedbackSnapshot?.taskId === visibleTask.id
+      ? feedbackSnapshot.read
+      : null;
   const visibleTitle = visibleTask
     ? visibleHistory?.inputs[0]?.text.trim().replace(/\s+/g, " ").slice(0, 80) ||
       `Task ${shortId(visibleTask.id)}`
@@ -451,7 +476,12 @@ export function EngineConversation({
       : currentTaskBlock(visibleTask, "execution.revise", engines, refreshFailed)
     : "当前 Task 不可用。";
   const assistantFeedbackBlockedReason = visibleTask
-    ? currentTaskBlock(visibleTask, "assistant.feedback", engines, refreshFailed)
+    ? (currentTaskBlock(visibleTask, "assistant.feedback", engines, refreshFailed) ??
+      (visibleTask.engine.engineId === "zcode" && visibleFeedback?.state !== "current"
+        ? visibleFeedback?.state === "unknown"
+          ? visibleFeedback.reason
+          : "原生反馈状态尚未读取。"
+        : null))
     : "当前 Task 不可用。";
   const currentEngine = visibleTask
     ? (engines?.find((engine) => engine.engineId === visibleTask.currentEngine.engineId) ?? null)
@@ -1079,6 +1109,9 @@ export function EngineConversation({
               onReplyApproval={replyApproval}
               onReplyUserInput={replyUserInput}
               assistantFeedbackBlockedReason={assistantFeedbackBlockedReason}
+              assistantFeedback={
+                visibleFeedback?.state === "current" ? visibleFeedback.values : undefined
+              }
               onAssistantFeedback={updateAssistantFeedback}
               forkBlockedReason={forkBlockedReason}
               onForkExecution={forkExecution}

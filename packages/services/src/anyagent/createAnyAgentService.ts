@@ -179,6 +179,29 @@ export function createAnyAgentService(
     async getHistory(taskId) {
       return runtime.getHistory(taskId);
     },
+    async getAssistantFeedback(taskId) {
+      const task = runtime.getTask(taskId);
+      if (!task || task.engine.engineId !== "zcode" || !task.session.nativeSessionId)
+        return { state: "unknown", reason: "No attached ZCode Session belongs to this Task." };
+      const history = runtime.getHistory(taskId);
+      const messageIds = [
+        ...new Set(
+          history?.events
+            .filter(
+              (event) =>
+                event.type === "message.delta" &&
+                event.source === "engine" &&
+                event.duplicateOf === null &&
+                typeof event.payload.messageId === "string",
+            )
+            .map((event) => event.payload.messageId as string) ?? [],
+        ),
+      ];
+      return enginesFor(task.environment).zcode.readAssistantFeedback(
+        task.session.nativeSessionId,
+        messageIds,
+      );
+    },
     createTask: ({ engineId, ...workspace }) => {
       const target = environmentFor(workspace);
       return runtime.createTask({

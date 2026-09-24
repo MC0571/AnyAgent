@@ -800,6 +800,7 @@ export function EngineConversationTimeline({
   onReplyApproval,
   onReplyUserInput,
   assistantFeedbackBlockedReason = null,
+  assistantFeedback,
   onAssistantFeedback,
   forkBlockedReason = null,
   onForkExecution,
@@ -826,6 +827,7 @@ export function EngineConversationTimeline({
   onReplyApproval: (approvalId: string, optionId: string, feedback?: string) => void;
   onReplyUserInput: (requestId: string, response: EngineUserInputAnswer) => void;
   assistantFeedbackBlockedReason?: string | null;
+  assistantFeedback?: Readonly<Record<string, "like" | "dislike" | null>>;
   onAssistantFeedback?: (
     executionId: string,
     messageId: string,
@@ -990,6 +992,8 @@ export function EngineConversationTimeline({
                 busyAction ||
                 !onAssistantFeedback ||
                 !block?.messageId ||
+                (assistantFeedback !== undefined &&
+                  !Object.hasOwn(assistantFeedback, block.messageId)) ||
                 block.source !== "engine" ||
                 !["completed", "failed", "stopped"].includes(execution.status)
               ) {
@@ -1065,6 +1069,11 @@ export function EngineConversationTimeline({
                             text={execution.result ?? text}
                             createdAt={assistantAnswerTimestamp(executionTurn)}
                             entityId={item.block.messageId ?? undefined}
+                            feedback={
+                              item.block.messageId
+                                ? assistantFeedback?.[item.block.messageId]
+                                : undefined
+                            }
                             onFeedbackAction={feedbackActionForBlock(item.block)}
                             unsupportedFeedbackReason={feedbackDisabledReason}
                             unsupportedForkReason={
@@ -1130,6 +1139,11 @@ export function EngineConversationTimeline({
                         text={execution.result}
                         createdAt={assistantAnswerTimestamp(executionTurn)}
                         entityId={executionTurn.deltas.at(-1)?.messageId ?? undefined}
+                        feedback={
+                          executionTurn.deltas.at(-1)?.messageId
+                            ? assistantFeedback?.[executionTurn.deltas.at(-1)!.messageId!]
+                            : undefined
+                        }
                         onFeedbackAction={feedbackActionForBlock(executionTurn.deltas.at(-1))}
                         unsupportedFeedbackReason={feedbackDisabledReason}
                         unsupportedForkReason={

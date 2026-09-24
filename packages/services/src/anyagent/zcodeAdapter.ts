@@ -313,7 +313,16 @@ export function createZCodeAdapter(options: {
   validateModelSelection?: (
     selection: ModelSelection,
   ) => Promise<string | undefined> | string | undefined;
-}): EngineAdapter & { dispose(): void } {
+}): EngineAdapter & {
+  dispose(): void;
+  readAssistantFeedback(
+    session: string,
+    messageIds: readonly string[],
+  ): Promise<
+    | { state: "current"; values: Record<string, "like" | "dislike" | null> }
+    | { state: "unknown"; reason: string }
+  >;
+} {
   const workspace = {
     workspacePath: options.workspacePath,
     ...(options.workspaceIdentity ? { workspaceIdentity: options.workspaceIdentity } : {}),
@@ -334,6 +343,66 @@ export function createZCodeAdapter(options: {
   let configurationVersion: string | null = null;
   let nativeWorkspaceId = options.workspaceIdentity ?? options.workspacePath;
   let capabilityProbeRevision = 0;
+
+  class AssistantRowReadError extends Error {
+    constructor(
+      message: string,
+      readonly status: "unsupported" | "temporarily-unavailable",
+    ) {
+      super(message);
+    }
+  }
+
+  async function readAssistantRows(session: string, messageIds: ReadonlySet<string>) {
+    let beforeRowId: number | undefined;
+    let baseRevision: number | undefined;
+    let baseLogEpoch: string | undefined;
+    const matches = new Map<string, { rowId: number; feedback: "like" | "dislike" | null }>();
+    while (true) {
+      const page = await options.agent.conversationRowsRangeV4({
+        ...workspace,
+        sessionId: session,
+        ...(beforeRowId === undefined ? {} : { beforeRowId }),
+        limit: 200,
+      });
+      if (baseRevision === undefined) {
+        baseRevision = page.atRevision;
+        baseLogEpoch = page.atLogEpoch;
+      } else if (baseRevision !== page.atRevision || baseLogEpoch !== page.atLogEpoch) {
+        throw new AssistantRowReadError(
+          "The native conversation changed while reading assistant feedback.",
+          "temporarily-unavailable",
+        );
+      }
+      for (const row of page.rows) {
+        if (!row.entityId || !messageIds.has(row.entityId)) continue;
+        if (matches.has(row.entityId) || row.kind !== "assistantText")
+          throw new AssistantRowReadError(
+            "The native assistant message has no unique text row.",
+            "unsupported",
+          );
+        if (!Number.isSafeInteger(row.rowId))
+          throw new AssistantRowReadError(
+            "The native assistant row identity is invalid.",
+            "temporarily-unavailable",
+          );
+        matches.set(row.entityId, { rowId: row.rowId, feedback: row.feedback ?? null });
+      }
+      if (!page.hasMore || page.rows.length === 0) break;
+      const nextBeforeRowId = page.rows[0]?.rowId;
+      if (
+        typeof nextBeforeRowId !== "number" ||
+        !Number.isSafeInteger(nextBeforeRowId) ||
+        (beforeRowId !== undefined && nextBeforeRowId >= beforeRowId)
+      )
+        throw new AssistantRowReadError(
+          "The native conversation row cursor did not advance.",
+          "temporarily-unavailable",
+        );
+      beforeRowId = nextBeforeRowId;
+    }
+    return { matches, baseRevision, baseLogEpoch };
+  }
 
   function capabilities(): EngineCapabilitySnapshot {
     const status = (support: "supported" | "unsupported" | "unknown", reason?: string) => ({
@@ -1637,66 +1706,19 @@ export function createZCodeAdapter(options: {
       if (!messageId || messageId.trim() !== messageId)
         return { status: "unsupported", reason: "The assistant message identity is invalid." };
 
-      let beforeRowId: number | undefined;
       let baseRevision: number | undefined;
       let baseLogEpoch: string | undefined;
       let target:
         | { readonly rowId: number; readonly feedback: "like" | "dislike" | null }
         | undefined;
       try {
-        while (true) {
-          const page = await options.agent.conversationRowsRangeV4({
-            ...workspace,
-            sessionId: session,
-            ...(beforeRowId !== undefined ? { beforeRowId } : {}),
-            limit: 200,
-          });
-          if (baseRevision === undefined) {
-            baseRevision = page.atRevision;
-            baseLogEpoch = page.atLogEpoch;
-          } else if (page.atRevision !== baseRevision || page.atLogEpoch !== baseLogEpoch) {
-            return {
-              status: "temporarily-unavailable",
-              reason: "The native conversation changed while resolving the assistant message.",
-            };
-          }
-          const matches = page.rows.filter((row) => row.entityId === messageId);
-          if (matches.length > 1 || (matches.length > 0 && target))
-            return {
-              status: "unsupported",
-              reason: "The native Session has ambiguous rows for this assistant message.",
-            };
-          const row = matches[0];
-          if (row) {
-            if (!Number.isSafeInteger(row.rowId))
-              return {
-                status: "temporarily-unavailable",
-                reason: "The native assistant row identity is invalid.",
-              };
-            if (row.kind !== "assistantText")
-              return {
-                status: "unsupported",
-                reason: "The native entity is not an assistant text row.",
-              };
-            target = { rowId: row.rowId, feedback: row.feedback ?? null };
-          }
-          if (!page.hasMore || page.rows.length === 0) break;
-          const nextBeforeRowId = page.rows[0]?.rowId;
-          if (
-            typeof nextBeforeRowId !== "number" ||
-            !Number.isSafeInteger(nextBeforeRowId) ||
-            (beforeRowId !== undefined && nextBeforeRowId >= beforeRowId)
-          ) {
-            return {
-              status: "temporarily-unavailable",
-              reason: "The native conversation row cursor did not advance.",
-            };
-          }
-          beforeRowId = nextBeforeRowId;
-        }
+        const rows = await readAssistantRows(session, new Set([messageId]));
+        baseRevision = rows.baseRevision;
+        baseLogEpoch = rows.baseLogEpoch;
+        target = rows.matches.get(messageId);
       } catch (error) {
         return {
-          status: "temporarily-unavailable",
+          status: error instanceof AssistantRowReadError ? error.status : "temporarily-unavailable",
           reason: error instanceof Error ? error.message : String(error),
         };
       }
@@ -1751,6 +1773,26 @@ export function createZCodeAdapter(options: {
       } catch (error) {
         return {
           status: "unknown",
+          reason: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+    async readAssistantFeedback(session, messageIds) {
+      if (!sessions.has(session))
+        return {
+          state: "unknown",
+          reason: "The native Session is not attached in this Adapter process.",
+        };
+      if (messageIds.length === 0) return { state: "current", values: {} };
+      try {
+        const { matches } = await readAssistantRows(session, new Set(messageIds));
+        return {
+          state: "current",
+          values: Object.fromEntries([...matches].map(([id, row]) => [id, row.feedback])),
+        };
+      } catch (error) {
+        return {
+          state: "unknown",
           reason: error instanceof Error ? error.message : String(error),
         };
       }
