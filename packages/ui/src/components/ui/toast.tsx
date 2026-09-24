@@ -64,6 +64,7 @@ let nextId = 0;
 let addToast: ((item: ToastItem) => void) | null = null;
 let removeToast: ((id: number) => void) | null = null;
 let updateToastItem: ((id: number, patch: ToastUpdate) => void) | null = null;
+let hostDocument: Document | null = null;
 const pendingToastIds = new Set<number>();
 const pendingToastUpdates = new Map<number, ToastUpdate>();
 const dismissedBeforeMountToastIds = new Set<number>();
@@ -71,9 +72,14 @@ const DEFAULT_TOAST_DURATION_MS = 3000;
 const TOAST_TRANSITION_DURATION_MS = 200;
 
 function ensureHost() {
-  if (addToast) {
-    return;
-  }
+  if (hostDocument === document) return;
+
+  // A replaced document needs its own portal; callbacks from the old host must not
+  // route notices into a detached page (including mounted component tests).
+  addToast = null;
+  removeToast = null;
+  updateToastItem = null;
+  hostDocument = document;
 
   const host = document.createElement("div");
   host.id = "zcode-toast-host";

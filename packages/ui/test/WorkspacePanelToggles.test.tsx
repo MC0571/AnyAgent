@@ -173,3 +173,146 @@ test("workspace shell panel buttons reflect open state after user clicks", async
     dom.window.close();
   }
 });
+
+test("Root draft starts from Engine view return to the M0 composer while shell New Task does so directly", async () => {
+  const dom = installDom();
+  const [
+    { DesktopTopOverlay },
+    { useDraftStartReturnsToChat },
+    { ZCodeIntlProvider },
+    { ServiceProvider },
+    { PlatformProvider },
+    { TooltipProvider },
+    { useZCodeSessionStore },
+  ] = await Promise.all([
+    import("../src/DesktopTopOverlay.js"),
+    import("../src/app-shell/useDraftStartReturnsToChat.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/hooks/useServices.js"),
+    import("../src/hooks/usePlatform.js"),
+    import("../src/components/ui/tooltip.js"),
+    import("../src/store/zcodeSessionStore.js"),
+  ]);
+  const workspaceKey = "/tmp/root-new-task-navigation";
+
+  function DraftNavigationHarness() {
+    const [view, setView] = useState<"chat" | "engine">("engine");
+    const draftFocusVersion = useZCodeSessionStore(
+      (state) => state.getWorkspaceState(workspaceKey).draftFocusVersion,
+    );
+    const [selectedEngineTaskId] = useState("existing-engine-task");
+    useDraftStartReturnsToChat({
+      workspaceKey,
+      draftFocusVersion,
+      isEngineView: view === "engine",
+      onReturnToChat: () => setView("chat"),
+    });
+
+    const startRootDraft = () => useZCodeSessionStore.getState().startDraft(workspaceKey);
+    const createFromShell = () => {
+      setView("chat");
+      startRootDraft();
+    };
+
+    return createElement(
+      "div",
+      null,
+      createElement("div", { "data-testid": "main-view" }, view),
+      view === "chat"
+        ? createElement("input", { "data-testid": "m0-composer" })
+        : createElement("div", { "data-testid": "selected-engine-task" }, selectedEngineTaskId),
+      createElement("button", {
+        type: "button",
+        "data-testid": "root-platform-new-task",
+        onClick: startRootDraft,
+      }),
+      createElement("button", {
+        type: "button",
+        "data-testid": "root-web-shortcut-new-task",
+        onClick: startRootDraft,
+      }),
+      createElement("button", {
+        type: "button",
+        "data-testid": "return-to-engine",
+        onClick: () => setView("engine"),
+      }),
+      createElement(DesktopTopOverlay, {
+        isMacDesktop: true,
+        isSidebarVisible: true,
+        showNewTaskButton: true,
+        updateReadyVersion: null,
+        updateState: null,
+        toggleSidebarShortcutLabel: "⌘B",
+        newTaskShortcutLabel: "⌘N",
+        goBackShortcutLabel: "⌘[",
+        goForwardShortcutLabel: "⌘]",
+        canTaskNavBack: false,
+        canTaskNavForward: false,
+        canGoBack: false,
+        canGoForward: false,
+        appLogoUrl: "",
+        platform: {},
+        onToggleSidebar: () => {},
+        onCreateTask: createFromShell,
+        onGoBack: () => {},
+        onGoForward: () => {},
+      }),
+    );
+  }
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            ServiceProvider,
+            { services: {} },
+            createElement(
+              PlatformProvider,
+              { platform: {} },
+              createElement(TooltipProvider, null, createElement(DraftNavigationHarness)),
+            ),
+          ),
+        ),
+      );
+    });
+
+    const click = async (selector: string) => {
+      const button = container.querySelector<HTMLButtonElement>(selector);
+      assert.ok(button, `missing ${selector}`);
+      await act(async () => {
+        button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+    };
+    const assertChatDraft = () => {
+      assert.equal(container.querySelector('[data-testid="main-view"]')?.textContent, "chat");
+      assert.ok(container.querySelector('[data-testid="m0-composer"]'));
+    };
+
+    await click('[data-testid="root-platform-new-task"]');
+    assertChatDraft();
+
+    await click('[data-testid="return-to-engine"]');
+    await click('[data-testid="root-web-shortcut-new-task"]');
+    assertChatDraft();
+
+    await click('[data-testid="return-to-engine"]');
+    const shellNewTask = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="新建任务"]',
+    );
+    assert.ok(shellNewTask);
+    await act(async () => {
+      shellNewTask.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    assertChatDraft();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    dom.window.close();
+  }
+});

@@ -11,6 +11,7 @@ const engineId = "fake-engine";
 const available = { support: "supported", availability: "available" } as const;
 const capabilities = {
   "session.create": available,
+  "session.resume": available,
   "session.close": available,
   "execution.run": available,
   "execution.interrupt": available,
@@ -2072,8 +2073,6 @@ test("an active ZCode Harness task switches models within its Session and submit
   const zcodeSlashCommands = [
     { name: "compact", description: "Compact", source: "builtin" as const },
     { name: "goal", description: "Goal", source: "builtin" as const },
-    { name: "help", description: "Help", source: "builtin" as const },
-    { name: "mode", description: "Mode", source: "builtin" as const },
     { name: "init", description: "Initialize", source: "builtin" as const },
     { name: "skill", description: "Use a skill", source: "builtin" as const },
     { name: "custom-note", description: "Custom prompt", source: "custom" as const },
@@ -2309,6 +2308,156 @@ test("an active ZCode Harness task switches models within its Session and submit
         })
       | null;
     assert.ok(input?.__zcodeLexicalInputE2E);
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/model"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="app-slash:model"]')),
+      "the Harness model shortcut should be available when the Desktop CLI catalog omits TUI-only /model",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="app-slash:model"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await waitFor(
+      () =>
+        assert.ok(document.body.querySelector('[data-model-provider-key="harness-zcode-models"]')),
+      "/model should open the existing model picker",
+    );
+    await act(async () =>
+      document.body
+        .querySelector<HTMLElement>('[data-model-provider-key="harness-zcode-models"]')!
+        .click(),
+    );
+    await waitFor(
+      () =>
+        assert.ok(
+          [
+            ...document.body.querySelectorAll<HTMLElement>(
+              "[data-testid^='chat-model-select-item-']",
+            ),
+          ].some((item) => item.textContent?.includes("go-alpha")),
+        ),
+      "/model picker should list models for the current ZCode Harness",
+    );
+    await waitFor(
+      () => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""),
+      "selecting /model should consume the local command without submitting input",
+    );
+    assert.equal(submissions.length, 0);
+    await act(async () => modelTrigger()!.click());
+
+    const submitCurrentDraft = async () =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!
+          .click(),
+      );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/model opencode-go/go-alpha"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.match(modelTrigger()?.textContent ?? "", /go-alpha/),
+      "/model provider/model should use the existing same-Provider model selection",
+    );
+    assert.equal(submissions.length, 0, "model selection must not create an Input");
+    await act(async () =>
+      input.__zcodeLexicalInputE2E!.setText("/model other-provider/other-model"),
+    );
+    await submitCurrentDraft();
+    assert.equal(
+      input.__zcodeLexicalInputE2E!.getText(),
+      "/model other-provider/other-model",
+      "cross-Provider model selection must be rejected with the draft preserved",
+    );
+    assert.equal(submissions.length, 0);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/model opencode-go/go-beta"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.match(modelTrigger()?.textContent ?? "", /go-beta/),
+      "same-Provider /model selection did not restore the selected model",
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/effort"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="app-slash:effort"]')),
+      "the Harness reasoning shortcut should be available when absent from the Desktop CLI catalog",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="app-slash:effort"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await waitFor(
+      () =>
+        assert.ok(
+          document.body.querySelector('[data-testid="chat-thought-level-select-item-low"]'),
+        ),
+      "/effort should open the existing reasoning picker",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="chat-thought-level-select-trigger"]')!
+        .click(),
+    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/effort high"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.match(
+          container.querySelector('[data-testid="chat-thought-level-select-trigger"]')
+            ?.textContent ?? "",
+          /high/i,
+        ),
+      "/effort high should update the same model selection used by the composer",
+    );
+    assert.equal(submissions.length, 0, "reasoning selection must not create an Input");
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/mode"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="app-slash:mode"]')),
+      "the Harness mode shortcut should be available when absent from the Desktop CLI catalog",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="app-slash:mode"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await waitFor(
+      () => assert.ok(document.body.querySelector('[data-testid="chat-mode-select-item-edit"]')),
+      "/mode should open the existing permission mode picker",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="chat-mode-select-trigger"]')!
+        .click(),
+    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/mode build"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.equal(
+          container
+            .querySelector('[data-testid="chat-mode-select-trigger"]')
+            ?.getAttribute("aria-label"),
+          "build",
+        ),
+      "/mode build should update the current product submission configuration",
+    );
+    await chooseConfig("chat-mode-select-trigger", "chat-mode-select-item-edit");
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help model"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("/model [list|provider/model]")),
+      "/help model should show local CLI help without submitting to the model",
+    );
+    assert.equal(submissions.length, 0);
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/goal status"));
+    await submitCurrentDraft();
+    assert.equal(submissions.length, 0, "unmapped native /goal must not become an ordinary prompt");
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/goal status");
+
     await act(async () => input.__zcodeLexicalInputE2E!.setText("Use the selected model"));
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
@@ -2318,7 +2467,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     assert.deepEqual(submissionConfig.modelSelection, {
       providerId: "opencode-go",
       modelId: "go-beta",
-      options: { reasoningLevel: "low" },
+      options: { reasoningLevel: "high" },
     });
     assert.equal(submissions[0]?.sessionId, sessionId);
     assert.equal(submissionConfig.mode, "edit");
@@ -2675,6 +2824,339 @@ test("Engine file rewind uses the native summary and preview dialog through moun
       () => assert.equal(container.textContent, ""),
       "a failed native lookup must not leak diagnostics into the conversation",
     );
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    dom.window.close();
+  }
+});
+
+test("unknown native Session and Execution require explicit identity-bound recovery actions", async () => {
+  const dom = installDom();
+  const [
+    { EngineConversation },
+    { ServiceProvider },
+    { PlatformProvider },
+    { ZCodeIntlProvider },
+    { TabStoreProvider },
+    { TooltipProvider },
+  ] = await Promise.all([
+    import("../src/EngineConversation.js"),
+    import("../src/hooks/useServices.js"),
+    import("../src/hooks/usePlatform.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/store/TabStoreProvider.js"),
+    import("../src/components/ui/tooltip.js"),
+  ]);
+  const zcodeEngine = { ...currentEngine, engineId: "zcode" };
+  let activeTask = {
+    ...task,
+    authorizationId: "authorization-recovery-ui",
+    engine: { ...task.engine, engineId: "zcode" },
+    currentEngine: zcodeEngine,
+    session: {
+      ...task.session,
+      status: "unknown",
+      nativeSessionId: "native-session-after-restart",
+    },
+  };
+  const sourceInput = {
+    id: "input-after-disconnect",
+    taskId,
+    participantId,
+    sessionId,
+    text: "finish the original request",
+    submissionConfig: {
+      mode: "build",
+      planEnabled: false,
+      modelSelection: {
+        providerId: "opencode-go",
+        modelId: "go-alpha",
+        options: { reasoningLevel: "low" },
+      },
+    },
+    status: "unknown",
+    receivedAt: 1_100,
+    acceptedAt: 1_101,
+    startedAt: 1_102,
+    terminalAt: null,
+    error: "connection lost",
+  };
+  const unknownExecution = {
+    id: "execution-after-disconnect",
+    taskId,
+    participantId,
+    sessionId,
+    inputId: sourceInput.id,
+    nativeExecutionId: "native-command-after-disconnect",
+    status: "unknown",
+    acceptedAt: 1_101,
+    startedAt: 1_102,
+    terminalAt: null,
+    result: null,
+    error: "connection lost",
+    reconciliationReason: "Native command state is not yet terminal.",
+  };
+  let activeHistory = {
+    ...emptyHistory(taskId),
+    inputs: [sourceInput],
+    executions: [unknownExecution],
+    compactOperations: [],
+    fileRewindOperations: [],
+  };
+  const restoreRequests: Array<Record<string, unknown>> = [];
+  const reconcileRequests: Array<Record<string, unknown>> = [];
+  const submittedInputs: Array<Record<string, unknown>> = [];
+  const listeners = new Set<(change: Record<string, unknown>) => void>();
+  let rejectRestore = true;
+  let releaseRestore: (() => void) | null = null;
+  let releaseReconciliation: (() => void) | null = null;
+  const restoreGate = new Promise<void>((resolve) => {
+    releaseRestore = resolve;
+  });
+  const reconciliationGate = new Promise<void>((resolve) => {
+    releaseReconciliation = resolve;
+  });
+  const modelView = {
+    revision: 1,
+    providers: [
+      {
+        providerId: "opencode-go",
+        providerName: "OpenCode Go",
+        config: { api: { type: "openai" }, visibility: "visible" },
+        models: [
+          {
+            modelId: "go-alpha",
+            config: { optionSpecs: { reasoningLevel: { values: ["low", "high"] } } },
+          },
+        ],
+      },
+    ],
+    preferredSelection: {
+      providerId: "opencode-go",
+      modelId: "go-alpha",
+      options: { reasoningLevel: "low" },
+    },
+  };
+  const service = {
+    listTasks: async () => [activeTask],
+    getTask: async (id: string) => (id === taskId ? activeTask : null),
+    getHistory: async (id: string) => (id === taskId ? activeHistory : null),
+    listEngines: async () => [zcodeEngine],
+    getExecutionFileChanges: async () => null,
+    getAssistantFeedback: async () => ({ state: "current", values: {} }),
+    onDidChange: (listener: (change: Record<string, unknown>) => void) => {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
+    submitInput: async (input: Record<string, unknown>) => submittedInputs.push(input),
+    reconcileExecution: async (request: Record<string, unknown>) => {
+      reconcileRequests.push(request);
+      await reconciliationGate;
+      const terminalExecution = {
+        ...unknownExecution,
+        status: "completed",
+        terminalAt: 1_200,
+        result: "original execution completed",
+        error: null,
+      };
+      activeHistory = {
+        ...activeHistory,
+        inputs: activeHistory.inputs.map((input) =>
+          input.id === sourceInput.id
+            ? { ...input, status: "completed", terminalAt: 1_200, error: null }
+            : input,
+        ),
+        executions: [terminalExecution],
+      };
+      return terminalExecution;
+    },
+    restoreTaskSession: async (request: Record<string, unknown>) => {
+      restoreRequests.push(request);
+      if (restoreRequests.length === 1) await restoreGate;
+      if (rejectRestore) throw new Error("授权已失效，请在 App 内重新授权后重试。");
+      activeTask = {
+        ...activeTask,
+        session: { ...activeTask.session, status: "active" },
+      };
+      return activeTask;
+    },
+  };
+  const services = {
+    clientConfigService: { getSnapshot: async () => ({ pluginStoreOrder: null }) },
+    fileService: { searchWorkspaceFiles: async () => [] },
+    subagentsService: {
+      list: async () => ({
+        agents: [],
+        userAgents: [],
+        pluginAgents: [],
+        capability: { userScopeAvailable: false },
+      }),
+    },
+    zcodeAgentService: {
+      getSkillReferenceCatalog: async () => ({ skills: [], authority: "session" }),
+      onAgentRuntimeRestarted: () => ({ dispose: () => {} }),
+    },
+    modelSelectionService: {
+      getView: async () => modelView,
+      onDidChange: () => ({ dispose: () => {} }),
+    },
+  };
+  const platform = {
+    canSelectFilePath: true,
+    selectFiles: async () => ["/tmp/anyagent-ui/not-used.txt"],
+    onSettingsChanged: () => () => {},
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const app = createElement(
+    TooltipProvider,
+    null,
+    createElement(
+      ServiceProvider,
+      { services: services as never },
+      createElement(
+        PlatformProvider,
+        { platform: platform as never },
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TabStoreProvider,
+            null,
+            createElement(EngineConversation, {
+              service: service as never,
+              selectedTaskId: taskId,
+              onSelectTask: () => {},
+            }),
+          ),
+        ),
+      ),
+    ),
+  );
+  try {
+    await act(async () => root.render(app));
+    await waitFor(() => {
+      assert.ok(container.querySelector('[data-testid="engine-session-recovery"]'));
+      assert.ok(
+        container.querySelector('[data-testid="reconcile-execution-execution-after-disconnect"]'),
+      );
+      assert.equal(
+        container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+          ?.disabled,
+        true,
+      );
+      assert.equal(
+        container.querySelector<HTMLButtonElement>(
+          '[data-testid="engine-composer-attachment-action"]',
+        )?.disabled,
+        true,
+      );
+    }, "unknown Session should show explicit recovery controls while blocking composer actions");
+    assert.equal(restoreRequests.length, 0, "history selection must not restore automatically");
+    assert.equal(reconcileRequests.length, 0, "history selection must not reconcile automatically");
+
+    const reconcileButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="reconcile-execution-execution-after-disconnect"]',
+    );
+    assert.ok(reconcileButton);
+    await act(async () => {
+      reconcileButton.click();
+      reconcileButton.click();
+    });
+    await waitFor(
+      () => assert.equal(reconcileRequests.length, 1),
+      "reconcile should dispatch once",
+    );
+    assert.deepEqual(reconcileRequests[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-recovery-ui",
+      executionId: unknownExecution.id,
+    });
+    assert.equal(reconcileButton.disabled, true, "a pending reconcile cannot be dispatched twice");
+    assert.equal(submittedInputs.length, 0, "reconcile must never resend the original input");
+    await act(async () => {
+      releaseReconciliation?.();
+    });
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-testid="restore-engine-session"]')),
+      "terminal reconciliation should unblock explicit Session recovery",
+    );
+    assert.equal(submittedInputs.length, 0);
+
+    const restoreButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="restore-engine-session"]',
+    );
+    assert.ok(restoreButton);
+    await act(async () => {
+      restoreButton.click();
+      restoreButton.click();
+    });
+    await waitFor(() => assert.equal(restoreRequests.length, 1), "restore should dispatch once");
+    assert.deepEqual(restoreRequests[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-recovery-ui",
+    });
+    assert.equal(restoreButton.disabled, true, "a pending restore cannot be dispatched twice");
+    releaseRestore?.();
+    await waitFor(
+      () =>
+        assert.match(
+          container.querySelector('[data-testid="restore-session-error"]')?.textContent ?? "",
+          /授权已失效/,
+        ),
+      "expired authorization should stay visible and leave the Session unknown",
+    );
+    assert.equal(container.querySelector('[data-testid="engine-session-recovery"]') !== null, true);
+
+    rejectRestore = false;
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="restore-engine-session"]')!.click();
+    });
+    await waitFor(
+      () =>
+        assert.equal(
+          container.querySelector('[data-testid="engine-session-recovery"]'),
+          null,
+          "the unknown-state panel should disappear after the same Session is restored",
+        ),
+      "successful recovery did not refresh the selected Task state",
+    );
+    await waitFor(
+      () =>
+        assert.equal(
+          container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+            ?.disabled,
+          false,
+        ),
+      "the composer should become available only after explicit successful recovery",
+    );
+    assert.equal(restoreRequests.length, 2);
+    assert.deepEqual(restoreRequests[1], restoreRequests[0]);
+    assert.equal(submittedInputs.length, 0, "recovery must not replay the original input");
+
+    activeTask = {
+      ...activeTask,
+      status: "completed",
+      closeReason: "completed by owner",
+      session: { ...activeTask.session, status: "unknown" },
+    };
+    await act(async () => {
+      for (const listener of listeners)
+        listener({ taskId, task: activeTask, history: activeHistory });
+    });
+    await waitFor(() => {
+      assert.match(
+        container.querySelector('[data-testid="engine-session-recovery"]')?.textContent ?? "",
+        /此 Task 已结束，不能恢复后继续/,
+      );
+      assert.equal(container.querySelector('[data-testid="restore-engine-session"]'), null);
+    }, "terminal Task reason should remain visible without exposing a restore action");
   } finally {
     await act(async () => root.unmount());
     container.remove();

@@ -97,7 +97,16 @@ const zcodeBuiltinSlashCommandByName = new Map(
   ),
 );
 const nativePromptBuiltinSlashCommands = new Set(["init", "skill"]);
-const rendererMappedSlashCommands = new Set(["compact", "mode", "plan"]);
+const rendererMappedSlashCommands = new Set([
+  "compact",
+  "effort",
+  "help",
+  "mode",
+  "model",
+  "plan",
+  "variant",
+]);
+const appMappedSlashCommandNames = ["effort", "help", "mode", "model", "variant"] as const;
 
 function parseLeadingSlashCommand(text: string): { name: string; args: string } | null {
   const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/u.exec(text.trim());
@@ -129,6 +138,43 @@ function excludedNativeSlashCommandNames(commands: readonly ZCodeSlashCommand[])
         return false;
       return nativeBuiltinForSlashCommand(name, commands) !== null;
     });
+}
+
+function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashCommand[]): string {
+  const requestedName = normalizeSlashCommandValue(args.trim()).toLowerCase();
+  if (requestedName) {
+    const entry = BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES.find(
+      (candidate) => candidate.name === requestedName || candidate.aliases?.includes(requestedName),
+    );
+    if (entry) {
+      const isMapped =
+        rendererMappedSlashCommands.has(entry.name) ||
+        nativePromptBuiltinSlashCommands.has(entry.name) ||
+        entry.name === "skill";
+      return [
+        `${entry.usage} — ${entry.summary}`,
+        ...entry.details,
+        ...(isMapped ? [] : ["此原生命令当前没有对应的 Harness 操作。"]),
+      ].join("\n");
+    }
+    const custom = commands.find(
+      (command) => normalizeSlashCommandValue(command.name).toLowerCase() === requestedName,
+    );
+    if (custom) {
+      return [custom.inputHint?.trim() || `/${custom.name}`, custom.description].join("\n");
+    }
+    return `未找到 /${requestedName}。输入 /help 查看当前命令目录。`;
+  }
+
+  const commandNames = new Map<string, string>();
+  for (const command of commands) {
+    const name = normalizeSlashCommandValue(command.name);
+    if (name) commandNames.set(name.toLowerCase(), `/${name}`);
+  }
+  for (const name of appMappedSlashCommandNames) {
+    if (!commandNames.has(name)) commandNames.set(name, `/${name}`);
+  }
+  return `当前命令：${[...commandNames.values()].join("、")}。输入 /help <命令> 查看说明。`;
 }
 
 function errorText(error: unknown): string {
@@ -249,6 +295,9 @@ export function EngineConversation({
   const [loading, setLoading] = useState(true);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [restoreErrors, setRestoreErrors] = useState<Record<string, string>>({});
+  const [reconcileErrors, setReconcileErrors] = useState<Record<string, string>>({});
+  const lifecycleActionsRef = useRef(new Set<string>());
   const setNotice = (notice: Notice | null) => {
     if (notice) toast(notice.message, { variant: notice.kind === "error" ? "warning" : "info" });
   };
@@ -258,6 +307,9 @@ export function EngineConversation({
   const [configByTask, setConfigByTask] = useState<
     Record<string, { mode?: string; modelSelection?: ModelSelection }>
   >({});
+  const [modePickerOpen, setModePickerOpen] = useState(false);
+  const [thoughtPickerOpen, setThoughtPickerOpen] = useState(false);
+  const [modelPickerRequestKey, setModelPickerRequestKey] = useState(0);
   const [revision, setRevision] = useState(0);
   const requestVersionRef = useRef(0);
   const changeVersionRef = useRef(0);
@@ -483,8 +535,26 @@ export function EngineConversation({
   const unknownRound =
     visibleHistory?.inputs.some((input) => input.status === "unknown") ||
     visibleHistory?.executions.some((execution) => execution.status === "unknown");
+  const unknownExecutions =
+    visibleHistory?.executions.filter((execution) => execution.status === "unknown") ?? [];
   const hasPendingRound = activeRound || unknownRound || queuedInputs.length > 0;
   const shouldQueue = activeRound || queuedInputs.length > 0;
+  const hasUnresolvedMaintenance =
+    visibleHistory?.compactOperations?.some((operation) =>
+      ["requested", "accepted", "unknown"].includes(operation.status),
+    ) === true ||
+    visibleHistory?.fileRewindOperations?.some((operation) =>
+      ["requested", "unknown"].includes(operation.status),
+    ) === true;
+  const sessionRestoreBlockedReason = unknownRound
+    ? unknownExecutions.length > 0
+      ? "请先对账结果未知的原执行；对账不会重发原输入。"
+      : "原生输入结果未知，尚无可对账的执行；请先核实原生状态。"
+    : activeRound || queuedInputs.length > 0
+      ? "Session 仍有未完成的输入或执行，完成对账后才能恢复继续。"
+      : hasUnresolvedMaintenance
+        ? "Session 仍有未决的压缩或文件撤销操作，核实后才能恢复。"
+        : null;
   const currentAttachments = visibleTask ? (attachmentsByTask[visibleTask.id] ?? []) : [];
   const runBlockedReason = visibleTask
     ? unknownRound
@@ -551,6 +621,7 @@ export function EngineConversation({
     setPromptHistory(readPromptHistoryEntries(promptHistoryWorkspacePath));
   }, [promptHistoryWorkspacePath]);
   const nativeSessionId = isZCodeHarness ? (visibleTask?.session.nativeSessionId ?? null) : null;
+  const activeNativeSessionId = visibleTask?.session.status === "active" ? nativeSessionId : null;
   const nativeSlashCommands = useSlashCommands(composerWorkspacePath);
   const excludedSlashCommandNames = useMemo(
     () =>
@@ -611,31 +682,6 @@ export function EngineConversation({
           modelView,
         )
       : null;
-  const planSlashCommands = useMemo<AppSlashCommand[]>(
-    () =>
-      isZCodeHarness
-        ? [
-            {
-              value: "plan",
-              description: locale === "zh-CN" ? "切换到计划模式" : "Switch to plan mode",
-              keywords: ["plan", "计划", "计划模式"],
-              run: () => {
-                if (!visibleTask) return;
-                if (runBlockedReason || busyAction) {
-                  setNotice({ kind: "info", message: runBlockedReason ?? "当前暂不可操作。" });
-                  return;
-                }
-                setConfigByTask((current) => ({
-                  ...current,
-                  [visibleTask.id]: { ...current[visibleTask.id], mode: "plan" },
-                }));
-                setNotice(null);
-              },
-            },
-          ]
-        : [],
-    [busyAction, isZCodeHarness, locale, runBlockedReason, visibleTask],
-  );
   const modeOption: ZCodeConfigOption = isZCodeHarness
     ? { ...engineModeUnavailableOption, currentValue: selectedMode }
     : engineModeUnavailableOption;
@@ -667,6 +713,101 @@ export function EngineConversation({
         : null;
     return [harnessGroup, ...(zcodeGroup ? [zcodeGroup] : []), ...providerGroups];
   }, [engines, modelSelectionRead.state]);
+  const mappedSlashCommands = useMemo<AppSlashCommand[]>(() => {
+    if (!isZCodeHarness) return [];
+    const openModePicker = () => {
+      if (runBlockedReason || busyAction) {
+        setNotice({ kind: "info", message: runBlockedReason ?? "当前暂不可操作。" });
+        return;
+      }
+      setModePickerOpen(true);
+    };
+    const openModelPicker = () => {
+      if (runBlockedReason || busyAction) {
+        setNotice({ kind: "info", message: runBlockedReason ?? "当前暂不可操作。" });
+        return;
+      }
+      if (!modelView) {
+        setNotice({ kind: "info", message: "当前模型目录尚未就绪。" });
+        return;
+      }
+      setModelPickerRequestKey((current) => current + 1);
+    };
+    const openThoughtPicker = () => {
+      if (runBlockedReason || busyAction) {
+        setNotice({ kind: "info", message: runBlockedReason ?? "当前暂不可操作。" });
+        return;
+      }
+      if (!thoughtOption) {
+        setNotice({ kind: "info", message: "当前模型没有可用的推理档位。" });
+        return;
+      }
+      setThoughtPickerOpen(true);
+    };
+    const uiCommands: AppSlashCommand[] = [
+      {
+        value: "plan",
+        description: locale === "zh-CN" ? "切换到计划模式" : "Switch to plan mode",
+        keywords: ["plan", "计划", "计划模式"],
+        run: () => {
+          if (!visibleTask) return;
+          if (runBlockedReason || busyAction) {
+            setNotice({ kind: "info", message: runBlockedReason ?? "当前暂不可操作。" });
+            return;
+          }
+          setConfigByTask((current) => ({
+            ...current,
+            [visibleTask.id]: { ...current[visibleTask.id], mode: "plan" },
+          }));
+        },
+      },
+      {
+        value: "mode",
+        description: "查看或切换权限模式",
+        keywords: [
+          "mode",
+          "权限",
+          "模式",
+          ...engineModeUnavailableOptions.map((item) => item.value),
+        ],
+        run: openModePicker,
+      },
+      {
+        value: "model",
+        description: "查看或切换当前 Provider 的模型",
+        keywords: ["model", "模型", "provider"],
+        run: openModelPicker,
+      },
+      {
+        value: "effort",
+        description: "查看或切换当前模型的推理档位",
+        keywords: ["effort", "推理", "档位"],
+        run: openThoughtPicker,
+      },
+      {
+        value: "variant",
+        description: "查看或切换当前模型的推理档位",
+        keywords: ["variant", "effort", "推理", "档位"],
+        run: openThoughtPicker,
+      },
+      {
+        value: "help",
+        description: "查看当前 Harness 命令帮助",
+        keywords: ["help", "帮助", "命令"],
+        run: () => toast(formatEngineSlashHelp("", nativeSlashCommands), { variant: "info" }),
+      },
+    ];
+    return uiCommands;
+  }, [
+    busyAction,
+    isZCodeHarness,
+    locale,
+    modelView,
+    nativeSlashCommands,
+    runBlockedReason,
+    thoughtOption,
+    visibleTask,
+  ]);
   const latestExecution = visibleHistory?.executions.at(-1);
   const pendingStop = latestExecution
     ? visibleHistory?.stopRequests.find(
@@ -695,6 +836,142 @@ export function EngineConversation({
     } finally {
       setBusyAction(null);
     }
+  };
+
+  const restoreUnknownSession = (): void => {
+    const target = visibleTask;
+    if (
+      !target ||
+      target.session.status !== "unknown" ||
+      target.status !== "active" ||
+      !target.session.nativeSessionId ||
+      sessionRestoreBlockedReason ||
+      busyAction
+    )
+      return;
+    const actionKey = `restore:${target.id}`;
+    if (lifecycleActionsRef.current.has(actionKey)) return;
+    lifecycleActionsRef.current.add(actionKey);
+    setRestoreErrors((current) => {
+      const next = { ...current };
+      delete next[target.id];
+      return next;
+    });
+    setBusyAction(actionKey);
+    setNotice(null);
+    const requestVersion = requestVersionRef.current;
+    void (async () => {
+      try {
+        const identity = {
+          taskId: target.id,
+          participantId: target.participant.id,
+          sessionId: target.session.id,
+          authorizationId: target.authorizationId,
+        };
+        const restored = await service.restoreTaskSession(identity);
+        if (
+          restored.id !== target.id ||
+          restored.status !== "active" ||
+          restored.participant.id !== target.participant.id ||
+          restored.session.id !== target.session.id ||
+          restored.session.nativeSessionId !== target.session.nativeSessionId
+        )
+          throw new Error("Host 恢复结果的 Task、Participant 或 Session 身份不匹配。");
+        const [freshTask, freshHistory] = await Promise.all([
+          service.getTask(target.id),
+          service.getHistory(target.id),
+        ]);
+        if (
+          !freshTask ||
+          !freshHistory ||
+          freshHistory.taskId !== target.id ||
+          freshTask.id !== target.id ||
+          freshTask.participant.id !== target.participant.id ||
+          freshTask.session.id !== target.session.id ||
+          freshTask.session.nativeSessionId !== target.session.nativeSessionId
+        )
+          throw new Error("恢复后读取的 Task、Participant、Session 或历史身份不匹配。");
+        if (requestVersion === requestVersionRef.current && selectedTaskId === target.id) {
+          setTask(freshTask);
+          setHistory(freshHistory);
+        }
+      } catch (error) {
+        const message = errorText(error);
+        setRestoreErrors((current) => ({ ...current, [target.id]: message }));
+        setNotice({ kind: "error", message });
+      } finally {
+        lifecycleActionsRef.current.delete(actionKey);
+        setBusyAction(null);
+      }
+    })();
+  };
+
+  const reconcileUnknownExecution = (executionId: string): void => {
+    const target = visibleTask;
+    const execution = visibleHistory?.executions.find((item) => item.id === executionId);
+    if (
+      !target ||
+      !execution ||
+      execution.status !== "unknown" ||
+      execution.taskId !== target.id ||
+      execution.participantId !== target.participant.id ||
+      execution.sessionId !== target.session.id ||
+      busyAction
+    )
+      return;
+    const actionKey = `reconcile:${executionId}`;
+    if (lifecycleActionsRef.current.has(actionKey)) return;
+    lifecycleActionsRef.current.add(actionKey);
+    setReconcileErrors((current) => {
+      const next = { ...current };
+      delete next[executionId];
+      return next;
+    });
+    setBusyAction(actionKey);
+    setNotice(null);
+    const requestVersion = requestVersionRef.current;
+    void (async () => {
+      try {
+        const identity = {
+          taskId: target.id,
+          participantId: target.participant.id,
+          sessionId: target.session.id,
+          authorizationId: target.authorizationId,
+        };
+        const result = await service.reconcileExecution({ ...identity, executionId });
+        if (
+          result.id !== executionId ||
+          result.taskId !== target.id ||
+          result.participantId !== target.participant.id ||
+          result.sessionId !== target.session.id
+        )
+          throw new Error("Host 对账结果的 Execution 归属不匹配。");
+        const [freshTask, freshHistory] = await Promise.all([
+          service.getTask(target.id),
+          service.getHistory(target.id),
+        ]);
+        if (
+          !freshTask ||
+          !freshHistory ||
+          freshHistory.taskId !== target.id ||
+          freshTask.id !== target.id ||
+          freshTask.participant.id !== target.participant.id ||
+          freshTask.session.id !== target.session.id
+        )
+          throw new Error("对账后读取的 Task、Participant、Session 或历史身份不匹配。");
+        if (requestVersion === requestVersionRef.current && selectedTaskId === target.id) {
+          setTask(freshTask);
+          setHistory(freshHistory);
+        }
+      } catch (error) {
+        const message = errorText(error);
+        setReconcileErrors((current) => ({ ...current, [executionId]: message }));
+        setNotice({ kind: "error", message });
+      } finally {
+        lifecycleActionsRef.current.delete(actionKey);
+        setBusyAction(null);
+      }
+    })();
   };
 
   const submitInput = (text: string): boolean => {
@@ -762,10 +1039,13 @@ export function EngineConversation({
         });
         return false;
       } else if (slashCommand.name === "plan") {
-        if (selectedAttachments.length > 0) {
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
           setNotice({
             kind: "info",
-            message: intl.formatMessage({ id: "chat.plan.attachmentsBlocked" }),
+            message:
+              locale === "zh-CN"
+                ? "/plan 目前只接受纯文本；请先移除附件或上下文，输入已保留。"
+                : "/plan currently accepts text only. Remove attachments or context; your draft is preserved.",
           });
           return false;
         }
@@ -802,21 +1082,115 @@ export function EngineConversation({
           [visibleTask.id]: { ...current[visibleTask.id], mode: "plan" },
         }));
         submittedText = slashCommand.args;
+      } else if (slashCommand.name === "help") {
+        toast(formatEngineSlashHelp(slashCommand.args, nativeSlashCommands), { variant: "info" });
+        return true;
+      } else if (slashCommand.name === "model") {
+        if (runBlockedReason || busyAction) {
+          setNotice({ kind: "info", message: runBlockedReason ?? "当前暂不可操作。" });
+          return false;
+        }
+        const requestedModel = slashCommand.args.trim();
+        if (!requestedModel || requestedModel.toLowerCase() === "list") {
+          if (!modelView) {
+            setNotice({ kind: "info", message: "当前模型目录尚未就绪；输入已保留。" });
+            return false;
+          }
+          setModelPickerRequestKey((current) => current + 1);
+          return true;
+        }
+        const providerSeparator = requestedModel.indexOf("/");
+        if (providerSeparator <= 0 || providerSeparator === requestedModel.length - 1) {
+          setNotice({
+            kind: "info",
+            message: "/model 需要 provider/model；输入已保留。",
+          });
+          return false;
+        }
+        const providerId = requestedModel.slice(0, providerSeparator);
+        const modelId = requestedModel.slice(providerSeparator + 1);
+        const sessionHasProviderConstraint =
+          visibleHistory?.inputs.length !== 0 || !!visibleTask.forkedFrom;
+        if (
+          !modelView ||
+          (sessionHasProviderConstraint && !sessionProviderId) ||
+          (sessionProviderId !== null && providerId !== sessionProviderId)
+        ) {
+          setNotice({
+            kind: "info",
+            message:
+              "当前 Session 只允许选择同一 Provider 的模型；跨 Provider 切换请新建对话。输入已保留。",
+          });
+          return false;
+        }
+        const selection = completeNewModelSelection(modelView, { providerId, modelId });
+        if (!selection) {
+          setNotice({
+            kind: "info",
+            message: `模型 ${requestedModel} 不在当前 Provider 配置中；输入已保留。`,
+          });
+          return false;
+        }
+        setConfigByTask((current) => ({
+          ...current,
+          [visibleTask.id]: { ...current[visibleTask.id], modelSelection: selection },
+        }));
+        return true;
+      } else if (slashCommand.name === "effort" || slashCommand.name === "variant") {
+        if (runBlockedReason || busyAction) {
+          setNotice({ kind: "info", message: runBlockedReason ?? "当前暂不可操作。" });
+          return false;
+        }
+        if (!thoughtOption || !selectedModel) {
+          setNotice({ kind: "info", message: "当前模型没有可用的推理档位；输入已保留。" });
+          return false;
+        }
+        const requestedEffort = slashCommand.args.trim();
+        if (!requestedEffort || requestedEffort.toLowerCase() === "list") {
+          setThoughtPickerOpen(true);
+          return true;
+        }
+        const effort = thoughtOption.options?.find(
+          (option) => option.value.toLowerCase() === requestedEffort.toLowerCase(),
+        );
+        if (!effort) {
+          setNotice({
+            kind: "info",
+            message: `当前模型不支持推理档位 ${requestedEffort}；输入已保留。`,
+          });
+          return false;
+        }
+        setConfigByTask((current) => ({
+          ...current,
+          [visibleTask.id]: {
+            ...current[visibleTask.id],
+            modelSelection: {
+              providerId: selectedModel.providerId,
+              modelId: selectedModel.modelId,
+              options: { reasoningLevel: effort.value },
+            },
+          },
+        }));
+        return true;
       } else if (slashCommand.name === "mode") {
         const requestedMode = engineModeUnavailableOptions.find(
           (option) => option.value.toLowerCase() === slashCommand.args.toLowerCase(),
         );
-        if (selectedAttachments.length > 0) {
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
           setNotice({
             kind: "info",
             message:
               locale === "zh-CN"
-                ? "/mode 是本地配置操作；请先移除附件，输入已保留。"
-                : "/mode is a local setting. Remove attachments first; your draft is preserved.",
+                ? "/mode 是本地配置操作；请先移除附件或上下文，输入已保留。"
+                : "/mode is a local setting. Remove attachments or context; your draft is preserved.",
           });
           return false;
         }
         if (runBlockedReason || busyAction) return false;
+        if (!slashCommand.args || slashCommand.args.toLowerCase() === "list") {
+          setModePickerOpen(true);
+          return true;
+        }
         if (!requestedMode) {
           setNotice({
             kind: "info",
@@ -1371,6 +1745,81 @@ export function EngineConversation({
       {visibleTask ? (
         <div className="shrink-0 px-4 pb-4">
           <div className={`mx-auto ${contentWidthClassName}`}>
+            {visibleTask.session.status === "unknown" ? (
+              <section
+                className="mb-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm"
+                data-testid="engine-session-recovery"
+                role="status"
+                aria-live="polite"
+              >
+                <p className="font-medium">
+                  原生 Session 状态未知，历史仍可查看；不会自动恢复或重发输入。
+                </p>
+                {visibleTask.status !== "active" ? (
+                  <p className="mt-1 text-xs text-foreground-subtle">
+                    此 Task 已结束，不能恢复后继续。
+                  </p>
+                ) : !visibleTask.session.nativeSessionId ? (
+                  <p className="mt-1 text-xs text-foreground-subtle">
+                    历史中没有已验证的原生 Session 身份，无法恢复此会话。
+                  </p>
+                ) : sessionRestoreBlockedReason ? (
+                  <p className="mt-1 text-xs text-foreground-subtle">
+                    {sessionRestoreBlockedReason}
+                  </p>
+                ) : (
+                  <button
+                    className="mt-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-60"
+                    data-testid="restore-engine-session"
+                    type="button"
+                    disabled={busyAction !== null}
+                    onClick={restoreUnknownSession}
+                  >
+                    {busyAction === `restore:${visibleTask.id}` ? "正在恢复…" : "恢复原会话"}
+                  </button>
+                )}
+                {restoreErrors[visibleTask.id] ? (
+                  <p className="mt-2 text-xs text-warning" data-testid="restore-session-error">
+                    恢复失败：{restoreErrors[visibleTask.id]}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+            {unknownExecutions.map((execution) => (
+              <section
+                className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm"
+                data-testid={`unknown-execution-${execution.id}`}
+                key={execution.id}
+                role="status"
+                aria-live="polite"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">执行结果未知；对账只查询原生状态，不会重发输入。</p>
+                  {execution.reconciliationReason || execution.reconciliationEvidence?.detail ? (
+                    <p className="mt-1 break-words text-xs text-foreground-subtle">
+                      {execution.reconciliationReason ?? execution.reconciliationEvidence?.detail}
+                    </p>
+                  ) : null}
+                  {reconcileErrors[execution.id] ? (
+                    <p
+                      className="mt-1 break-words text-xs text-warning"
+                      data-testid={`reconcile-execution-error-${execution.id}`}
+                    >
+                      对账失败：{reconcileErrors[execution.id]}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-60"
+                  data-testid={`reconcile-execution-${execution.id}`}
+                  type="button"
+                  disabled={busyAction !== null}
+                  onClick={() => reconcileUnknownExecution(execution.id)}
+                >
+                  {busyAction === `reconcile:${execution.id}` ? "正在对账…" : "对账原执行"}
+                </button>
+              </section>
+            ))}
             {submitBlockedReason ? (
               <p className="mb-2 text-xs text-warning">{submitBlockedReason}</p>
             ) : null}
@@ -1405,24 +1854,34 @@ export function EngineConversation({
                   key={visibleTask.id}
                   className="p-0"
                   workspacePath={composerWorkspacePath}
-                  taskId={nativeSessionId}
+                  taskId={activeNativeSessionId}
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
                   attachmentAction={attachmentAction}
-                  actionMenuDisabled={!platform.canSelectFilePath || shouldQueue}
+                  actionMenuDisabled={
+                    !platform.canSelectFilePath ||
+                    shouldQueue ||
+                    !!runBlockedReason ||
+                    busyAction !== null
+                  }
                   actionMenuDisabledReason={
-                    shouldQueue
-                      ? "附件不能排队；请等待当前轮次完成后发送。"
-                      : intl.formatMessage({
-                          id: platform.canSelectFilePath
-                            ? "engine.composer.textOnly"
-                            : "engine.composer.attachmentLocalPathRequired",
-                        })
+                    runBlockedReason ??
+                    (busyAction !== null
+                      ? "操作正在处理中。"
+                      : shouldQueue
+                        ? "附件不能排队；请等待当前轮次完成后发送。"
+                        : intl.formatMessage({
+                            id: platform.canSelectFilePath
+                              ? "engine.composer.textOnly"
+                              : "engine.composer.attachmentLocalPathRequired",
+                          }))
                   }
                   leadingActions={
                     <ConfigSelect
                       option={modeOption}
                       provider={ZCODE_AGENT_PROVIDER}
+                      open={modePickerOpen}
+                      onOpenChange={setModePickerOpen}
                       onValueChange={(mode) => {
                         if (!visibleTask || !isZCodeHarness) return;
                         if (!engineModeUnavailableOptions.some((option) => option.value === mode))
@@ -1476,6 +1935,7 @@ export function EngineConversation({
                         }
                         triggerLabelPrefixClassName="composer-provider-prefix hidden @2xl/composer:inline group-data-[composer-provider-compact=true]/toolbar:hidden"
                         showManageModelsAction={false}
+                        openRequestKey={modelPickerRequestKey}
                         lockReasonMessage="当前 Session 不支持切换 Harness 或 Provider。请新建对话后选择。"
                         isItemLocked={(candidate) => {
                           const encoded = decodeHarnessZCodeModelValue(candidate);
@@ -1529,6 +1989,8 @@ export function EngineConversation({
                       />
                       <ConfigSelect
                         option={currentThoughtOption}
+                        open={thoughtPickerOpen}
+                        onOpenChange={setThoughtPickerOpen}
                         onValueChange={(reasoningLevel) => {
                           if (!visibleTask || !isZCodeHarness || !selectedModel || !thoughtOption)
                             return;
@@ -1627,6 +2089,7 @@ export function EngineConversation({
                   cancelLabel="请求中断"
                   onCancel={
                     latestExecution &&
+                    latestExecution.status !== "unknown" &&
                     !isTerminal(latestExecution.status) &&
                     !stopBlockedReason &&
                     !pendingStop &&
@@ -1636,8 +2099,10 @@ export function EngineConversation({
                   }
                   showSlashButton={false}
                   excludedSlashCommandNames={excludedSlashCommandNames}
-                  appSlashCommands={planSlashCommands}
-                  enableMentionPanel={nativeSessionId !== null}
+                  appSlashCommands={mappedSlashCommands}
+                  enableMentionPanel={
+                    visibleTask.session.status === "active" && nativeSessionId !== null
+                  }
                   inputTestId="engine-composer-input"
                   submitTestId="engine-composer-submit"
                   onSubmit={submitInput}

@@ -55,6 +55,7 @@ import { useWorkspaceSessionReload } from "@/app-shell/useWorkspaceSessionReload
 import { useWorkspaceShellLifecycle } from "@/app-shell/useWorkspaceShellLifecycle.js";
 import { useWorkspaceShellZCodeState } from "@/app-shell/useWorkspaceShellZCodeState.js";
 import { useWorkspaceMainViewSettingsExit } from "@/app-shell/useWorkspaceMainViewSettingsExit.js";
+import { useDraftStartReturnsToChat } from "@/app-shell/useDraftStartReturnsToChat.js";
 import {
   useWorkspaceTaskNavigation,
   type AutomationsNavigationTarget,
@@ -825,6 +826,25 @@ export function App({
   useTestActions(testActions);
   const [workspaceMainView, setWorkspaceMainView] = useState<WorkspaceMainView>("chat");
   const [engineSelectedTaskId, setEngineSelectedTaskId] = useState<string | null>(null);
+  const handleCreateTaskFromCurrentView = useCallback(
+    (request?: Parameters<typeof onCreateTask>[0]) => {
+      if (workspaceReadOnlyReason) return;
+      setWorkspaceMainView("chat");
+      handleCreateTaskIfWritable(request);
+    },
+    [handleCreateTaskIfWritable, workspaceReadOnlyReason],
+  );
+  const handleCreateConversationTaskFromCurrentView = useCallback(() => {
+    setWorkspaceMainView("chat");
+    if (onCreateConversationTask) onCreateConversationTask();
+    else handleCreateTaskFromCurrentView();
+  }, [handleCreateTaskFromCurrentView, onCreateConversationTask]);
+  useDraftStartReturnsToChat({
+    workspaceKey,
+    draftFocusVersion,
+    isEngineView: workspaceMainView === "engine",
+    onReturnToChat: () => setWorkspaceMainView("chat"),
+  });
   const [openAutomationId, setOpenAutomationId] = useState<string | null>(null);
   const [openAutomationTab, setOpenAutomationTab] = useState<NonNullable<
     AutomationsNavigationTarget["automationTab"]
@@ -1022,7 +1042,7 @@ export function App({
           toggleTerminal: toggleTerminalShortcutLabel,
         },
         handlers: {
-          createTask: () => runVisibleWorkspaceCommand(() => handleCreateTaskIfWritable()),
+          createTask: () => runVisibleWorkspaceCommand(() => handleCreateTaskFromCurrentView()),
           openWorkspace: () => runVisibleWorkspaceCommand(onOpenWorkspace),
           openSettings: openSettingsTab,
           openSkillsSettings: () => {
@@ -1065,7 +1085,7 @@ export function App({
       isLoggedIn,
       isSidebarVisible,
       newTaskShortcutLabel,
-      handleCreateTaskIfWritable,
+      handleCreateTaskFromCurrentView,
       onLogin,
       onLogout,
       onOpenWorkspace,
@@ -1161,8 +1181,8 @@ export function App({
           reconnectingRemoteWorkspaceLogsByWorkspaceKey
         }
         remoteConnectionLogs={remoteConnectionLogs}
-        onCreateTask={handleCreateTaskIfWritable}
-        onCreateConversationTask={onCreateConversationTask}
+        onCreateTask={handleCreateTaskFromCurrentView}
+        onCreateConversationTask={handleCreateConversationTaskFromCurrentView}
         onResolveConversationWorkspace={onResolveConversationWorkspace}
         onOpenWorkspace={onOpenWorkspace}
         onOpenFolderFromWorkspaceMenu={onOpenFolderFromWorkspaceMenu}
