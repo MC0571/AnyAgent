@@ -1895,7 +1895,13 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                           </AutomationsMainBreadcrumbFrame>
                         </main>
                       ) : workspaceMainView === "engine" && engineService ? (
-                        <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
+                        <main className="relative flex h-full min-h-0 flex-1 flex-col bg-background">
+                          <TaskFindDialog
+                            key={`engine-find:${engineSelectedTaskId ?? "draft"}`}
+                            {...taskFindDialogProps}
+                            placement="chat"
+                            showFileChangesScope={false}
+                          />
                           <ScopedErrorBoundary
                             scope="engine-main"
                             resetKeys={workspaceOnlyResetKeys}
@@ -1913,6 +1919,14 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                               refreshVersion={engineRefreshVersion}
                               inspectorOpen={engineInspectorOpen}
                               onInspectorOpenChange={setEngineInspectorOpen}
+                              conversationFindQuery={conversationFindQuery}
+                              conversationFindActiveIndex={conversationFindActiveIndex}
+                              conversationFindNavigationRequestId={
+                                conversationFindNavigationRequestId
+                              }
+                              onConversationFindMatchStateChange={
+                                onConversationFindMatchStateChange
+                              }
                             />
                           </ScopedErrorBoundary>
                         </main>

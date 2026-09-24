@@ -31,6 +31,7 @@ export type TaskFindDialogProps = {
   open: boolean;
   focusRequestId: number;
   placement?: "window" | "chat";
+  showFileChangesScope?: boolean;
   isMacDesktop?: boolean;
   isWindowsDesktop?: boolean;
   isLinuxDesktop?: boolean;
@@ -50,6 +51,7 @@ export function TaskFindDialog({
   open,
   focusRequestId,
   placement = "window",
+  showFileChangesScope = true,
   isMacDesktop,
   isWindowsDesktop,
   isLinuxDesktop,
@@ -304,7 +306,8 @@ export function TaskFindDialog({
           onClick: () => moveSelection("next"),
           children: <ArrowDownIcon className="size-3.5" />,
         })}
-        {(!isOfficeMode || scope === "changes") &&
+        {showFileChangesScope &&
+          (!isOfficeMode || scope === "changes") &&
           renderFindIconButton({
             label: nextScopeLabel,
             tooltipLabel: scopeTooltipLabel,

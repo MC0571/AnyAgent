@@ -1,5 +1,5 @@
 /* oxlint-disable eslint(max-lines) -- 输入轮次、Execution 与对应交互必须沿同一消息序列呈现。 */
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   WORKFLOW_REFINE_PERMISSION_OPTION_ID,
   type ZCodeElicitationRequest,
@@ -37,6 +37,11 @@ import { isPlainRecord } from "@/ToolCallBlocks/fileSummaryTypes.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { Button } from "@/components/ui/button.js";
 import { Textarea } from "@/components/ui/textarea.js";
+import type { AssistantTextRow, UserInputRow } from "@zcode/shared/zcode-protocol-v4";
+import { AssistantCodeCommentFeatureProvider } from "@/AssistantCodeCommentFeatureProvider.js";
+import { useConversationTimelineFind } from "@/v4/useConversationTimelineFind.js";
+import type { ConversationTurnRenderUnit } from "@/v4/conversationTurnRenderUnits.js";
+import type { ConversationFindMatchState } from "@/v4/legacyChatViewTypes.js";
 
 function isInProgress(status: string) {
   return status === "accepted" || status === "started";
@@ -93,6 +98,156 @@ function finalExtendsDeltas(turn: EngineExecutionTurn): boolean {
   if (result === null || !sameAnswerBlock(turn)) return false;
   const streamed = turn.deltas.map((block) => block.text).join("");
   return streamed.length > 0 && result.length > streamed.length && result.startsWith(streamed);
+}
+
+type EngineFindProjection = {
+  renderUnits: ConversationTurnRenderUnit[];
+  rowIdByInputId: Map<string, number>;
+  rowIdByAnswerKey: Map<string, number>;
+};
+
+type EngineVisibleAssistantAnswer = {
+  parts: Array<{ key: string; text: string }>;
+  finalExtendsPartialStream: boolean;
+  finalReplacesPartialStream: boolean;
+  finalAlreadyShown: boolean;
+};
+
+function textRevision(text: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+  }
+  return `${text.length}:${hash >>> 0}`;
+}
+
+function visibleAssistantAnswer(turn: EngineExecutionTurn): EngineVisibleAssistantAnswer {
+  const { execution, deltas, items } = turn;
+  const finalExtendsPartialStream = !isInProgress(execution.status) && finalExtendsDeltas(turn);
+  const firstDeltaIndex = items.findIndex((item) => item.kind === "delta");
+  const lastDeltaIndex = items.findLastIndex((item) => item.kind === "delta");
+  const hasInterleavedContent = items
+    .slice(firstDeltaIndex + 1, lastDeltaIndex)
+    .some((item) => item.kind !== "delta");
+  const finalReplacesPartialStream = finalExtendsPartialStream && !hasInterleavedContent;
+  const finalAlreadyShown = finalExtendsPartialStream || finalDuplicatesDeltas(turn);
+  const finalSuffix =
+    finalExtendsPartialStream && hasInterleavedContent
+      ? execution.result?.slice(deltas.map((block) => block.text).join("").length)
+      : "";
+  const firstDelta = deltas[0];
+  const parts: Array<{ key: string; text: string }> = [];
+
+  for (const item of items) {
+    if (item.kind !== "delta") continue;
+    if (finalReplacesPartialStream && item.block !== firstDelta) continue;
+    parts.push({
+      key: item.block.key,
+      text: finalReplacesPartialStream
+        ? (execution.result ?? item.block.text)
+        : item.block.text + (item.block === deltas.at(-1) ? finalSuffix : ""),
+    });
+  }
+  if (execution.result && !finalAlreadyShown) {
+    parts.push({ key: `engine-result:${execution.id}`, text: execution.result });
+  }
+  return {
+    parts,
+    finalExtendsPartialStream,
+    finalReplacesPartialStream,
+    finalAlreadyShown,
+  };
+}
+
+function buildEngineFindProjection(projection: EngineConversationProjection): EngineFindProjection {
+  let nextRowId = 1;
+  const rowIdByInputId = new Map<string, number>();
+  const rowIdByAnswerKey = new Map<string, number>();
+  const renderUnits = projection.turns.map((turn) => {
+    const userRowId = nextRowId++;
+    rowIdByInputId.set(turn.input.id, userRowId);
+    const userRow = {
+      kind: "userInput",
+      rowId: userRowId,
+      turnId: turn.input.id,
+      text: turn.input.text,
+    } as unknown as UserInputRow;
+    const assistantTextRows: AssistantTextRow[] = [];
+    let isRunning = false;
+    const contentRevisionParts = [`input:${textRevision(turn.input.text)}`];
+
+    for (const executionTurn of turn.executions) {
+      const answer = visibleAssistantAnswer(executionTurn);
+      isRunning ||= isInProgress(executionTurn.execution.status);
+      contentRevisionParts.push(
+        [
+          executionTurn.execution.id,
+          executionTurn.execution.status,
+          executionTurn.execution.terminalAt ?? "open",
+          textRevision(executionTurn.execution.result ?? ""),
+          executionTurn.events.length,
+          executionTurn.events.at(-1)?.id ?? "no-event",
+          answer.parts.map((part) => `${part.key}:${textRevision(part.text)}`).join(","),
+        ].join(":"),
+      );
+      for (const part of answer.parts) {
+        const rowId = nextRowId++;
+        rowIdByAnswerKey.set(part.key, rowId);
+        assistantTextRows.push({
+          kind: "assistantText",
+          rowId,
+          turnId: turn.input.id,
+          text: part.text,
+          state: isInProgress(executionTurn.execution.status) ? "streaming" : "complete",
+        } as unknown as AssistantTextRow);
+      }
+    }
+
+    // The native find cache treats a stable unit key as immutable text. Engine can attach a late
+    // event or result to a completed input, so include its projected row and event revision.
+    return {
+      key: `${turn.input.id}:${contentRevisionParts.join("|")}`,
+      turnId: turn.input.id,
+      visibleUserInputs: [userRow],
+      assistantTextRows,
+      isRunning,
+    } as ConversationTurnRenderUnit;
+  });
+  return { renderUnits, rowIdByInputId, rowIdByAnswerKey };
+}
+
+function EngineConversationFindController({
+  rootRef,
+  findProjection,
+  conversationFindQuery,
+  conversationFindActiveIndex,
+  conversationFindNavigationRequestId,
+  onConversationFindMatchStateChange,
+}: {
+  rootRef: React.RefObject<HTMLElement | null>;
+  findProjection: EngineFindProjection;
+  conversationFindQuery: string;
+  conversationFindActiveIndex: number;
+  conversationFindNavigationRequestId: number;
+  onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
+}) {
+  const mountedRowsKey = findProjection.renderUnits
+    .map((unit) => `${unit.key}:${unit.isRunning ? "running" : "stable"}`)
+    .join("|");
+  useConversationTimelineFind({
+    rootRef,
+    renderUnits: findProjection.renderUnits,
+    rows: [],
+    mountedRowsKey,
+    canLoadOlder: false,
+    loadingOlder: false,
+    conversationFindQuery,
+    conversationFindActiveIndex,
+    conversationFindNavigationRequestId,
+    onConversationFindMatchStateChange,
+    scrollToUnit: () => {},
+  });
+  return null;
 }
 
 type EngineToolEventData = {
@@ -507,6 +662,7 @@ function UserInputReply({
 
 function EngineUserInputMessage({
   input,
+  findRowId,
   workspacePath,
   superseded,
   editable,
@@ -514,6 +670,7 @@ function EngineUserInputMessage({
   onEdit,
 }: {
   input: EngineInput;
+  findRowId?: number;
   workspacePath: string;
   superseded: boolean;
   editable: boolean;
@@ -524,7 +681,7 @@ function EngineUserInputMessage({
   const [draft, setDraft] = useState(input.text);
   const { intl } = useZCodeIntl();
   return (
-    <Message from="user" data-testid={`engine-input-${input.id}`}>
+    <Message from="user" data-testid={`engine-input-${input.id}`} data-row-id={findRowId}>
       <div className="group/user-row flex flex-col items-end">
         {editing && onEdit ? (
           <ChatPromptEditor
@@ -648,6 +805,10 @@ export function EngineConversationTimeline({
   onForkExecution,
   revisionBlockedReason = null,
   onEditExecution,
+  conversationFindQuery = "",
+  conversationFindActiveIndex = -1,
+  conversationFindNavigationRequestId = 0,
+  onConversationFindMatchStateChange,
 }: {
   projection: EngineConversationProjection;
   inheritedSources?: readonly {
@@ -674,8 +835,14 @@ export function EngineConversationTimeline({
   onForkExecution?: (executionId: string) => void;
   revisionBlockedReason?: string | null;
   onEditExecution?: (executionId: string, text: string) => Promise<boolean>;
+  conversationFindQuery?: string;
+  conversationFindActiveIndex?: number;
+  conversationFindNavigationRequestId?: number;
+  onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
 }) {
   const { intl, locale } = useZCodeIntl();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const findProjection = useMemo(() => buildEngineFindProjection(projection), [projection]);
   // Native v4 only marks the latest real user query editable. An older completed
   // Execution must not gain an edit action just because a newer turn has no Execution.
   const latestEditableExecutionId = [...(projection.turns.at(-1)?.executions ?? [])]
@@ -693,16 +860,47 @@ export function EngineConversationTimeline({
     !inheritedSources.length
   ) {
     return (
-      <p className="py-4 text-sm text-foreground-subtle">
-        此 Task 尚无输入。可以继续在下方开始一轮对话。
-      </p>
+      <div
+        ref={rootRef}
+        className="mx-auto w-full py-4"
+        data-testid={readOnlySource ? "engine-inherited-timeline" : "engine-conversation-timeline"}
+      >
+        {!readOnlySource ? (
+          <AssistantCodeCommentFeatureProvider enabled={false}>
+            <EngineConversationFindController
+              rootRef={rootRef}
+              findProjection={findProjection}
+              conversationFindQuery={conversationFindQuery}
+              conversationFindActiveIndex={conversationFindActiveIndex}
+              conversationFindNavigationRequestId={conversationFindNavigationRequestId}
+              onConversationFindMatchStateChange={onConversationFindMatchStateChange}
+            />
+          </AssistantCodeCommentFeatureProvider>
+        ) : null}
+        <p className="text-sm text-foreground-subtle">
+          此 Task 尚无输入。可以继续在下方开始一轮对话。
+        </p>
+      </div>
     );
   }
   return (
     <div
-      className="mx-auto flex w-full max-w-4xl flex-col gap-5 py-4"
+      ref={rootRef}
+      className="mx-auto flex w-full flex-col gap-5 py-4"
       data-testid={readOnlySource ? "engine-inherited-timeline" : "engine-conversation-timeline"}
     >
+      {!readOnlySource ? (
+        <AssistantCodeCommentFeatureProvider enabled={false}>
+          <EngineConversationFindController
+            rootRef={rootRef}
+            findProjection={findProjection}
+            conversationFindQuery={conversationFindQuery}
+            conversationFindActiveIndex={conversationFindActiveIndex}
+            conversationFindNavigationRequestId={conversationFindNavigationRequestId}
+            onConversationFindMatchStateChange={onConversationFindMatchStateChange}
+          />
+        </AssistantCodeCommentFeatureProvider>
+      ) : null}
       {inheritedSources.map((source) => (
         <div
           key={source.sourceTaskId}
@@ -741,6 +939,9 @@ export function EngineConversationTimeline({
         >
           <EngineUserInputMessage
             input={turn.input}
+            findRowId={
+              !readOnlySource ? findProjection.rowIdByInputId.get(turn.input.id) : undefined
+            }
             workspacePath={workspacePath}
             superseded={isSupersededInput(projection, turn.input.id)}
             editable={
@@ -759,21 +960,8 @@ export function EngineConversationTimeline({
             const execution = executionTurn.execution;
             const deltas = executionTurn.deltas;
             const streaming = isInProgress(execution.status);
-            const finalExtendsPartialStream = !streaming && finalExtendsDeltas(executionTurn);
-            const firstDeltaIndex = executionTurn.items.findIndex((item) => item.kind === "delta");
-            const lastDeltaIndex = executionTurn.items.findLastIndex(
-              (item) => item.kind === "delta",
-            );
-            const hasInterleavedContent = executionTurn.items
-              .slice(firstDeltaIndex + 1, lastDeltaIndex)
-              .some((item) => item.kind !== "delta");
-            const finalReplacesPartialStream = finalExtendsPartialStream && !hasInterleavedContent;
-            const finalAlreadyShown =
-              finalExtendsPartialStream || finalDuplicatesDeltas(executionTurn);
-            const finalSuffix =
-              finalExtendsPartialStream && hasInterleavedContent
-                ? execution.result?.slice(deltas.map((block) => block.text).join("").length)
-                : "";
+            const answerDisplay = visibleAssistantAnswer(executionTurn);
+            const { finalReplacesPartialStream, finalAlreadyShown } = answerDisplay;
             const toolParts = new Map(toolEvents(executionTurn).map((item) => [item.id, item]));
             const hasAssistantAnswer = deltas.length > 0 || execution.result !== null;
             const latestDeltaKey = deltas.at(-1)?.key;
@@ -832,11 +1020,12 @@ export function EngineConversationTimeline({
                 ) : null}
                 {executionTurn.items.map((item) => {
                   if (item.kind === "delta") {
+                    const answerPart = answerDisplay.parts.find(
+                      (part) => part.key === item.block.key,
+                    );
+                    if (!answerPart) return null;
                     const firstDelta = item.block === deltas[0];
-                    if (finalReplacesPartialStream && !firstDelta) return null;
-                    const text = finalReplacesPartialStream
-                      ? (execution.result ?? item.block.text)
-                      : item.block.text + (item.block === deltas.at(-1) ? finalSuffix : "");
+                    const text = answerPart.text;
                     const showsFinalAnswer =
                       !streaming &&
                       hasAssistantAnswer &&
@@ -850,6 +1039,11 @@ export function EngineConversationTimeline({
                         key={item.block.key}
                         from="assistant"
                         className="group/assistant-row"
+                        data-row-id={
+                          !readOnlySource
+                            ? findProjection.rowIdByAnswerKey.get(item.block.key)
+                            : undefined
+                        }
                         data-testid={
                           finalReplacesPartialStream
                             ? `engine-final-${execution.id}`
@@ -911,6 +1105,11 @@ export function EngineConversationTimeline({
                     from="assistant"
                     className="group/assistant-row"
                     data-testid={`engine-final-${execution.id}`}
+                    data-row-id={
+                      !readOnlySource
+                        ? findProjection.rowIdByAnswerKey.get(`engine-result:${execution.id}`)
+                        : undefined
+                    }
                   >
                     <MessageContent>
                       {deltas.length ? (

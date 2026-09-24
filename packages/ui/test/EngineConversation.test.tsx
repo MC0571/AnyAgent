@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
-import { act, createElement } from "react";
+import { act, createElement, useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 const taskId = "task-engine-ui";
@@ -1222,6 +1222,462 @@ test("EngineConversation sends through the product composer and renders ordered 
   } finally {
     await act(async () => root.unmount());
     container.remove();
+    dom.window.close();
+  }
+});
+
+test("Engine timeline reuses native find navigation and updates matches as Harness text streams", async () => {
+  const dom = installDom();
+  Object.defineProperty(dom.window.HTMLElement.prototype, "attachEvent", {
+    configurable: true,
+    value(this: HTMLElement, eventName: string, listener: EventListener) {
+      this.addEventListener(eventName.replace(/^on/u, ""), listener);
+    },
+  });
+  Object.defineProperty(dom.window.HTMLElement.prototype, "detachEvent", {
+    configurable: true,
+    value(this: HTMLElement, eventName: string, listener: EventListener) {
+      this.removeEventListener(eventName.replace(/^on/u, ""), listener);
+    },
+  });
+  const registry = new Map<string, unknown>();
+  class TestHighlight {
+    priority = 0;
+    readonly ranges: Range[];
+    constructor(...ranges: Range[]) {
+      this.ranges = ranges;
+    }
+  }
+  const css = {
+    highlights: {
+      set: (name: string, value: unknown) => registry.set(name, value),
+      delete: (name: string) => registry.delete(name),
+    },
+  };
+  const originalCss = Object.getOwnPropertyDescriptor(globalThis, "CSS");
+  Object.defineProperty(dom.window, "CSS", { configurable: true, value: css });
+  Object.defineProperty(dom.window, "Highlight", { configurable: true, value: TestHighlight });
+  Object.defineProperty(globalThis, "CSS", {
+    configurable: true,
+    writable: true,
+    value: css,
+  });
+
+  const [
+    { EngineConversationTimeline },
+    { projectEngineConversation },
+    { TaskFindDialog },
+    { createTaskFindNavigationState, changeTaskFindSelection, navigateTaskFindSelection },
+    { ZCodeIntlProvider },
+    { TooltipProvider },
+  ] = await Promise.all([
+    import("../src/EngineConversationTimeline.js"),
+    import("../src/engineConversationProjection.js"),
+    import("../src/quickpick/TaskFindDialog.js"),
+    import("../src/quickpick/taskFindNavigationState.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/components/ui/tooltip.js"),
+  ]);
+  const taskBId = "task-engine-find-b";
+  const taskB = {
+    ...task,
+    id: taskBId,
+    participant: { ...task.participant, id: "participant-engine-find-b" },
+    session: { ...task.session, id: "session-engine-find-b" },
+  };
+  const historyA = {
+    ...emptyHistory(),
+    inputs: [
+      {
+        id: "input-find-a",
+        taskId,
+        participantId,
+        sessionId,
+        text: "needle in prompt",
+        status: "completed",
+        receivedAt: 1_000,
+        acceptedAt: 1_000,
+        startedAt: 1_000,
+        terminalAt: 1_010,
+        error: null,
+      },
+      {
+        id: "input-live-a",
+        taskId,
+        participantId,
+        sessionId,
+        text: "waiting for streamed content",
+        status: "started",
+        receivedAt: 2_000,
+        acceptedAt: 2_000,
+        startedAt: 2_000,
+        terminalAt: null,
+        error: null,
+      },
+    ],
+    executions: [
+      {
+        id: "execution-find-a",
+        taskId,
+        participantId,
+        sessionId,
+        inputId: "input-find-a",
+        status: "completed",
+        acceptedAt: 1_000,
+        startedAt: 1_000,
+        terminalAt: 1_010,
+        result: "needle in answer",
+        error: null,
+      },
+      {
+        id: "execution-live-a",
+        taskId,
+        participantId,
+        sessionId,
+        inputId: "input-live-a",
+        status: "started",
+        acceptedAt: 2_000,
+        startedAt: 2_000,
+        terminalAt: null,
+        result: null,
+        error: null,
+      },
+    ],
+  };
+  const historyB = {
+    ...emptyHistory(taskBId),
+    inputs: [
+      {
+        id: "input-find-b",
+        taskId: taskBId,
+        participantId: taskB.participant.id,
+        sessionId: taskB.session.id,
+        text: "Task B prompt",
+        status: "completed",
+        receivedAt: 1_000,
+        acceptedAt: 1_000,
+        startedAt: 1_000,
+        terminalAt: 1_010,
+        error: null,
+      },
+    ],
+  };
+
+  function FindTestHarness() {
+    const [selectedTaskId, setSelectedTaskId] = useState(taskId);
+    const [findOpen, setFindOpen] = useState(false);
+    const [findState, setFindState] = useState(createTaskFindNavigationState);
+    const [matchCount, setMatchCount] = useState(0);
+    const [timelineRevision, setTimelineRevision] = useState(0);
+    const selectedTask = selectedTaskId === taskId ? task : taskB;
+    const selectedHistory = selectedTaskId === taskId ? historyA : historyB;
+    const projection = useMemo(
+      () => projectEngineConversation(selectedTask as never, selectedHistory as never),
+      [selectedTaskId, timelineRevision],
+    );
+    const onFindChange = useCallback((query: string, activeIndex: number) => {
+      setFindState((state) => changeTaskFindSelection(state, query, activeIndex));
+    }, []);
+    const onFindNavigate = useCallback((query: string, activeIndex: number) => {
+      setFindState((state) => navigateTaskFindSelection(state, query, activeIndex));
+    }, []);
+    const onMatchStateChange = useCallback(
+      (state: { matchCount: number; activeIndex?: number }) => {
+        setMatchCount(state.matchCount);
+        if (state.activeIndex !== undefined) {
+          setFindState((current) =>
+            changeTaskFindSelection(current, current.query, state.activeIndex ?? -1),
+          );
+        }
+      },
+      [],
+    );
+    const onFileChangeFindChange = useCallback(() => {}, []);
+    const streamLiveText = useCallback(() => {
+      historyA.events.push({
+        id: "event-live-a",
+        taskId,
+        participantId,
+        sessionId,
+        inputId: "input-live-a",
+        executionId: "execution-live-a",
+        nativeEventId: "native-event-live-a",
+        streamId: "stream-live-a",
+        sourceSequence: 1,
+        deliverySequence: 1,
+        observedAt: 2_010,
+        source: "engine",
+        type: "message.delta",
+        payload: { text: "liveword arrived" },
+        duplicateOf: null,
+      });
+      setTimelineRevision((revision) => revision + 1);
+    }, []);
+    const reviseCompletedAnswer = useCallback(() => {
+      historyA.executions[0]!.result = "needle on answer";
+      setTimelineRevision((revision) => revision + 1);
+    }, []);
+
+    return createElement(
+      "div",
+      null,
+      createElement(
+        "button",
+        { type: "button", "data-testid": "open-find", onClick: () => setFindOpen(true) },
+        "Find",
+      ),
+      createElement(
+        "button",
+        {
+          type: "button",
+          "data-testid": "select-task-b",
+          onClick: () => setSelectedTaskId(taskBId),
+        },
+        "Task B",
+      ),
+      createElement(
+        "button",
+        {
+          type: "button",
+          "data-testid": "select-task-a",
+          onClick: () => setSelectedTaskId(taskId),
+        },
+        "Task A",
+      ),
+      createElement(
+        "button",
+        { type: "button", "data-testid": "stream-live-text", onClick: streamLiveText },
+        "Stream text",
+      ),
+      createElement(
+        "button",
+        {
+          type: "button",
+          "data-testid": "revise-completed-answer",
+          onClick: reviseCompletedAnswer,
+        },
+        "Revise completed answer",
+      ),
+      createElement(TaskFindDialog, {
+        key: `task-find:${selectedTaskId}`,
+        open: findOpen,
+        focusRequestId: 1,
+        placement: "chat",
+        showFileChangesScope: false,
+        conversationMatchCount: matchCount,
+        conversationMatchIndex: findState.activeIndex,
+        fileChangeMatchCount: 0,
+        fileChangeMatchIndex: -1,
+        onOpenChange: setFindOpen,
+        onConversationFindChange: onFindChange,
+        onConversationFindNavigate: onFindNavigate,
+        onFileChangeFindChange,
+        onFileChangeFindNavigate: onFileChangeFindChange,
+        onOpenFileChanges: () => {},
+      }),
+      createElement(EngineConversationTimeline, {
+        key: `engine-timeline:${selectedTaskId}`,
+        projection: projection as never,
+        workspacePath: "/tmp/anyagent-ui",
+        historyLoading: false,
+        approvalBlockedReason: null,
+        userInputBlockedReason: null,
+        busyAction: null,
+        onReplyApproval: () => {},
+        onReplyUserInput: () => {},
+        conversationFindQuery: findState.query,
+        conversationFindActiveIndex: findState.activeIndex,
+        conversationFindNavigationRequestId: findState.navigationRequestId,
+        onConversationFindMatchStateChange: onMatchStateChange,
+      }),
+    );
+  }
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const activeRanges = () =>
+    (registry.get("zcode-v4-conversation-find-active") as TestHighlight | undefined)?.ranges ?? [];
+  const setQuery = async (value: string) => {
+    const input = container.querySelector<HTMLInputElement>('[role="dialog"] input');
+    assert.ok(input, "the native find input should be mounted");
+    await act(async () => {
+      input.focus();
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        dom.window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      valueSetter?.call(input, value);
+      const propertyChange = new dom.window.Event("propertychange", { bubbles: true });
+      Object.defineProperty(propertyChange, "propertyName", { value: "value" });
+      input.dispatchEvent(propertyChange);
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+  };
+
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(TooltipProvider, null, createElement(FindTestHarness)),
+        ),
+      );
+    });
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="open-find"]')?.click(),
+    );
+    await waitFor(
+      () => assert.ok(container.querySelector('[role="dialog"] input')),
+      "the shared native find dialog should open for Engine conversations",
+    );
+    assert.equal(
+      container.querySelector('button[aria-label="搜索文件变更"]'),
+      null,
+      "Engine find must not expose M0 file change search from the prior workspace task",
+    );
+    await setQuery("needle");
+    await waitFor(
+      () => assert.equal(container.querySelector(".tabular-nums")?.textContent, "1/2"),
+      "native find should count the prompt and answer matches",
+    );
+    await waitFor(
+      () => assert.equal(activeRanges()[0]?.toString(), "needle"),
+      "the active conversation match should use native CSS text highlighting",
+    );
+    assert.equal(
+      activeRanges()[0]
+        ?.commonAncestorContainer.parentElement?.closest("[data-testid]")
+        ?.getAttribute("data-testid"),
+      "engine-input-input-find-a",
+    );
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="下一个结果"]')?.click(),
+    );
+    await waitFor(
+      () =>
+        assert.equal(
+          activeRanges()[0]
+            ?.commonAncestorContainer.parentElement?.closest("[data-testid]")
+            ?.getAttribute("data-testid"),
+          "engine-final-execution-find-a",
+        ),
+      "next should highlight the assistant answer match",
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="上一个结果"]')?.click(),
+    );
+    await waitFor(
+      () =>
+        assert.equal(
+          activeRanges()[0]
+            ?.commonAncestorContainer.parentElement?.closest("[data-testid]")
+            ?.getAttribute("data-testid"),
+          "engine-input-input-find-a",
+        ),
+      "previous should return to the prompt match",
+    );
+
+    await setQuery("in answer");
+    await waitFor(
+      () => assert.equal(container.querySelector(".tabular-nums")?.textContent, "1/1"),
+      "a completed Engine answer should be searchable",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="revise-completed-answer"]')
+        ?.click(),
+    );
+    await waitFor(
+      () => assert.equal(container.querySelector(".tabular-nums")?.textContent, "0/0"),
+      "a same-length late answer revision should invalidate the completed unit search cache",
+    );
+
+    await setQuery("liveword");
+    await waitFor(
+      () => assert.equal(container.querySelector(".tabular-nums")?.textContent, "0/0"),
+      "a query without a match should report zero results",
+    );
+    await waitFor(
+      () => assert.equal(activeRanges().length, 0),
+      "the old active highlight should clear when the query has no matches",
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="stream-live-text"]')?.click(),
+    );
+    await waitFor(
+      () => assert.equal(container.querySelector(".tabular-nums")?.textContent, "1/1"),
+      "a matching Harness delta should update the open find count",
+    );
+    await waitFor(
+      () => assert.equal(activeRanges()[0]?.toString(), "liveword"),
+      "a newly streamed matching word should receive the active highlight",
+    );
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="select-task-b"]')?.click(),
+    );
+    await waitFor(() => {
+      assert.equal(container.querySelector<HTMLInputElement>('[role="dialog"] input')?.value, "");
+      assert.equal(container.querySelector(".tabular-nums")?.textContent, "0/0");
+    }, "Task B should not inherit Task A's open search query");
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="select-task-a"]')?.click(),
+    );
+    await waitFor(() => {
+      assert.equal(container.querySelector<HTMLInputElement>('[role="dialog"] input')?.value, "");
+      assert.equal(container.querySelector(".tabular-nums")?.textContent, "0/0");
+    }, "returning to Task A should keep the cleared search state");
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="关闭"]')?.click(),
+    );
+    await waitFor(
+      () => assert.equal(container.querySelector('[role="dialog"]'), null),
+      "closing native find should restore the conversation view",
+    );
+    assert.equal(activeRanges().length, 0);
+
+    await act(async () =>
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(TaskFindDialog, {
+              open: true,
+              focusRequestId: 2,
+              conversationMatchCount: 0,
+              conversationMatchIndex: -1,
+              fileChangeMatchCount: 0,
+              fileChangeMatchIndex: -1,
+              onOpenChange: () => {},
+              onConversationFindChange: () => {},
+              onConversationFindNavigate: () => {},
+              onFileChangeFindChange: () => {},
+              onFileChangeFindNavigate: () => {},
+              onOpenFileChanges: () => {},
+            }),
+          ),
+        ),
+      ),
+    );
+    await waitFor(
+      () =>
+        assert.ok(
+          document.body.querySelector('button[aria-label="搜索文件变更"]'),
+          "M0 should keep its existing file change search scope by default",
+        ),
+      "the new Engine-only prop should preserve M0 find behavior",
+    );
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    if (originalCss) Object.defineProperty(globalThis, "CSS", originalCss);
+    else Reflect.deleteProperty(globalThis, "CSS");
     dom.window.close();
   }
 });

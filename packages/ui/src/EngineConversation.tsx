@@ -63,6 +63,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
+import type { ConversationFindMatchState } from "@/v4/legacyChatViewTypes.js";
 
 type Notice = { kind: "error" | "info"; message: string };
 type InheritedSource = {
@@ -213,6 +214,10 @@ export function EngineConversation({
   refreshVersion = 0,
   inspectorOpen = false,
   onInspectorOpenChange = () => {},
+  conversationFindQuery = "",
+  conversationFindActiveIndex = -1,
+  conversationFindNavigationRequestId = 0,
+  onConversationFindMatchStateChange,
 }: {
   service: IAnyAgentService;
   selectedTaskId: string | null;
@@ -223,6 +228,10 @@ export function EngineConversation({
   refreshVersion?: number;
   inspectorOpen?: boolean;
   onInspectorOpenChange?: (open: boolean) => void;
+  conversationFindQuery?: string;
+  conversationFindActiveIndex?: number;
+  conversationFindNavigationRequestId?: number;
+  onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
 }) {
   const [task, setTask] = useState<EngineTask | null>(null);
   const [history, setHistory] = useState<EngineHistory | null>(null);
@@ -969,6 +978,10 @@ export function EngineConversation({
               onForkExecution={forkExecution}
               revisionBlockedReason={revisionBlockedReason}
               onEditExecution={editExecution}
+              conversationFindQuery={conversationFindQuery}
+              conversationFindActiveIndex={conversationFindActiveIndex}
+              conversationFindNavigationRequestId={conversationFindNavigationRequestId}
+              onConversationFindMatchStateChange={onConversationFindMatchStateChange}
             />
           ) : (
             <div className="mx-auto grid h-full max-w-2xl place-items-center px-5 text-center">
