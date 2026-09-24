@@ -795,7 +795,7 @@ export function ChatContextUsage({
   }, [intl, numberFormatter, renderableTaskUsage]);
   const cacheHitRateLabel = useMemo(() => {
     return formatContextCacheHitRateLabel(renderableTaskUsage?.cache?.hitRate, locale, {
-      showBelowThreshold: import.meta.env.DEV,
+      showBelowThreshold: import.meta.env?.DEV,
     });
   }, [locale, renderableTaskUsage]);
   const breakdownSegments = useMemo(

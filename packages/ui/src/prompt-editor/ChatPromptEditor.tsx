@@ -27,7 +27,10 @@ import {
 } from "@/lib/workspaceFileDrag.js";
 import { appendWorkspaceFileMentionToComposer } from "@/lib/workspaceFileComposer.js";
 import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragState.js";
-import { ChatPromptActionMenu } from "@/prompt-editor/ChatPromptActionMenu.js";
+import {
+  ChatPromptActionMenu,
+  ChatPromptActionMenuDisabledTrigger,
+} from "@/prompt-editor/ChatPromptActionMenu.js";
 import { useComposerToolbarFit } from "@/prompt-editor/useComposerToolbarFit.js";
 
 function runAfterFrame(callback: () => void) {
@@ -48,6 +51,8 @@ export function ChatPromptEditor({
   placeholder,
   disabled = false,
   disabledReason,
+  actionMenuDisabled = false,
+  actionMenuDisabledReason,
   submitting = false,
   submitDisabled = false,
   allowSubmitWhenEmpty = false,
@@ -100,6 +105,9 @@ export function ChatPromptEditor({
   placeholder?: string;
   disabled?: boolean;
   disabledReason?: string;
+  /** Disable the native + menu when this input mode cannot handle its actions. */
+  actionMenuDisabled?: boolean;
+  actionMenuDisabledReason?: string;
   submitting?: boolean;
   submitDisabled?: boolean;
   allowSubmitWhenEmpty?: boolean;
@@ -391,19 +399,27 @@ export function ChatPromptEditor({
           <div className="flex min-w-0 flex-1 items-center" data-composer-leading-actions>
             <div className="flex shrink-0 items-center gap-1" data-composer-leading-content>
               {hasActionMenu ? (
-                <ChatPromptActionMenu
-                  actionMenuTitle={actionMenuTitle}
-                  excludedSlashCommandNames={excludedSlashCommandNames}
-                  attachmentAction={attachmentAction}
-                  disabled={disabled}
-                  disabledReason={disabledReason}
-                  inputApiRef={resolvedInputApiRef}
-                  workspacePath={workspacePath}
-                  workspaceIdentity={workspaceIdentity}
-                  sessionId={taskId}
-                  container={resolvedTriggerPanelContainer}
-                  showPlugins={enableMentionPanel !== false}
-                />
+                disabled || actionMenuDisabled ? (
+                  <ChatPromptActionMenuDisabledTrigger
+                    actionMenuTitle={actionMenuTitle}
+                    disabledReason={actionMenuDisabledReason ?? disabledReason}
+                    testId={attachmentAction?.testId}
+                  />
+                ) : (
+                  <ChatPromptActionMenu
+                    actionMenuTitle={actionMenuTitle}
+                    excludedSlashCommandNames={excludedSlashCommandNames}
+                    attachmentAction={attachmentAction}
+                    disabled={false}
+                    disabledReason={actionMenuDisabledReason ?? disabledReason}
+                    inputApiRef={resolvedInputApiRef}
+                    workspacePath={workspacePath}
+                    workspaceIdentity={workspaceIdentity}
+                    sessionId={taskId}
+                    container={resolvedTriggerPanelContainer}
+                    showPlugins={enableMentionPanel !== false}
+                  />
+                )
               ) : null}
               {/* 权限/模式选择曾作为 leadingActions 先于动作菜单渲染，导致常驻顺序与产品规范相反。*/}
               {leadingActions}

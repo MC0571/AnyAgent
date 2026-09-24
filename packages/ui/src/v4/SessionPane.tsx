@@ -1372,7 +1372,11 @@ export function SessionPane({
   const composerSubmissionReady = useMemo(
     () =>
       selectedHarnessId
-        ? harnesses.some((harness) => harness.engineId === selectedHarnessId && harness.selectable)
+        ? harnesses.some(
+            (harness) => harness.engineId === selectedHarnessId && harness.selectable,
+          ) &&
+          (selectedHarnessId !== "zcode" ||
+            createComposerSubmissionConfig(draftConfig, modelSelectionView) !== null)
         : createComposerSubmissionConfig(draftConfig, modelSelectionView) !== null,
     [draftConfig, harnesses, modelSelectionView, selectedHarnessId],
   );
@@ -3048,13 +3052,14 @@ export function SessionPane({
       if (!harnessService || !selectedHarnessId)
         throw new Error("Harness 服务或选择已失效，请重新选择。");
       if (
-        options?.attachments?.length ||
         options?.contextAttachmentCount ||
         options?.sharedContextRefs?.length ||
         (options?.requestedDelivery && options.requestedDelivery !== "startNow")
       ) {
-        throw new Error("M1 Harness 当前只接收直接文本输入；请移除附件或队列选项。");
+        throw new Error("M1 Harness 暂不接收工作区/网页上下文或排队输入。");
       }
+      if (selectedHarnessId === "zcode" && !options?.submission)
+        throw new Error("请先选择当前可用的模型、模式和推理档位。");
       const task =
         pendingHarnessTaskRef.current?.engine.engineId === selectedHarnessId
           ? pendingHarnessTaskRef.current
@@ -3062,14 +3067,48 @@ export function SessionPane({
               engineId: selectedHarnessId,
               workspacePath,
               workspaceIdentity,
-            });
+          });
       pendingHarnessTaskRef.current = task;
+      const attachments = await Promise.all(
+        (options?.attachments ?? []).map((attachment) =>
+          harnessService.stageAttachment({
+            taskId: task.id,
+            participantId: task.participant.id,
+            sessionId: task.session.id,
+            authorizationId: task.authorizationId,
+            localPath: attachment.ref,
+            fileName: attachment.fileName,
+            mimeType: attachment.mime,
+            sizeBytes: attachment.bytes,
+          }),
+        ),
+      );
       await harnessService.submitInput({
         taskId: task.id,
         participantId: task.participant.id,
         sessionId: task.session.id,
         authorizationId: task.authorizationId,
         text,
+        ...(attachments.length ? { attachments } : {}),
+        ...(selectedHarnessId === "zcode" && options?.submission
+          ? {
+              submissionConfig: {
+                mode: options.submission.mode,
+                planEnabled: options.submission.planEnabled,
+                modelSelection: {
+                  providerId: options.submission.modelSelection.providerId,
+                  modelId: options.submission.modelSelection.modelId,
+                  ...(options.submission.modelSelection.options?.reasoningLevel
+                    ? {
+                        options: {
+                          reasoningLevel: options.submission.modelSelection.options.reasoningLevel,
+                        },
+                      }
+                    : {}),
+                },
+              },
+            }
+          : {}),
       });
       harnessTaskToOpenRef.current = task.id;
       return "sent" as const;
@@ -4518,7 +4557,9 @@ export function SessionPane({
       onSelectHarness={harnessService ? handleSelectHarness : undefined}
       onRefreshHarnesses={harnessService ? refreshHarnesses : undefined}
       updateComposerContent={updateComposerContent}
-      createSubmissionFromComposer={selectedHarnessId ? undefined : createSubmissionFromComposer}
+      createSubmissionFromComposer={
+        selectedHarnessId === "fake" ? undefined : createSubmissionFromComposer
+      }
       contextHeader={isDraft ? draftComposerHeader : undefined}
       centered={isDraft}
       blockingRequestId={blockingInteractionId}

@@ -115,6 +115,8 @@ interface UseComposerAttachmentsOptions {
    */
   onRuntimeLifecycle?: (listener: (state: "available" | "unavailable") => void) => () => void;
   disabled?: boolean;
+  /** Harness inputs may only cross the Host boundary as user-selected local file paths. */
+  localPathOnly?: boolean;
   /**
    * 是否消费全局 add-to-chat 事件（whiteboard 引用）。
    * 语义与 useWebElementContexts 等一致：由调用方传 `listenAddToChatEvents && !disabled`
@@ -198,6 +200,7 @@ export function useComposerAttachments(
     onRuntimeRestart,
     onRuntimeLifecycle,
     disabled = false,
+    localPathOnly = false,
     listenAddToChatEvents = true,
   } = options;
   const platform = usePlatform();
@@ -628,16 +631,29 @@ export function useComposerAttachments(
   const addPreparedAttachments = useCallback(
     (selectedAttachments: ChatComposerAttachment[]) => {
       if (selectedAttachments.length === 0) return;
+      const target = targetsRef.current.get(scopeKey);
+      const acceptedForTarget = selectedAttachments.filter(
+        (attachment) =>
+          !localPathOnly ||
+          (Boolean(attachment.localPath) && !isRemoteAttachmentTarget(target ?? {})),
+      );
+      const rejectedForTarget = selectedAttachments.filter(
+        (attachment) => !acceptedForTarget.includes(attachment),
+      );
+      rejectedForTarget.forEach(revokeChatComposerAttachment);
+      if (rejectedForTarget.length > 0) {
+        setAttachmentError(intl.formatMessage({ id: "engine.composer.attachmentLocalPathRequired" }));
+      }
+      if (acceptedForTarget.length === 0) return;
       const current = readComposerAttachmentScope(scopeKey);
       const remainingSlots = MAX_CHAT_ATTACHMENTS - current.length;
       if (remainingSlots <= 0) {
-        selectedAttachments.forEach(revokeChatComposerAttachment);
+        acceptedForTarget.forEach(revokeChatComposerAttachment);
         showAttachmentLimitWarning();
         return;
       }
-      const accepted = selectedAttachments.slice(0, remainingSlots);
-      selectedAttachments.slice(remainingSlots).forEach(revokeChatComposerAttachment);
-      const target = targetsRef.current.get(scopeKey);
+      const accepted = acceptedForTarget.slice(0, remainingSlots);
+      acceptedForTarget.slice(remainingSlots).forEach(revokeChatComposerAttachment);
       const items: ComposerAttachmentUploadItem[] = accepted.map((attachment) => {
         // 远端 identity 往往早于 remoteSessionId 注入；这段窗口不能退化为本地路径直读。
         const localZeroCopy = Boolean(
@@ -668,13 +684,13 @@ export function useComposerAttachments(
         };
       });
       commitScope(scopeKey, (existing) => [...existing, ...items]);
-      setAttachmentError(null);
-      if (selectedAttachments.length > remainingSlots) showAttachmentLimitWarning();
+      if (rejectedForTarget.length === 0) setAttachmentError(null);
+      if (acceptedForTarget.length > remainingSlots) showAttachmentLimitWarning();
       for (const item of items) {
         if (item.uploadStatus === "queued") enqueueUpload(scopeKey, item.id);
       }
     },
-    [commitScope, enqueueUpload, scopeKey, showAttachmentLimitWarning],
+    [commitScope, enqueueUpload, intl, localPathOnly, scopeKey, showAttachmentLimitWarning],
   );
 
   const addAttachmentFiles = useCallback(

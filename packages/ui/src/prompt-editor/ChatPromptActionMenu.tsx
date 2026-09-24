@@ -7,11 +7,19 @@ import {
 } from "@/mentions/mentionSearch.js";
 import { getSessionMentionWorkspaceScope } from "@/mentions/mentionPanelRouting.js";
 import { useChatViewActiveTaskProvider } from "@/v4/activeTaskProvider.js";
-import { useMemo, useRef, useState, type MutableRefObject } from "react";
+import {
+  forwardRef,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type MutableRefObject,
+} from "react";
 import type { EditorState } from "lexical";
 import { GoalIcon, Info, PaperclipIcon, PlusIcon, Workflow } from "lucide-react";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { Button } from "@/components/ui/button.js";
+import { cn } from "@/components/lib/utils.js";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
 import { buildSlashApplyMentionPayload } from "@/lib/slashApplyMentionPayload.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
@@ -31,6 +39,61 @@ const QUICK_COMMANDS = {
   workflow: { id: "add-workflow", labelId: "chat.composer.addWorkflow", Icon: Workflow },
 } as const;
 type QuickCommand = keyof typeof QUICK_COMMANDS;
+
+interface ChatPromptActionMenuButtonProps extends Omit<
+  ComponentPropsWithoutRef<"button">,
+  "children"
+> {
+  actionMenuTitle: string;
+  disabledReason?: string;
+  testId?: string;
+}
+
+const ChatPromptActionMenuButton = forwardRef<HTMLButtonElement, ChatPromptActionMenuButtonProps>(
+  function ChatPromptActionMenuButton(
+    { actionMenuTitle, disabledReason, testId, className, onMouseDown, ...buttonProps },
+    ref,
+  ) {
+    return (
+      <Button
+        {...buttonProps}
+        ref={ref}
+        type="button"
+        variant="ghost"
+        size="icon-md"
+        className={cn("gap-1 rounded-lg text-ui-base", className)}
+        onMouseDown={(event) => {
+          onMouseDown?.(event);
+          event.preventDefault();
+        }}
+        aria-label={actionMenuTitle}
+        data-testid={testId}
+        title={disabledReason}
+      >
+        <PlusIcon className="size-4" />
+        <span className="sr-only">{actionMenuTitle}</span>
+      </Button>
+    );
+  },
+);
+
+/** Native-looking disabled + trigger without mounting its catalog hooks. */
+export function ChatPromptActionMenuDisabledTrigger({
+  actionMenuTitle,
+  disabledReason,
+  testId,
+}: ChatPromptActionMenuButtonProps) {
+  return (
+    <ControlHintTooltip title={disabledReason ?? actionMenuTitle}>
+      <ChatPromptActionMenuButton
+        actionMenuTitle={actionMenuTitle}
+        disabled
+        disabledReason={disabledReason}
+        testId={testId}
+      />
+    </ControlHintTooltip>
+  );
+}
 
 export function ChatPromptActionMenu({
   actionMenuTitle,
@@ -245,20 +308,12 @@ export function ChatPromptActionMenu({
     >
       <ControlHintTooltip title={disabledReason ?? actionMenuTitle}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-md"
-            className="gap-1 rounded-lg text-ui-base"
-            onMouseDown={(event) => event.preventDefault()}
-            aria-label={actionMenuTitle}
-            data-testid={attachmentAction?.testId}
+          <ChatPromptActionMenuButton
+            actionMenuTitle={actionMenuTitle}
             disabled={disabled}
-            title={disabledReason}
-          >
-            <PlusIcon className="size-4" />
-            <span className="sr-only">{actionMenuTitle}</span>
-          </Button>
+            disabledReason={disabledReason}
+            testId={attachmentAction?.testId}
+          />
         </PopoverTrigger>
       </ControlHintTooltip>
       {/* 默认按钮锚点在首次挂载时也会注册；自定义锚点必须随后注册，避免被即将卸载的旧按钮覆盖。 */}

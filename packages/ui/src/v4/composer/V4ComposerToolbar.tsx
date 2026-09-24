@@ -84,9 +84,12 @@ import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCusto
 import {
   buildHarnessModelSelectGroups,
   buildRegistryModelSelectGroups,
+  buildZCodeHarnessModelGroup,
   decodeHarnessModelSelectValue,
+  decodeHarnessZCodeModelValue,
   dispatchComposerModelSelectValue,
   encodeHarnessModelSelectValue,
+  encodeHarnessZCodeModelValue,
   isHarnessModelSelectValue,
   type HarnessModelSelectOption,
 } from "@/lib/modelSelectionGroups.js";
@@ -754,8 +757,12 @@ function V4ComposerModelControlsImpl({
   const modelSelectGroups = useMemo<ModelSelectGroup[]>(() => {
     const harnessGroups = buildHarnessModelSelectGroups(harnesses);
     if (!modelSelectionView) return harnessGroups;
+    const zcodeModels = harnesses.some((harness) => harness.engineId === "zcode")
+      ? buildZCodeHarnessModelGroup(modelSelectionView)
+      : null;
     return [
       ...harnessGroups,
+      ...(zcodeModels ? [zcodeModels] : []),
       ...buildRegistryModelSelectGroups(displayProvider, modelSelectionView, {
         apiKeyLabel: intl.formatMessage({ id: "settings.modelProvider.apiKey" }),
         apiKeyBadgeLabel: intl.formatMessage({
@@ -820,16 +827,23 @@ function V4ComposerModelControlsImpl({
   );
   const selectedHarness = harnesses.find((harness) => harness.engineId === selectedHarnessId);
   const selectedHarnessValue = selectedHarness
-    ? encodeHarnessModelSelectValue(selectedHarness.engineId)
+    ? selectedHarness.engineId === "zcode" && effectiveConfig?.provider && effectiveConfig.model
+      ? encodeHarnessZCodeModelValue(
+          encodeCustomModelValue(effectiveConfig.provider, effectiveConfig.model),
+        )
+      : encodeHarnessModelSelectValue(selectedHarness.engineId)
     : null;
   const normalizedModelValue = selectedHarnessValue ?? triggerDisplay.value ?? "";
 
   const modelTriggerDisplay = useMemo(() => {
     if (selectedHarness) {
+      const providerName = modelSelectionView?.providers.find(
+        (candidate) => candidate.providerId === effectiveConfig?.provider,
+      )?.providerName;
       return {
-        fullLabel: `Harness · ${selectedHarness.label}`,
+        fullLabel: `Harness · ${selectedHarness.label}${effectiveConfig?.model ? ` · ${providerName ?? effectiveConfig.provider}/${effectiveConfig.model}` : ""}`,
         providerPrefix: "Harness · ",
-        modelLabel: selectedHarness.label,
+        modelLabel: effectiveConfig?.model ?? selectedHarness.label,
       };
     }
     // 非可选值（未选 / synthetic / 不可用）：占位文案或默认「选择模型」。
@@ -927,6 +941,17 @@ function V4ComposerModelControlsImpl({
 
   const handleModelValueChange = useCallback(
     (value: string) => {
+      const harnessModelValue = decodeHarnessZCodeModelValue(value);
+      if (harnessModelValue !== null) {
+        if (
+          sessionId !== null ||
+          !harnesses.some((harness) => harness.engineId === "zcode" && harness.selectable)
+        )
+          return;
+        onSelectHarness("zcode");
+        handleProviderModelValueChange(harnessModelValue);
+        return;
+      }
       dispatchComposerModelSelectValue({
         value,
         harnesses,
@@ -1015,6 +1040,11 @@ function V4ComposerModelControlsImpl({
   const thoughtShortcutLabel = useShortcutCommandLabel("cycleThoughtLevel");
   const isModelOptionLocked = useCallback(
     (candidateValue: string) => {
+      if (decodeHarnessZCodeModelValue(candidateValue) !== null)
+        return (
+          sessionId !== null ||
+          !harnesses.some((harness) => harness.engineId === "zcode" && harness.selectable)
+        );
       if (!isHarnessModelSelectValue(candidateValue)) return false;
       const engineId = decodeHarnessModelSelectValue(candidateValue);
       const harness = harnesses.find((candidate) => candidate.engineId === engineId);
@@ -1033,11 +1063,14 @@ function V4ComposerModelControlsImpl({
     disabled || recoveryPending || (modelSelectionState.status !== "ready" && !hasHarnessPicker);
   const providerSubmenuClassName = undefined;
   useToolbarShortcutBindings({
-    hasAnyOption: Boolean(modelOption) || (Boolean(thoughtOption) && !selectedHarnessId),
+    hasAnyOption:
+      Boolean(modelOption) ||
+      (Boolean(thoughtOption) && (!selectedHarnessId || selectedHarnessId === "zcode")),
     toolbarDisabled: disabled || recoveryPending,
     modelMenuDisabled: modelPickerDisabled || !modelMenuVisible,
     modelOption,
-    thoughtOption: selectedHarnessId ? undefined : (thoughtOption ?? undefined),
+    thoughtOption:
+      selectedHarnessId && selectedHarnessId !== "zcode" ? undefined : (thoughtOption ?? undefined),
     onOpenModelMenu: handleOpenModelMenuShortcut,
     onCycleThoughtLevel: handleCycleThoughtLevel,
     onCycleSessionMode: noop,
@@ -1140,7 +1173,7 @@ function V4ComposerModelControlsImpl({
           providerSubmenuClassName={providerSubmenuClassName}
         />
       ) : null}
-      {!selectedHarnessId && thoughtOption ? (
+      {(!selectedHarnessId || selectedHarnessId === "zcode") && thoughtOption ? (
         <ThoughtLevelCycleControl
           indicatorClassName="hidden @xl/composer:block"
           triggerClassName="@max-sm/composer:size-7 @max-sm/composer:justify-center @max-sm/composer:p-0"

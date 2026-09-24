@@ -4266,6 +4266,8 @@ const enUS: Record<string, string> = {
   "chat.message.dislike": "Dislike",
   "chat.message.disliked": "Disliked",
   "chat.message.fork": "Fork",
+  "engine.message.feedbackUnsupported": "This Harness cannot save message feedback yet.",
+  "engine.message.forkUnsupported": "This Harness cannot fork from this message yet.",
   "chat.message.forking": "Forking...",
   "chat.message.fork.unavailable": "Fork after task finishes",
   "chat.message.fork.unsupported": "The current agent does not support forking yet",
@@ -4521,6 +4523,15 @@ const enUS: Record<string, string> = {
   "chat.modelSwitch.contextWindowGuard.stillTooLarge":
     "After compression, the context used by this conversation is still larger than the target model's available context after reserving maximum output. Model switching was canceled.",
   "chat.toolbar.mode.label": "Switch mode",
+  "engine.composer.unavailableValue": "Not mapped",
+  "engine.composer.textOnly":
+    "AnyAgent's current Harness integration has not mapped workspace, web, or shared-context shortcuts.",
+  "engine.composer.attachmentLocalPathRequired":
+    "Harness attachments must be selected as local files that the Host can verify.",
+  "engine.composer.modeUnavailable":
+    "AnyAgent's current Harness integration has not mapped permission or execution mode settings, so this selector is unavailable.",
+  "engine.composer.thoughtUnavailable":
+    "AnyAgent's current Harness integration has not mapped reasoning effort settings, so this selector is unavailable.",
   // CUA composer entry button
   "chat.toolbar.computerUse.label": "Computer Use",
   "chat.toolbar.computerUse.tooltip.idle":

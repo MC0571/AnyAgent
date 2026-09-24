@@ -2,6 +2,7 @@ import {
   isZCodeAgentProvider,
   resolveModelProviderFamilySpecByProviderId,
   zcodeProviderAccountAccessSchema,
+  ZCODE_AGENT_PROVIDER,
   type ZCodeProviderAccountAccess,
   type ZCodeProvider,
 } from "@zcode/shared";
@@ -30,6 +31,32 @@ export interface HarnessModelSelectOption {
 
 /** Picker-only namespace; Harness identities are never encoded as provider/model identities. */
 export const HARNESS_MODEL_SELECT_VALUE_PREFIX = "anyagent-harness:";
+const HARNESS_ZCODE_MODEL_VALUE_PREFIX = "anyagent-harness-zcode-model:";
+
+export function encodeHarnessZCodeModelValue(providerModelValue: string): string {
+  return `${HARNESS_ZCODE_MODEL_VALUE_PREFIX}${encodeURIComponent(providerModelValue)}`;
+}
+
+export function decodeHarnessZCodeModelValue(value: string): string | null {
+  if (!value.startsWith(HARNESS_ZCODE_MODEL_VALUE_PREFIX)) return null;
+  try {
+    return decodeURIComponent(value.slice(HARNESS_ZCODE_MODEL_VALUE_PREFIX.length));
+  } catch {
+    return null;
+  }
+}
+
+export function buildZCodeHarnessModelGroup(view: ModelSelectionView): ModelSelectGroup | null {
+  const items = buildRegistryModelSelectGroups(ZCODE_AGENT_PROVIDER, view).flatMap((group) =>
+    group.items.map((item) => ({
+      ...item,
+      key: `harness-zcode:${item.key}`,
+      value: encodeHarnessZCodeModelValue(item.value),
+      name: `${group.label} · ${item.name}`,
+    })),
+  );
+  return items.length ? { key: "harness-zcode-models", label: "Harness · zcode", items } : null;
+}
 
 export function encodeHarnessModelSelectValue(engineId: string): string {
   return `${HARNESS_MODEL_SELECT_VALUE_PREFIX}${encodeURIComponent(engineId)}`;

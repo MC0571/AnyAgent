@@ -3995,6 +3995,8 @@ const zhCN: Record<string, string> = {
   "chat.message.dislike": "踩",
   "chat.message.disliked": "已踩",
   "chat.message.fork": "分叉",
+  "engine.message.feedbackUnsupported": "当前 Harness 暂不支持保存消息反馈。",
+  "engine.message.forkUnsupported": "当前 Harness 暂不支持从此消息分叉。",
   "chat.message.forking": "正在分叉...",
   "chat.message.fork.unavailable": "任务结束后可分叉",
   "chat.message.fork.unsupported": "当前agent暂不支持分叉功能",
@@ -4246,6 +4248,14 @@ const zhCN: Record<string, string> = {
   "chat.modelSwitch.contextWindowGuard.stillTooLarge":
     "压缩完成后，当前会话已使用的上下文仍大于目标模型预留最大输出后的可用上下文，模型切换已取消。",
   "chat.toolbar.mode.label": "切换模式",
+  "engine.composer.unavailableValue": "接入未映射",
+  "engine.composer.textOnly": "AnyAgent 当前 Harness 接入尚未映射工作区、网页和共享上下文快捷操作。",
+  "engine.composer.attachmentLocalPathRequired":
+    "Harness 附件必须是可由 Host 核验的本地文件，请通过文件选择器重新添加。",
+  "engine.composer.modeUnavailable":
+    "AnyAgent 当前 Harness 接入尚未映射权限/执行模式设置，因此该选择器不可用。",
+  "engine.composer.thoughtUnavailable":
+    "AnyAgent 当前 Harness 接入尚未映射推理档位设置，因此该选择器不可用。",
   // CUA 输入框常驻入口按钮
   "chat.toolbar.computerUse.label": "电脑操作",
   "chat.toolbar.computerUse.tooltip.idle": "电脑操作空闲——首次使用时自动启动",

@@ -393,6 +393,8 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   );
   const [isSidebarFileTreeOpen, setIsSidebarFileTreeOpen] = useState(false);
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
+  const supportsWorkspaceSessionPanels =
+    workspaceMainView === "chat" || workspaceMainView === "engine";
   const screenshotSurfaceRequest = useBrowserScreenshotSurfaceRequest(sidePaneState?.tabs ?? []);
   const screenshotSurfaceTab = screenshotSurfaceRequest
     ? findScreenshotSurfaceTabForRender(sidePaneState?.tabs ?? [], screenshotSurfaceRequest)
@@ -453,7 +455,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     // 截图 surface 由 browser-use tab 自己的 fixed 承载层提供尺寸，不能再把整个右侧
     // ResizablePanel 撑开；否则自动化页会闪出空白的 tab 栏，且面板过渡期间 guest surface
     // 仍可能被 Chromium 判定为不可合成。
-    open: workspaceMainView === "chat" && isSidePaneOpen,
+    open: supportsWorkspaceSessionPanels && isSidePaneOpen,
     expandedSize: SIDE_PANE_DEFAULT_EXPANDED_SIZE,
     rememberExpandedSize: true,
     resizeOnInitialVisibleMount: false,
@@ -478,7 +480,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   }, [handleToggleSidebar, handleToggleSidePane, isSidebarVisible, isSidePaneOpen, workspaceKey]);
 
   useEffect(() => {
-    if (workspaceMainView !== "chat") {
+    if (!supportsWorkspaceSessionPanels) {
       return;
     }
 
@@ -563,7 +565,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       }
       window.removeEventListener("resize", handleWindowResize);
     };
-  }, [workspaceMainView]);
+  }, [supportsWorkspaceSessionPanels]);
 
   useEffect(() => {
     workspaceSidebarPanelWidthPxRef.current = workspaceSidebarPanelWidthPx;
@@ -1995,7 +1997,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     </div>
                   </section>
                 </ResizablePanel>
-                {workspaceMainView === "chat" ? (
+                {supportsWorkspaceSessionPanels ? (
                   <AnimatedTerminalPanel
                     frameClassName={cn(
                       isSidePaneVisible

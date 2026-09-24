@@ -1,8 +1,17 @@
 /* oxlint-disable eslint(max-lines) -- 输入轮次、Execution 与对应交互必须沿同一消息序列呈现。 */
 import { useState } from "react";
-import type { EngineApproval, EngineUserInput } from "@/EngineUiParts.js";
+import {
+  WORKFLOW_REFINE_PERMISSION_OPTION_ID,
+  type ZCodeElicitationRequest,
+  type ZCodeInteractionRequestOrigin,
+  type ZCodePermissionOption,
+  type ZCodePermissionRequest,
+} from "@zcode/shared";
+import type { EngineJsonObject, EngineUserInputAnswer } from "@anyagent/engine-contract";
+import type { EngineApproval, EngineInput, EngineUserInput } from "@/EngineUiParts.js";
 import { jsonLabel, recordStatusLabel, shortId, timeLabel } from "@/EngineUiParts.js";
 import type {
+  EngineDeltaBlock,
   EngineConversationProjection,
   EngineExecutionTurn,
 } from "@/engineConversationProjection.js";
@@ -12,14 +21,36 @@ import {
   MessageResponse,
   type MessageFileLinkTarget,
 } from "@/components/ai-elements/message.js";
+import {
+  ConversationAssistantTextActions,
+  ConversationUserInputActions,
+} from "@/v4/ConversationRowView.js";
+import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
+import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
+import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
+import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
+import { ElicitationDialog } from "@/ElicitationDialog.js";
+import { PermissionDialog } from "@/PermissionDialog.js";
+import { isPlainRecord } from "@/ToolCallBlocks/fileSummaryTypes.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { Button } from "@/components/ui/button.js";
 import { Textarea } from "@/components/ui/textarea.js";
 
 function isInProgress(status: string) {
   return status === "accepted" || status === "started";
+}
+
+function assistantAnswerTimestamp(turn: EngineExecutionTurn): number | undefined {
+  if (turn.execution.terminalAt !== null) return turn.execution.terminalAt;
+  return turn.events.reduce<number | undefined>(
+    (latest, event) =>
+      event.type === "message.delta" && (latest === undefined || event.observedAt > latest)
+        ? event.observedAt
+        : latest,
+    undefined,
+  );
 }
 
 function sameAnswerBlock(turn: EngineExecutionTurn): boolean {
@@ -155,7 +186,7 @@ function InlineApproval({
   approval: EngineApproval;
   disabledReason: string | null;
   busyAction: string | null;
-  onReply: (approvalId: string, optionId: string) => void;
+  onReply: (approvalId: string, optionId: string, feedback?: string) => void;
 }) {
   const pending = approval.status === "pending";
   return (
@@ -178,19 +209,35 @@ function InlineApproval({
           </p>
         ) : pending ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            {approval.options.map((option) => (
-              <Button
-                key={option.id}
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!!disabledReason || busyAction !== null}
-                title={disabledReason ?? undefined}
-                onClick={() => onReply(approval.id, option.id)}
-              >
-                {option.label}
-              </Button>
-            ))}
+            {approval.options.map((option) => {
+              const requiresFreeText = option.id === WORKFLOW_REFINE_PERMISSION_OPTION_ID;
+              return (
+                <Button
+                  key={option.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={
+                    !!disabledReason ||
+                    busyAction !== null ||
+                    requiresFreeText ||
+                    option.requiresFeedback === true
+                  }
+                  title={
+                    disabledReason ??
+                    (requiresFreeText || option.requiresFeedback
+                      ? "此选项需要填写反馈文本；当前请求没有可用的原生反馈输入。"
+                      : undefined)
+                  }
+                  onClick={() => {
+                    if (!requiresFreeText && !option.requiresFeedback)
+                      onReply(approval.id, option.id);
+                  }}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
           </div>
         ) : approval.repliedOptionId ? (
           <p className="mt-2 text-xs text-foreground-subtle">
@@ -200,8 +247,143 @@ function InlineApproval({
         {disabledReason && pending ? (
           <p className="mt-2 text-xs text-warning">{disabledReason}</p>
         ) : null}
+        {pending &&
+        approval.options.some(
+          (option) => option.id === WORKFLOW_REFINE_PERMISSION_OPTION_ID || option.requiresFeedback,
+        ) ? (
+          <p className="mt-2 text-xs text-warning">
+            工作流修改反馈需要通过原生审批对话框填写后提交。
+          </p>
+        ) : null}
       </MessageContent>
     </Message>
+  );
+}
+
+function permissionOrigin(value: unknown): ZCodeInteractionRequestOrigin | undefined {
+  if (
+    !isPlainRecord(value) ||
+    value.kind !== "subagent" ||
+    typeof value.agentId !== "string" ||
+    typeof value.agentType !== "string" ||
+    typeof value.childSessionId !== "string" ||
+    typeof value.parentSessionId !== "string"
+  )
+    return undefined;
+  return value as unknown as ZCodeInteractionRequestOrigin;
+}
+
+function nativePermissionRequest(approval: EngineApproval): ZCodePermissionRequest | null {
+  const presentation = approval.presentation;
+  if (!presentation?.toolCallId || approval.options.length === 0) return null;
+
+  const options: ZCodePermissionOption[] = [];
+  for (const option of approval.options) {
+    const native = option.presentation;
+    if (
+      !native?.kind ||
+      !native.response ||
+      !isPlainRecord(native.response) ||
+      (native.response.decision !== "allow" && native.response.decision !== "deny")
+    )
+      return null;
+    options.push({
+      optionId: option.id,
+      kind: native.kind,
+      name: option.label,
+      ...(native.description ? { description: native.description } : {}),
+      response: native.response as ZCodePermissionOption["response"],
+    });
+  }
+
+  const origin = permissionOrigin(presentation.origin);
+  const raw = {
+    toolCallId: presentation.toolCallId,
+    toolName: approval.operation,
+    ...(approval.scope === null ? {} : { reason: approval.scope }),
+    ...(presentation.riskLevel ? { riskLevel: presentation.riskLevel } : {}),
+    ...(presentation.input === undefined ? {} : { input: presentation.input }),
+  };
+  return {
+    type: "permission_request",
+    taskId: approval.taskId as ZCodePermissionRequest["taskId"],
+    traceId: approval.executionId as ZCodePermissionRequest["traceId"],
+    requestId: approval.id,
+    description: approval.scope ?? approval.operation,
+    kind: approval.operation,
+    title: approval.operation,
+    options,
+    ...(approval.options.some((option) => option.requiresFeedback) ? { freeText: true } : {}),
+    ...(origin ? { origin } : {}),
+    raw,
+  };
+}
+
+function nativeElicitationRequest(request: EngineUserInput): ZCodeElicitationRequest | null {
+  const source = request.presentation;
+  if (!source?.questions.length) return null;
+  const questions = source.questions.map((question) => ({
+    question: question.question,
+    header: question.header,
+    options: question.options.map((option) => ({
+      value: option.value,
+      label: option.label,
+      ...(option.description ? { description: option.description } : {}),
+    })),
+    ...(question.multiSelect === undefined ? {} : { multiSelect: question.multiSelect }),
+  }));
+  const first = questions[0];
+  if (!first) return null;
+  const origin = permissionOrigin(source.origin);
+  return {
+    type: "elicitation_request",
+    taskId: request.taskId,
+    traceId: request.executionId as ZCodeElicitationRequest["traceId"],
+    requestId: request.id,
+    message: first.question,
+    header: first.header,
+    options: first.options,
+    questions,
+    ...(origin ? { origin } : {}),
+  };
+}
+
+function ApprovalEntry({
+  approval,
+  workspacePath,
+  disabledReason,
+  busyAction,
+  onReply,
+}: {
+  approval: EngineApproval;
+  workspacePath: string;
+  disabledReason: string | null;
+  busyAction: string | null;
+  onReply: (approvalId: string, optionId: string, feedback?: string) => void;
+}) {
+  const request = approval.status === "pending" ? nativePermissionRequest(approval) : null;
+  if (request && !disabledReason) {
+    return (
+      <Message from="assistant" data-testid={`engine-approval-${approval.id}`}>
+        <PermissionDialog
+          key={approval.id}
+          request={request}
+          workspacePath={workspacePath}
+          responding={busyAction !== null}
+          onRespond={(requestId, option, feedback) => {
+            if (requestId === approval.id) onReply(approval.id, option.optionId, feedback);
+          }}
+        />
+      </Message>
+    );
+  }
+  return (
+    <InlineApproval
+      approval={approval}
+      disabledReason={disabledReason}
+      busyAction={busyAction}
+      onReply={onReply}
+    />
   );
 }
 
@@ -214,8 +396,25 @@ function InlineUserInput({
   request: EngineUserInput;
   disabledReason: string | null;
   busyAction: string | null;
-  onReply: (requestId: string, response: unknown) => void;
+  onReply: (requestId: string, response: EngineUserInputAnswer) => void;
 }) {
+  const elicitation = nativeElicitationRequest(request);
+  if (elicitation && request.status === "pending" && !disabledReason && busyAction === null) {
+    return (
+      <Message from="assistant" data-testid={`engine-user-input-${request.id}`}>
+        <ElicitationDialog
+          request={elicitation}
+          onRespond={(requestId, action, content) => {
+            if (requestId !== request.id) return;
+            onReply(request.id, {
+              action,
+              ...(content === undefined ? {} : { content: content as EngineJsonObject }),
+            });
+          }}
+        />
+      </Message>
+    );
+  }
   return (
     <Message from="assistant" data-testid={`engine-user-input-${request.id}`}>
       <MessageContent className="w-full max-w-2xl rounded-lg border border-input-border bg-card p-3">
@@ -280,7 +479,7 @@ function UserInputReply({
 }: {
   requestId: string;
   disabled: boolean;
-  onReply: (requestId: string, response: unknown) => void;
+  onReply: (requestId: string, response: EngineUserInputAnswer) => void;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -306,8 +505,134 @@ function UserInputReply({
   );
 }
 
+function EngineUserInputMessage({
+  input,
+  workspacePath,
+  superseded,
+  editable,
+  busyAction,
+  onEdit,
+}: {
+  input: EngineInput;
+  workspacePath: string;
+  superseded: boolean;
+  editable: boolean;
+  busyAction: string | null;
+  onEdit?: (text: string) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(input.text);
+  const { intl } = useZCodeIntl();
+  return (
+    <Message from="user" data-testid={`engine-input-${input.id}`}>
+      <div className="group/user-row flex flex-col items-end">
+        {editing && onEdit ? (
+          <ChatPromptEditor
+            workspacePath={workspacePath}
+            taskId={null}
+            enableMentionPanel={false}
+            initialValue={input.text}
+            submitting={busyAction !== null}
+            submitDisabled={!draft.trim() || busyAction !== null}
+            submitLabel={intl.formatMessage({ id: "chat.send" })}
+            cancelLabel={intl.formatMessage({ id: "common.cancel" })}
+            inputTestId={`engine-edit-input-${input.id}`}
+            submitTestId={`engine-edit-submit-${input.id}`}
+            cancelTestId={`engine-edit-cancel-${input.id}`}
+            className="w-full max-w-xl"
+            shellClassName="min-h-32"
+            onChange={setDraft}
+            onSubmit={(text) => {
+              void onEdit(text).then((accepted) => {
+                if (accepted) setEditing(false);
+              });
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <>
+            <div
+              data-v4-user-input-bubble="true"
+              className="flex max-w-full flex-col gap-2 rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base text-foreground @min-[624px]/conversation:max-w-xl"
+            >
+              <ConversationUserInputContent text={input.text} />
+            </div>
+            <ConversationUserInputActions
+              text={input.text}
+              editActionTestId={`engine-edit-${input.id}`}
+              onEdit={
+                editable && onEdit
+                  ? () => {
+                      setDraft(input.text);
+                      setEditing(true);
+                    }
+                  : undefined
+              }
+            />
+          </>
+        )}
+        {input.revisionOf ? (
+          <span className="mt-1 text-xs text-foreground-subtle">
+            {input.status === "unknown"
+              ? "修订请求结果未知"
+              : input.status === "rejected"
+                ? "修订请求已拒绝"
+                : input.revisionOf.kind === "edit"
+                  ? "编辑后的输入"
+                  : "重试的输入"}
+          </span>
+        ) : superseded ? (
+          <span className="mt-1 text-xs text-foreground-subtle">此前版本 · 已由后续轮次修订</span>
+        ) : null}
+        {input.status === "rejected" || input.status === "failed" || input.status === "unknown" ? (
+          <div className="mt-1 text-[11px] text-foreground-subtle">
+            输入 · {recordStatusLabel(input.status)} · {timeLabel(input.receivedAt)}
+          </div>
+        ) : null}
+        {input.error ? <p className="mt-2 text-sm text-destructive">{input.error}</p> : null}
+      </div>
+    </Message>
+  );
+}
+
+function isSupersededInput(projection: EngineConversationProjection, inputId: string): boolean {
+  return projection.turns.some(
+    (later) =>
+      later.input.revisionOf?.inputId === inputId &&
+      ["native-accepted", "started", "completed", "failed", "stopped"].includes(later.input.status),
+  );
+}
+
+function EngineTurnFrame({
+  inputId,
+  superseded,
+  children,
+}: {
+  inputId: string;
+  superseded: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3" data-testid={`engine-turn-${inputId}`}>
+      {superseded ? (
+        <details
+          className="rounded-lg border border-border bg-surface/30 p-3 text-foreground-subtle"
+          data-testid={`engine-superseded-turn-${inputId}`}
+        >
+          <summary className="cursor-pointer text-sm">此前版本 · 已由后续轮次修订</summary>
+          <div className="mt-3 space-y-3">{children}</div>
+        </details>
+      ) : (
+        children
+      )}
+    </section>
+  );
+}
+
 export function EngineConversationTimeline({
   projection,
+  inheritedSources = [],
+  readOnlySource = false,
   workspacePath,
   onOpenCodeViewer,
   onOpenFileLink,
@@ -317,8 +642,19 @@ export function EngineConversationTimeline({
   busyAction,
   onReplyApproval,
   onReplyUserInput,
+  assistantFeedbackBlockedReason = null,
+  onAssistantFeedback,
+  forkBlockedReason = null,
+  onForkExecution,
+  revisionBlockedReason = null,
+  onEditExecution,
 }: {
   projection: EngineConversationProjection;
+  inheritedSources?: readonly {
+    sourceTaskId: string;
+    projection: EngineConversationProjection | null;
+  }[];
+  readOnlySource?: boolean;
   workspacePath: string;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
@@ -326,9 +662,25 @@ export function EngineConversationTimeline({
   approvalBlockedReason: string | null;
   userInputBlockedReason: string | null;
   busyAction: string | null;
-  onReplyApproval: (approvalId: string, optionId: string) => void;
-  onReplyUserInput: (requestId: string, response: unknown) => void;
+  onReplyApproval: (approvalId: string, optionId: string, feedback?: string) => void;
+  onReplyUserInput: (requestId: string, response: EngineUserInputAnswer) => void;
+  assistantFeedbackBlockedReason?: string | null;
+  onAssistantFeedback?: (
+    executionId: string,
+    messageId: string,
+    feedback: "like" | "dislike" | null,
+  ) => Promise<boolean>;
+  forkBlockedReason?: string | null;
+  onForkExecution?: (executionId: string) => void;
+  revisionBlockedReason?: string | null;
+  onEditExecution?: (executionId: string, text: string) => Promise<boolean>;
 }) {
+  const { intl, locale } = useZCodeIntl();
+  // Native v4 only marks the latest real user query editable. An older completed
+  // Execution must not gain an edit action just because a newer turn has no Execution.
+  const latestEditableExecutionId = [...(projection.turns.at(-1)?.executions ?? [])]
+    .reverse()
+    .find((turn) => turn.execution.status === "completed")?.execution.id;
   if (historyLoading) {
     return <p className="py-4 text-sm text-foreground-subtle">正在读取对话…</p>;
   }
@@ -337,7 +689,8 @@ export function EngineConversationTimeline({
     !projection.unassociatedExecutions.length &&
     !projection.unassociatedEvents.length &&
     !projection.unassociatedApprovals.length &&
-    !projection.unassociatedUserInputs.length
+    !projection.unassociatedUserInputs.length &&
+    !inheritedSources.length
   ) {
     return (
       <p className="py-4 text-sm text-foreground-subtle">
@@ -348,35 +701,60 @@ export function EngineConversationTimeline({
   return (
     <div
       className="mx-auto flex w-full max-w-4xl flex-col gap-5 py-4"
-      data-testid="engine-conversation-timeline"
+      data-testid={readOnlySource ? "engine-inherited-timeline" : "engine-conversation-timeline"}
     >
-      {projection.turns.map((turn) => (
-        <section
-          key={turn.input.id}
-          className="space-y-3"
-          data-testid={`engine-turn-${turn.input.id}`}
+      {inheritedSources.map((source) => (
+        <div
+          key={source.sourceTaskId}
+          data-testid={`engine-inherited-source-${source.sourceTaskId}`}
         >
-          <Message from="user" data-testid={`engine-input-${turn.input.id}`}>
-            <MessageContent>
-              <MessageResponse
-                workspacePath={workspacePath}
-                onOpenCodeViewer={onOpenCodeViewer}
-                onOpenFileLink={onOpenFileLink}
-              >
-                {turn.input.text}
-              </MessageResponse>
-              {turn.input.status === "rejected" ||
-              turn.input.status === "failed" ||
-              turn.input.status === "unknown" ? (
-                <div className="mt-1 text-[11px] text-foreground-subtle">
-                  输入 · {recordStatusLabel(turn.input.status)} · {timeLabel(turn.input.receivedAt)}
-                </div>
-              ) : null}
-              {turn.input.error ? (
-                <p className="mt-2 text-sm text-destructive">{turn.input.error}</p>
-              ) : null}
-            </MessageContent>
-          </Message>
+          <p className="mb-3 text-xs text-foreground-subtle">
+            继承自 Task {shortId(source.sourceTaskId)} · 只读
+          </p>
+          {source.projection ? (
+            <EngineConversationTimeline
+              projection={source.projection}
+              readOnlySource
+              workspacePath={workspacePath}
+              onOpenCodeViewer={onOpenCodeViewer}
+              onOpenFileLink={onOpenFileLink}
+              historyLoading={false}
+              approvalBlockedReason="继承来源只读。"
+              userInputBlockedReason="继承来源只读。"
+              busyAction={busyAction}
+              onReplyApproval={onReplyApproval}
+              onReplyUserInput={onReplyUserInput}
+              forkBlockedReason="继承来源只读。"
+            />
+          ) : (
+            <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
+              继承来源历史无法核实；此处不展示未经确认的对话内容。
+            </p>
+          )}
+        </div>
+      ))}
+      {projection.turns.map((turn) => (
+        <EngineTurnFrame
+          key={turn.input.id}
+          inputId={turn.input.id}
+          superseded={isSupersededInput(projection, turn.input.id)}
+        >
+          <EngineUserInputMessage
+            input={turn.input}
+            workspacePath={workspacePath}
+            superseded={isSupersededInput(projection, turn.input.id)}
+            editable={
+              !readOnlySource &&
+              !revisionBlockedReason &&
+              turn.executions.some((entry) => entry.execution.id === latestEditableExecutionId)
+            }
+            busyAction={busyAction}
+            onEdit={
+              onEditExecution && latestEditableExecutionId
+                ? (text) => onEditExecution(latestEditableExecutionId, text)
+                : undefined
+            }
+          />
           {turn.executions.map((executionTurn) => {
             const execution = executionTurn.execution;
             const deltas = executionTurn.deltas;
@@ -397,23 +775,81 @@ export function EngineConversationTimeline({
                 ? execution.result?.slice(deltas.map((block) => block.text).join("").length)
                 : "";
             const toolParts = new Map(toolEvents(executionTurn).map((item) => [item.id, item]));
+            const hasAssistantAnswer = deltas.length > 0 || execution.result !== null;
+            const latestDeltaKey = deltas.at(-1)?.key;
+            const completionTime = execution.terminalAt;
+            const durationMs =
+              execution.startedAt !== null && completionTime !== null
+                ? completionTime - execution.startedAt
+                : undefined;
+            const duration =
+              durationMs !== undefined && durationMs >= 0
+                ? formatConversationWorkDuration(durationMs, intl, locale)
+                : null;
+            const workStatusLabel =
+              execution.status === "stopped"
+                ? intl.formatMessage({ id: "chat.history.stopped" })
+                : duration && (execution.status === "completed" || execution.status === "failed")
+                  ? intl.formatMessage({ id: "chat.history.workedFor" }, { duration })
+                  : null;
+            const feedbackUnavailableReason = intl.formatMessage({
+              id: "engine.message.feedbackUnsupported",
+            });
+            const feedbackActionForBlock = (block: EngineDeltaBlock | undefined) => {
+              if (
+                readOnlySource ||
+                assistantFeedbackBlockedReason ||
+                busyAction ||
+                !onAssistantFeedback ||
+                !block?.messageId ||
+                block.source !== "engine" ||
+                !["completed", "failed", "stopped"].includes(execution.status)
+              ) {
+                return undefined;
+              }
+              return (feedback: "like" | "dislike" | null) =>
+                onAssistantFeedback(execution.id, block.messageId!, feedback);
+            };
+            const feedbackDisabledReason = readOnlySource
+              ? "继承来源只读。"
+              : (assistantFeedbackBlockedReason ?? feedbackUnavailableReason);
+            const forkUnavailableReason = intl.formatMessage({
+              id: "engine.message.forkUnsupported",
+            });
             return (
               <div
                 key={execution.id}
                 className="space-y-3"
                 data-testid={`engine-execution-${execution.id}`}
               >
+                {workStatusLabel ? (
+                  <div
+                    className="flex w-full border-b border-[var(--color-border)]/50 pb-2"
+                    data-testid={`engine-work-status-${execution.id}`}
+                  >
+                    <span className="text-ui-base text-foreground-subtle">{workStatusLabel}</span>
+                  </div>
+                ) : null}
                 {executionTurn.items.map((item) => {
                   if (item.kind === "delta") {
                     const firstDelta = item.block === deltas[0];
                     if (finalReplacesPartialStream && !firstDelta) return null;
                     const text = finalReplacesPartialStream
-                      ? execution.result
+                      ? (execution.result ?? item.block.text)
                       : item.block.text + (item.block === deltas.at(-1) ? finalSuffix : "");
+                    const showsFinalAnswer =
+                      !streaming &&
+                      hasAssistantAnswer &&
+                      (finalReplacesPartialStream
+                        ? firstDelta
+                        : finalAlreadyShown || !execution.result
+                          ? item.block.key === latestDeltaKey
+                          : false);
                     return (
                       <Message
                         key={item.block.key}
                         from="assistant"
+                        className="group/assistant-row"
                         data-testid={
                           finalReplacesPartialStream
                             ? `engine-final-${execution.id}`
@@ -430,6 +866,30 @@ export function EngineConversationTimeline({
                             {text}
                           </MessageResponse>
                         </MessageContent>
+                        {showsFinalAnswer ? (
+                          <ConversationAssistantTextActions
+                            text={execution.result ?? text}
+                            createdAt={assistantAnswerTimestamp(executionTurn)}
+                            entityId={item.block.messageId ?? undefined}
+                            onFeedbackAction={feedbackActionForBlock(item.block)}
+                            unsupportedFeedbackReason={feedbackDisabledReason}
+                            unsupportedForkReason={
+                              readOnlySource
+                                ? "继承来源只读。"
+                                : (forkBlockedReason ?? forkUnavailableReason)
+                            }
+                            onForkAction={
+                              !readOnlySource &&
+                              !forkBlockedReason &&
+                              execution.status === "completed" &&
+                              onForkExecution
+                                ? () => onForkExecution(execution.id)
+                                : undefined
+                            }
+                            forkActionId={execution.id}
+                            className="mt-1 opacity-0 transition-opacity group-hover/assistant-row:opacity-100 focus-within:opacity-100"
+                          />
+                        ) : null}
                       </Message>
                     );
                   }
@@ -447,7 +907,11 @@ export function EngineConversationTimeline({
                   }
                 })}
                 {execution.result && !finalAlreadyShown ? (
-                  <Message from="assistant" data-testid={`engine-final-${execution.id}`}>
+                  <Message
+                    from="assistant"
+                    className="group/assistant-row"
+                    data-testid={`engine-final-${execution.id}`}
+                  >
                     <MessageContent>
                       {deltas.length ? (
                         <p className="mb-1 text-xs text-foreground-subtle">
@@ -462,6 +926,30 @@ export function EngineConversationTimeline({
                         {execution.result}
                       </MessageResponse>
                     </MessageContent>
+                    {!streaming && hasAssistantAnswer ? (
+                      <ConversationAssistantTextActions
+                        text={execution.result}
+                        createdAt={assistantAnswerTimestamp(executionTurn)}
+                        entityId={executionTurn.deltas.at(-1)?.messageId ?? undefined}
+                        onFeedbackAction={feedbackActionForBlock(executionTurn.deltas.at(-1))}
+                        unsupportedFeedbackReason={feedbackDisabledReason}
+                        unsupportedForkReason={
+                          readOnlySource
+                            ? "继承来源只读。"
+                            : (forkBlockedReason ?? forkUnavailableReason)
+                        }
+                        onForkAction={
+                          !readOnlySource &&
+                          !forkBlockedReason &&
+                          execution.status === "completed" &&
+                          onForkExecution
+                            ? () => onForkExecution(execution.id)
+                            : undefined
+                        }
+                        forkActionId={execution.id}
+                        className="mt-1 opacity-0 transition-opacity group-hover/assistant-row:opacity-100 focus-within:opacity-100"
+                      />
+                    ) : null}
                   </Message>
                 ) : null}
                 {!deltas.length && !execution.result && !toolParts.size && streaming ? (
@@ -495,19 +983,20 @@ export function EngineConversationTimeline({
                   </p>
                 ) : null}
                 {executionTurn.approvals.map((approval) => (
-                  <InlineApproval
+                  <ApprovalEntry
                     key={approval.id}
                     approval={approval}
-                    disabledReason={approvalBlockedReason}
+                    workspacePath={workspacePath}
+                    disabledReason={readOnlySource ? "继承来源只读。" : approvalBlockedReason}
                     busyAction={busyAction}
-                    onReply={(approvalId, optionId) => onReplyApproval(approvalId, optionId)}
+                    onReply={onReplyApproval}
                   />
                 ))}
                 {executionTurn.userInputs.map((request) => (
                   <InlineUserInput
                     key={request.id}
                     request={request}
-                    disabledReason={userInputBlockedReason}
+                    disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
                     busyAction={busyAction}
                     onReply={onReplyUserInput}
                   />
@@ -535,7 +1024,7 @@ export function EngineConversationTimeline({
                   : `输入状态：${recordStatusLabel(turn.input.status)}；等待关联 Execution。`}
             </p>
           ) : null}
-        </section>
+        </EngineTurnFrame>
       ))}
       {projection.unassociatedExecutions.map((execution) => (
         <p
@@ -550,11 +1039,12 @@ export function EngineConversationTimeline({
           <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
             审批 {shortId(approval.id)} 没有可靠的 Execution 关联，单独显示以保留答复入口。
           </p>
-          <InlineApproval
+          <ApprovalEntry
             approval={approval}
-            disabledReason={approvalBlockedReason}
+            workspacePath={workspacePath}
+            disabledReason={readOnlySource ? "继承来源只读。" : approvalBlockedReason}
             busyAction={busyAction}
-            onReply={(approvalId, optionId) => onReplyApproval(approvalId, optionId)}
+            onReply={onReplyApproval}
           />
         </div>
       ))}
@@ -565,7 +1055,7 @@ export function EngineConversationTimeline({
           </p>
           <InlineUserInput
             request={request}
-            disabledReason={userInputBlockedReason}
+            disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
             busyAction={busyAction}
             onReply={onReplyUserInput}
           />

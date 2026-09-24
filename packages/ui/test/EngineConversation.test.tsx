@@ -20,6 +20,7 @@ const capabilities = {
   "events.file": available,
   "approval.respond": available,
   "user-input.respond": available,
+  "assistant.feedback": available,
 };
 const currentEngine = {
   engineId,
@@ -92,6 +93,17 @@ function installDom() {
   })) as typeof win.matchMedia;
   win.HTMLCanvasElement.prototype.getContext = (() =>
     null) as typeof win.HTMLCanvasElement.prototype.getContext;
+  win.Range.prototype.getBoundingClientRect = () => new win.DOMRect();
+  win.HTMLElement.prototype.scrollIntoView = () => {};
+  Object.defineProperty(win.HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get() {
+      return this.getAttribute("role") === "listbox" ? 224 : 0;
+    },
+  });
+  win.Element.prototype.hasPointerCapture = () => false;
+  win.Element.prototype.setPointerCapture = () => {};
+  win.Element.prototype.releasePointerCapture = () => {};
   for (const [key, value] of Object.entries({
     window: win,
     document: win.document,
@@ -100,11 +112,13 @@ function installDom() {
     HTMLElement: win.HTMLElement,
     HTMLInputElement: win.HTMLInputElement,
     HTMLTextAreaElement: win.HTMLTextAreaElement,
+    Text: win.Text,
     Element: win.Element,
     Event: win.Event,
     CustomEvent: win.CustomEvent,
     FocusEvent: win.FocusEvent,
     Node: win.Node,
+    DocumentFragment: win.DocumentFragment,
     NodeFilter: win.NodeFilter,
     SVGElement: win.SVGElement,
     CSSStyleSheet: win.CSSStyleSheet,
@@ -183,8 +197,16 @@ test("EngineConversation sends through the product composer and renders ordered 
   let nextRound = 0;
   let deliverySequence = 0;
   const changes = new Set<(change: { taskId: string; task: any; history: any }) => void>();
-  const submissions: Array<{ text: string; inputId: string; executionId: string }> = [];
+  const submissions: Array<{
+    text: string;
+    inputId: string;
+    executionId: string;
+    attachments?: Array<Record<string, unknown>>;
+  }> = [];
+  const stagedAttachmentRequests: Array<Record<string, unknown>> = [];
+  const selectedLocalPaths = ["/tmp/anyagent-ui/src/two.ts"];
   const replies: Array<{ approvalId: string; optionId: string }> = [];
+  const feedbackRequests: Array<Record<string, unknown>> = [];
   const stopRequests: Array<{ taskId: string; executionId: string }> = [];
   let failNextSubmit = false;
   let clock = 1_000;
@@ -211,7 +233,24 @@ test("EngineConversation sends through the product composer and renders ordered 
     listTasks: async () => [taskRecord(taskId), taskRecord(taskBId)],
     getTask: async (id: string) => taskRecord(id),
     getHistory: async (id: string) => (id === taskBId ? historyB : history),
-    submitInput: async ({ taskId: submittedTaskId, text }: { taskId: string; text: string }) => {
+    stageAttachment: async (input: Record<string, unknown>) => {
+      stagedAttachmentRequests.push(input);
+      return {
+        id: `runtime-attachment-${stagedAttachmentRequests.length}`,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        sizeBytes: 12,
+      };
+    },
+    submitInput: async ({
+      taskId: submittedTaskId,
+      text,
+      attachments,
+    }: {
+      taskId: string;
+      text: string;
+      attachments?: Array<Record<string, unknown>>;
+    }) => {
       if (failNextSubmit) {
         failNextSubmit = false;
         throw new Error("Fake host rejected this input");
@@ -257,7 +296,7 @@ test("EngineConversation sends through the product composer and renders ordered 
         ],
       };
       emit();
-      submissions.push({ text, inputId, executionId });
+      submissions.push({ text, inputId, executionId, ...(attachments ? { attachments } : {}) });
     },
     replyToApproval: async ({ approvalId, optionId }: { approvalId: string; optionId: string }) => {
       replies.push({ approvalId, optionId });
@@ -272,6 +311,10 @@ test("EngineConversation sends through the product composer and renders ordered 
       emit();
     },
     replyToUserInput: async () => {},
+    setAssistantFeedback: async (input: Record<string, unknown>) => {
+      feedbackRequests.push(input);
+      return { status: "updated" };
+    },
     requestStop: async ({
       taskId: requestedTaskId,
       executionId,
@@ -302,6 +345,7 @@ test("EngineConversation sends through the product composer and renders ordered 
   };
   const services = {
     settingService: { get: async () => ({}) },
+    clientConfigService: { getSnapshot: async () => ({ pluginStoreOrder: null }) },
     subagentsService: {
       list: async () => ({
         agents: [],
@@ -311,7 +355,11 @@ test("EngineConversation sends through the product composer and renders ordered 
       }),
     },
   };
-  const platform = { onSettingsChanged: () => () => {} };
+  const platform = {
+    canSelectFilePath: true,
+    selectFiles: async () => selectedLocalPaths,
+    onSettingsChanged: () => () => {},
+  };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -381,9 +429,36 @@ test("EngineConversation sends through the product composer and renders ordered 
     const modelTrigger = container.querySelector<HTMLButtonElement>(
       '[data-testid="chat-model-select-trigger"]',
     );
+    const permissionModeTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-testid="chat-mode-select-trigger"]',
+    );
+    const thoughtLevelTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-testid="chat-thought-level-select-trigger"]',
+    );
+    const addContextTrigger = container
+      .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
+      ?.closest("button") as HTMLButtonElement | null;
+    const composerSubmit = () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]');
     assert.ok(composer?.querySelector(".chat-composer-input-surface"));
     assert.ok(modelTrigger?.closest("[data-composer-trailing-actions]"));
     assert.equal(modelTrigger.getAttribute("data-model-current-value"), `harness:${engineId}`);
+    assert.ok(permissionModeTrigger, "the native permission mode control remains visible");
+    assert.equal(permissionModeTrigger.disabled, true);
+    assert.match(
+      permissionModeTrigger.getAttribute("aria-label") ?? "",
+      /AnyAgent 当前 Harness 接入尚未映射权限\/执行模式设置/,
+    );
+    assert.match(permissionModeTrigger.textContent ?? "", /接入未映射/);
+    assert.ok(thoughtLevelTrigger, "the native thought level control remains visible");
+    assert.equal(thoughtLevelTrigger.disabled, true);
+    assert.match(
+      thoughtLevelTrigger.getAttribute("aria-label") ?? "",
+      /AnyAgent 当前 Harness 接入尚未映射推理档位设置/,
+    );
+    assert.match(thoughtLevelTrigger.textContent ?? "", /接入未映射/);
+    assert.ok(addContextTrigger, "the native + action remains visible");
+    assert.equal(addContextTrigger.disabled, false);
     assert.ok(engineProbePaths.includes("/tmp/anyagent-ui"));
     const conversationScroll = container.querySelector<HTMLElement>(
       '[data-testid="engine-conversation-scroll"]',
@@ -434,7 +509,7 @@ test("EngineConversation sends through the product composer and renders ordered 
         sourceSequence: deliverySequence,
         deliverySequence,
         observedAt: 1_000 + deliverySequence,
-        source: "adapter",
+        source: "engine",
         type: "message.delta",
         payload,
         duplicateOf: null,
@@ -483,7 +558,96 @@ test("EngineConversation sends through the product composer and renders ordered 
 
     const firstStream = "First **answer** and code:\n\n```ts\nconst round = 1;\n```";
     const firstAnswer = `${firstStream}\n\nFinal line. [README.md](README.md)`;
-    await send("first request");
+    await act(async () => addContextTrigger.click());
+    assert.equal(addContextTrigger.getAttribute("aria-expanded"), "true");
+    await waitFor(
+      () =>
+        assert.ok(
+          document.querySelector('[data-testid="engine-composer-attachment-menu-item"]'),
+          "the native + menu should expose the attachment action",
+        ),
+      "attachment action did not appear in the native composer menu",
+    );
+    const attachmentMenuItem = document.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-attachment-menu-item"]',
+    );
+    assert.ok(attachmentMenuItem);
+    const attachmentOption = attachmentMenuItem.closest<HTMLElement>('[role="option"]');
+    assert.ok(attachmentOption);
+    await act(async () => {
+      attachmentOption.dispatchEvent(
+        new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }),
+      );
+    });
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-testid="engine-composer-attachment-0"]')),
+      "the selected local file should appear as a removable native attachment chip",
+    );
+    const firstInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E: {
+        setTextWithPluginMentions: (value: string) => void;
+      };
+    };
+    const structuredMentionPrompt =
+      "first request [@Review Plugin](plugin://openai.review@1.0.0)";
+    await act(async () =>
+      firstInput.__zcodeLexicalInputE2E.setTextWithPluginMentions(structuredMentionPrompt),
+    );
+    failNextSubmit = true;
+    await act(async () => composerSubmit()?.click());
+    await waitFor(
+      () => assert.ok(container.textContent?.includes("Fake host rejected this input")),
+      "failed submission should report the Host rejection",
+    );
+    assert.ok(
+      container.querySelector('[data-testid="engine-composer-attachment-0"]'),
+      "a rejected submission should preserve the selected attachment",
+    );
+    assert.equal(submissions.length, 0);
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(submissions.length, 1), "attachment retry was not submitted");
+    assert.deepEqual(stagedAttachmentRequests, [
+      {
+        taskId,
+        participantId,
+        sessionId,
+        authorizationId: "authorization-engine-ui",
+        localPath: "/tmp/anyagent-ui/src/two.ts",
+        fileName: "two.ts",
+        mimeType: "application/octet-stream",
+        sizeBytes: 0,
+      },
+      {
+        taskId,
+        participantId,
+        sessionId,
+        authorizationId: "authorization-engine-ui",
+        localPath: "/tmp/anyagent-ui/src/two.ts",
+        fileName: "two.ts",
+        mimeType: "application/octet-stream",
+        sizeBytes: 0,
+      },
+    ]);
+    assert.deepEqual(submissions[0]?.attachments, [
+      {
+        id: "runtime-attachment-2",
+        fileName: "two.ts",
+        mimeType: "application/octet-stream",
+        sizeBytes: 12,
+      },
+    ]);
+    assert.equal(
+      submissions[0]?.text,
+      structuredMentionPrompt,
+      "structured @ Plugin mention markdown should survive submit alongside staged attachments",
+    );
+    await waitFor(
+      () =>
+        assert.equal(container.querySelector('[data-testid="engine-composer-attachments"]'), null),
+      "accepted submission should clear the attachment chip",
+    );
     const conversationTimeline = container.querySelector(
       '[data-testid="engine-conversation-timeline"]',
     );
@@ -502,8 +666,35 @@ test("EngineConversation sends through the product composer and renders ordered 
       modelTrigger,
       "sending should keep the native composer and model selector mounted",
     );
+    assert.equal(
+      container.querySelector('[data-testid="chat-mode-select-trigger"]'),
+      permissionModeTrigger,
+      "sending should keep the disabled native permission mode control mounted",
+    );
+    assert.equal(
+      container.querySelector('[data-testid="chat-thought-level-select-trigger"]'),
+      thoughtLevelTrigger,
+      "sending should keep the disabled native thought level control mounted",
+    );
+    assert.equal(
+      container
+        .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
+        ?.closest("button")?.disabled,
+      true,
+      "the native + action should be disabled while the Host is handling the submission",
+    );
+    permissionModeTrigger.click();
+    thoughtLevelTrigger.click();
+    assert.equal(permissionModeTrigger.disabled, true);
+    assert.equal(thoughtLevelTrigger.disabled, true);
+    assert.equal(
+      container
+        .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
+        ?.closest("button")?.disabled,
+      true,
+    );
     await waitFor(
-      () => assert.equal(reportedTitle, "first request"),
+      () => assert.equal(reportedTitle, structuredMentionPrompt),
       "native header title did not follow the first input",
     );
     await sendDelta(1, "First **answer** and code:\n\n```ts\n", true);
@@ -561,6 +752,32 @@ test("EngineConversation sends through the product composer and renders ordered 
     });
     await finish(1, firstAnswer);
     assert.equal(conversationScroll.scrollTop, 500, "returning near the tail resumes following");
+    const likeButton = container.querySelector<HTMLButtonElement>('button[aria-label="赞"]');
+    assert.ok(likeButton, "native assistant message actions should expose Runtime-backed Like");
+    await act(async () => likeButton.click());
+    await waitFor(
+      () =>
+        assert.deepEqual(feedbackRequests, [
+          {
+            taskId,
+            participantId,
+            sessionId,
+            authorizationId: "authorization-engine-ui",
+            executionId: "execution-z-first",
+            messageId: "native-message-1",
+            feedback: "like",
+          },
+        ]),
+      "Like did not retain the originating Task, Session, Execution and native message identity",
+    );
+    await waitFor(
+      () =>
+        assert.equal(
+          container.querySelector('button[aria-label="已赞"]')?.getAttribute("aria-pressed"),
+          "true",
+        ),
+      "successful native Like should keep the message action selected",
+    );
     const fileLink = container.querySelector<HTMLButtonElement>(
       'button[title="/tmp/anyagent-ui/README.md"]',
     );
@@ -697,7 +914,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     );
     assert.deepEqual(
       submissions.map(({ text }) => text),
-      ["first request", "second request"],
+      [structuredMentionPrompt, "second request"],
       "the real ChatPromptEditor must submit the user's current composer text",
     );
 
@@ -716,8 +933,6 @@ test("EngineConversation sends through the product composer and renders ordered 
     assert.match(diagnostic.textContent ?? "", /配置版本：cfg-1/);
     inspectorOpen = false;
     await act(async () => root.render(appFor(taskId)));
-    const composerSubmit = () =>
-      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]');
     const checkCapability = async (
       capability: { support: string; availability: string; reason?: string },
       state: "current" | "unknown",
@@ -1226,6 +1441,348 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
   } finally {
     await act(async () => root.unmount());
     container.remove();
+    dom.window.close();
+  }
+});
+
+test("an active ZCode Harness task switches models within its Session and submits the chosen model", async () => {
+  const dom = installDom();
+  const [
+    { EngineConversation },
+    { ServiceProvider },
+    { PlatformProvider },
+    { ZCodeIntlProvider },
+    { TabStoreProvider },
+    { TooltipProvider },
+    { useZCodeSessionStore },
+  ] = await Promise.all([
+    import("../src/EngineConversation.js"),
+    import("../src/hooks/useServices.js"),
+    import("../src/hooks/usePlatform.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/store/TabStoreProvider.js"),
+    import("../src/components/ui/tooltip.js"),
+    import("../src/store/zcodeSessionStore.js"),
+  ]);
+  const zcodeEngine = { ...currentEngine, engineId: "zcode" };
+  const zcodeTask = {
+    ...task,
+    engine: { ...task.engine, engineId: "zcode" },
+    currentEngine: zcodeEngine,
+    session: { ...task.session, nativeSessionId: "native-zcode-session-ui" },
+  };
+  const workspacePath = "/tmp/anyagent-ui";
+  const zcodeSlashCommands = [
+    { name: "compact", description: "Compact", source: "builtin" as const },
+    { name: "goal", description: "Goal", source: "builtin" as const },
+    { name: "help", description: "Help", source: "builtin" as const },
+    { name: "mode", description: "Mode", source: "builtin" as const },
+    { name: "init", description: "Initialize", source: "builtin" as const },
+    { name: "skill", description: "Use a skill", source: "builtin" as const },
+    { name: "custom-note", description: "Custom prompt", source: "custom" as const },
+  ];
+  const zcodeSessionStore = useZCodeSessionStore.getState();
+  const originalSlashCommands = zcodeSessionStore.getWorkspaceState(workspacePath).slashCommands;
+  zcodeSessionStore.setSlashCommands(workspacePath, zcodeSlashCommands);
+  const modelView = {
+    revision: 1,
+    providers: [
+      {
+        providerId: "opencode-go",
+        providerName: "OpenCode Go",
+        config: { api: { type: "openai" }, visibility: "visible" },
+        models: [
+          {
+            modelId: "go-alpha",
+            config: { optionSpecs: { reasoningLevel: { values: ["low", "high"] } } },
+          },
+          {
+            modelId: "go-beta",
+            config: { optionSpecs: { reasoningLevel: { values: ["low", "high"] } } },
+          },
+        ],
+      },
+      {
+        providerId: "other-provider",
+        providerName: "Other Provider",
+        config: { api: { type: "openai" }, visibility: "visible" },
+        models: [
+          {
+            modelId: "other-model",
+            config: { optionSpecs: { reasoningLevel: { values: ["low", "high"] } } },
+          },
+        ],
+      },
+    ],
+    preferredSelection: {
+      providerId: "opencode-go",
+      modelId: "go-alpha",
+      options: { reasoningLevel: "high" },
+    },
+  };
+  const submissions: Array<Record<string, unknown>> = [];
+  const skillCatalogLookups: Array<Record<string, unknown>> = [];
+  const history = emptyHistory();
+  history.inputs.push({
+    id: "input-initial",
+    taskId,
+    participantId,
+    sessionId,
+    text: "earlier turn",
+    submissionConfig: {
+      mode: "build",
+      planEnabled: false,
+      modelSelection: {
+        providerId: "opencode-go",
+        modelId: "go-alpha",
+        options: { reasoningLevel: "high" },
+      },
+    },
+    status: "completed",
+    receivedAt: 900,
+    acceptedAt: 901,
+    startedAt: 902,
+    terminalAt: 950,
+    error: null,
+  });
+  const service = {
+    listTasks: async () => [zcodeTask],
+    getTask: async () => zcodeTask,
+    getHistory: async () => history,
+    listEngines: async () => [zcodeEngine],
+    onDidChange: () => ({ dispose: () => {} }),
+    submitInput: async (input: Record<string, unknown>) => {
+      submissions.push(input);
+    },
+  };
+  const services = {
+    clientConfigService: { getSnapshot: async () => ({ pluginStoreOrder: null }) },
+    fileService: { searchWorkspaceFiles: async () => [] },
+    subagentsService: {
+      list: async () => ({
+        agents: [],
+        userAgents: [],
+        pluginAgents: [],
+        capability: { userScopeAvailable: false },
+      }),
+    },
+    zcodeAgentService: {
+      getSkillReferenceCatalog: async (params: Record<string, unknown>) => {
+        skillCatalogLookups.push(params);
+        return { skills: [], authority: "session" };
+      },
+      onAgentRuntimeRestarted: () => ({ dispose: () => {} }),
+    },
+    modelSelectionService: {
+      getView: async () => modelView,
+      onDidChange: () => ({ dispose: () => {} }),
+    },
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(
+            ServiceProvider,
+            { services: services as never },
+            createElement(
+              PlatformProvider,
+              { platform: { onSettingsChanged: () => () => {} } as never },
+              createElement(
+                ZCodeIntlProvider,
+                { initialLocale: "zh-CN" },
+                createElement(
+                  TabStoreProvider,
+                  null,
+                  createElement(EngineConversation, {
+                    service: service as never,
+                    selectedTaskId: taskId,
+                    onSelectTask: () => {},
+                  }),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    const modelTrigger = () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="chat-model-select-trigger"]');
+    await waitFor(() => {
+      assert.match(modelTrigger()?.textContent ?? "", /go-alpha/);
+      assert.equal(
+        container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+          ?.disabled,
+        false,
+      );
+    }, "ZCode Harness model did not become ready");
+    await act(async () => {
+      const trigger = modelTrigger()!;
+      trigger.dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+      trigger.dispatchEvent(new dom.window.MouseEvent("pointerup", { bubbles: true, button: 0 }));
+      trigger.click();
+    });
+    await waitFor(
+      () =>
+        assert.ok(document.body.querySelector('[data-model-provider-key="harness-zcode-models"]')),
+      "Harness model group did not open",
+    );
+    const harnessModels = document.body.querySelector<HTMLElement>(
+      '[data-model-provider-key="harness-zcode-models"]',
+    );
+    assert.ok(harnessModels, "native picker should group models under ZCode Harness");
+    await act(async () => harnessModels.click());
+    const other = [
+      ...document.body.querySelectorAll<HTMLElement>('[data-testid^="chat-model-select-item-"]'),
+    ].find((item) => item.textContent?.includes("other-model"));
+    assert.equal(
+      other?.getAttribute("data-model-option-locked"),
+      "true",
+      "an active Session must reject cross-Provider model changes",
+    );
+    const beta = [
+      ...document.body.querySelectorAll<HTMLElement>('[data-testid^="chat-model-select-item-"]'),
+    ].find(
+      (item) =>
+        item.textContent?.includes("go-beta") &&
+        item.getAttribute("data-model-option-locked") !== "true",
+    );
+    assert.ok(beta, "same-Harness model must be selectable in the native model picker");
+    await act(async () => beta.click());
+    await waitFor(
+      () => assert.match(modelTrigger()?.textContent ?? "", /go-beta/),
+      "model did not change",
+    );
+    const chooseConfig = async (triggerTestId: string, itemTestId: string) => {
+      const trigger = container.querySelector<HTMLButtonElement>(
+        `[data-testid="${triggerTestId}"]`,
+      );
+      assert.ok(trigger && !trigger.disabled);
+      await act(async () => trigger.click());
+      await waitFor(
+        () => assert.ok(document.body.querySelector(`[data-testid="${itemTestId}"]`)),
+        `${itemTestId} did not open`,
+      );
+      await act(async () =>
+        document.body.querySelector<HTMLElement>(`[data-testid="${itemTestId}"]`)!.click(),
+      );
+    };
+    await chooseConfig("chat-mode-select-trigger", "chat-mode-select-item-edit");
+    await chooseConfig("chat-thought-level-select-trigger", "chat-thought-level-select-item-low");
+    const input = container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]') as
+      | (HTMLElement & {
+          __zcodeLexicalInputE2E?: {
+            setText: (value: string) => void;
+            setTextWithPluginMentions: (value: string) => void;
+            getText: () => string;
+          };
+        })
+      | null;
+    assert.ok(input?.__zcodeLexicalInputE2E);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("Use the selected model"));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
+    );
+    await waitFor(() => assert.equal(submissions.length, 1), "the chosen model was not submitted");
+    const submissionConfig = submissions[0]?.submissionConfig as Record<string, unknown>;
+    assert.deepEqual(submissionConfig.modelSelection, {
+      providerId: "opencode-go",
+      modelId: "go-beta",
+      options: { reasoningLevel: "low" },
+    });
+    assert.equal(submissions[0]?.sessionId, sessionId);
+    assert.equal(submissionConfig.mode, "edit");
+    await waitFor(
+      () => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""),
+      "accepted input did not clear",
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/compact"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-testid="prompt-suggestion-panel"]')),
+      "native slash suggestions did not open",
+    );
+    assert.equal(
+      container.querySelector('[data-option-id="slash:compact"]'),
+      null,
+      "the native-only compact command must not be advertised as a Harness action",
+    );
+    await act(async () =>
+      input.__zcodeLexicalInputE2E!.setText("/compact instructions"),
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
+    );
+    assert.equal(submissions.length, 1, "unmapped /compact must not become submitInput text");
+    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/compact instructions");
+    assert.match(
+      container.querySelector('[role="status"]')?.textContent ?? "",
+      /独立的上下文维护操作.*没有对应操作.*输入已保留/,
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/skill"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:skill"]')),
+      "safe native Skill prompt command should remain available",
+    );
+    await waitFor(
+      () => assert.ok(skillCatalogLookups.some((lookup) => lookup.sessionId === "native-zcode-session-ui")),
+      "native Skill catalog did not receive the verified native Session ID",
+    );
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/plan"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="app-slash:plan"]')),
+      "the product-routed /plan shortcut should be available in the native composer",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="app-slash:plan"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await waitFor(
+      () => assert.ok(input.__zcodeLexicalInputE2E!.getText() === ""),
+      "selecting /plan should consume only the local mode shortcut",
+    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/plan explain the change"));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
+    );
+    await waitFor(() => assert.equal(submissions.length, 2), "/plan task was not submitted");
+    assert.equal(submissions[1]?.text, "explain the change");
+    assert.equal(
+      (submissions[1]?.submissionConfig as Record<string, unknown>)?.planEnabled,
+      true,
+      "/plan task should route through the product submission config in plan mode",
+    );
+
+    const structuredMentionPrompt =
+      "Inspect [@Review Plugin](plugin://openai.review@1.0.0) before proposing changes";
+    await act(async () =>
+      input.__zcodeLexicalInputE2E!.setTextWithPluginMentions(structuredMentionPrompt),
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
+    );
+    await waitFor(() => assert.equal(submissions.length, 3), "structured mention prompt was not sent");
+    assert.equal(
+      submissions[2]?.text,
+      structuredMentionPrompt,
+      "structured @ Plugin mention markdown should survive Harness submission",
+    );
+    await act(async () => {
+      input.blur();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    zcodeSessionStore.setSlashCommands(workspacePath, originalSlashCommands);
     dom.window.close();
   }
 });

@@ -14,7 +14,9 @@ export type CapabilityState = CapabilityStatus;
 
 export const capabilityNames = [
   ["session.create", "创建 Session"],
+  ["session.fork", "从回答分叉"],
   ["execution.run", "运行输入"],
+  ["execution.revise", "编辑或重试轮次"],
   ["execution.interrupt", "请求中断"],
   ["approval.respond", "回答审批"],
   ["user-input.respond", "回答用户输入"],

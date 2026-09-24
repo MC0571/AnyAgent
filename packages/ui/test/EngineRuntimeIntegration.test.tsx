@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { FakeEngine, type FakeEngineStep } from "../../anyagent-engine/src/index.js";
 import { createTaskRuntime } from "../../anyagent-runtime/src/index.js";
+import { WORKFLOW_REFINE_PERMISSION_OPTION_ID } from "@zcode/shared";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -29,6 +30,18 @@ function installDom() {
   })) as typeof win.matchMedia;
   win.HTMLCanvasElement.prototype.getContext = (() =>
     null) as typeof win.HTMLCanvasElement.prototype.getContext;
+  Object.defineProperty(win.HTMLElement.prototype, "attachEvent", {
+    configurable: true,
+    value: function (this: HTMLElement, eventName: string, listener: EventListener) {
+      this.addEventListener(eventName.slice(2), listener);
+    },
+  });
+  Object.defineProperty(win.HTMLElement.prototype, "detachEvent", {
+    configurable: true,
+    value: function (this: HTMLElement, eventName: string, listener: EventListener) {
+      this.removeEventListener(eventName.slice(2), listener);
+    },
+  });
   for (const [key, value] of Object.entries({
     window: win,
     document: win.document,
@@ -37,6 +50,7 @@ function installDom() {
     HTMLElement: win.HTMLElement,
     Element: win.Element,
     Node: win.Node,
+    DocumentFragment: win.DocumentFragment,
     SVGElement: win.SVGElement,
     CSSStyleSheet: win.CSSStyleSheet,
     MutationObserver: win.MutationObserver,
@@ -94,6 +108,7 @@ async function mount(script: readonly FakeEngineStep[]) {
         "session.create",
         "execution.run",
         "approval.respond",
+        "user-input.respond",
         "execution.interrupt",
         "task.close",
       ],
@@ -298,6 +313,306 @@ test("mounted conversation shows approval expiry without forwarding an answer", 
     assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.repliedOptionId, null);
     assert.equal(ui.runtime.getHistory(ui.task.id)?.executions[0]?.status, "started");
     assert.match(ui.container.textContent ?? "", /审批 · expired write · 已过期/);
+  } finally {
+    await ui.close();
+  }
+});
+
+test("mounted ZCode permission request uses PermissionDialog and replies through Runtime scope", async () => {
+  const ui = await mount([
+    { type: "input.accepted" },
+    { type: "execution.started" },
+    {
+      type: "approval.requested",
+      operation: "Write",
+      scope: "edit a file",
+      presentation: {
+        toolCallId: "native-tool-call",
+        riskLevel: "high",
+        input: { file_path: "src/target.ts", content: "replacement" },
+        origin: {
+          kind: "subagent",
+          agentId: "native-agent",
+          agentType: "worker",
+          childSessionId: "native-child-session",
+          parentSessionId: "native-parent-session",
+        },
+      },
+      options: [
+        {
+          id: "allow",
+          label: "Allow once",
+          decision: "approve",
+          presentation: { kind: "allowOnce", response: { decision: "allow" } },
+        },
+        {
+          id: "deny",
+          label: "Deny",
+          decision: "reject",
+          presentation: { kind: "deny", response: { decision: "deny" } },
+        },
+      ],
+    },
+  ]);
+  try {
+    await ui.send("edit the file");
+    await ui.advance(3);
+    await waitFor(() => {
+      assert.ok(ui.container.querySelector('[data-permission-option-kind="allowOnce"]'));
+      assert.ok(ui.container.querySelector('[data-interaction-origin-badge="subagent"]'));
+      assert.ok(ui.container.textContent?.includes("edit a file"));
+    });
+
+    const [approval] = ui.runtime.getHistory(ui.task.id)?.approvals ?? [];
+    assert.equal(approval?.taskId, ui.task.id);
+    assert.equal(approval?.participantId, ui.task.participant.id);
+    assert.equal(approval?.sessionId, ui.task.session.id);
+    assert.equal(approval?.executionId, ui.runtime.getHistory(ui.task.id)?.executions[0]?.id);
+    assert.equal(approval?.presentation?.toolCallId, "native-tool-call");
+    assert.deepEqual(approval?.options[0]?.presentation, {
+      kind: "allowOnce",
+      response: { decision: "allow" },
+    });
+
+    const allow = ui.container.querySelector(
+      '[data-permission-option-kind="allowOnce"]',
+    ) as HTMLButtonElement;
+    await act(async () => allow.click());
+    await waitFor(() =>
+      assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.status, "forwarded"),
+    );
+    assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.repliedOptionId, "allow");
+  } finally {
+    await ui.close();
+  }
+});
+
+test("mounted workflow Refine uses PermissionDialog and sends feedback through Runtime", async () => {
+  const ui = await mount([
+    { type: "input.accepted" },
+    { type: "execution.started" },
+    {
+      type: "approval.requested",
+      operation: "CreateWorkflow",
+      scope: "run the workflow",
+      presentation: {
+        toolCallId: "workflow-tool-call",
+        input: { script: "phase one" },
+      },
+      options: [
+        {
+          id: "allow",
+          label: "Allow once",
+          decision: "approve",
+          presentation: { kind: "allowOnce", response: { decision: "allow" } },
+        },
+        {
+          id: WORKFLOW_REFINE_PERMISSION_OPTION_ID,
+          label: "Refine",
+          decision: "reject",
+          requiresFeedback: true,
+          presentation: { kind: "deny", response: { decision: "deny" } },
+        },
+      ],
+    },
+  ]);
+  try {
+    await ui.send("run workflow");
+    await ui.advance(3);
+    await waitFor(() =>
+      assert.ok(ui.container.querySelector('[data-permission-feedback-option="workflowRefine"]')),
+    );
+    const approval = ui.runtime.getHistory(ui.task.id)?.approvals[0];
+    assert.equal(approval?.taskId, ui.task.id);
+    assert.equal(approval?.participantId, ui.task.participant.id);
+    assert.equal(approval?.sessionId, ui.task.session.id);
+    assert.equal(approval?.executionId, ui.runtime.getHistory(ui.task.id)?.executions[0]?.id);
+    assert.equal(
+      approval?.options.find((option) => option.id === WORKFLOW_REFINE_PERMISSION_OPTION_ID)
+        ?.requiresFeedback,
+      true,
+    );
+
+    await assert.rejects(
+      ui.runtime.replyToApproval({
+        taskId: ui.task.id,
+        participantId: ui.task.participant.id,
+        sessionId: ui.task.session.id,
+        authorizationId: ui.task.authorizationId,
+        approvalId: approval!.id,
+        optionId: WORKFLOW_REFINE_PERMISSION_OPTION_ID,
+      }),
+      /requires non-empty user feedback/,
+    );
+    assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.status, "pending");
+    assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.repliedOptionId, null);
+
+    let forwardedFeedback: string | undefined;
+    const nativeReply = ui.fake.replyToApproval.bind(ui.fake);
+    ui.fake.replyToApproval = async (input) => {
+      forwardedFeedback = input.feedback;
+      return nativeReply(input);
+    };
+    const feedback = ui.container.querySelector(
+      '[data-permission-feedback-option="workflowRefine"]',
+    ) as HTMLTextAreaElement;
+    const setValue = Object.getOwnPropertyDescriptor(feedback.constructor.prototype, "value")?.set;
+    assert.ok(setValue);
+    await act(async () => {
+      feedback.focus();
+      setValue.call(feedback, "change the workflow order");
+      feedback.dispatchEvent(
+        new feedback.ownerDocument.defaultView!.KeyboardEvent("keyup", {
+          bubbles: true,
+          key: "e",
+        }),
+      );
+    });
+    await waitFor(() =>
+      assert.equal(
+        (ui.container.querySelector('button[aria-label="确认"]') as HTMLButtonElement).disabled,
+        false,
+      ),
+    );
+    await act(async () =>
+      (ui.container.querySelector('button[aria-label="确认"]') as HTMLButtonElement).click(),
+    );
+    await waitFor(() =>
+      assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.status, "forwarded"),
+    );
+    assert.equal(forwardedFeedback, "change the workflow order");
+    assert.equal(
+      ui.runtime.getHistory(ui.task.id)?.approvals[0]?.repliedOptionId,
+      WORKFLOW_REFINE_PERMISSION_OPTION_ID,
+    );
+  } finally {
+    await ui.close();
+  }
+});
+
+test("mounted timeline renders native choice options and forwards the selected value", async () => {
+  const ui = await mount([
+    { type: "input.accepted" },
+    { type: "execution.started" },
+    {
+      type: "user-input.requested",
+      prompt: "Which file should I update?",
+      inputKind: "choice",
+      options: [
+        { id: "src/one.ts", label: "One" },
+        { id: "src/two.ts", label: "Two" },
+      ],
+    },
+  ]);
+  try {
+    await ui.send("choose a file");
+    await ui.advance(3);
+    await waitFor(() => {
+      assert.ok(ui.container.textContent?.includes("Which file should I update?"));
+      assert.ok(ui.button("Two"));
+    });
+    assert.equal(ui.runtime.getHistory(ui.task.id)?.userInputs[0]?.inputKind, "choice");
+    assert.equal(ui.runtime.getHistory(ui.task.id)?.userInputs[0]?.status, "pending");
+
+    await act(async () => ui.button("Two").click());
+    await waitFor(() =>
+      assert.equal(ui.runtime.getHistory(ui.task.id)?.userInputs[0]?.status, "forwarded"),
+    );
+    assert.deepEqual(ui.runtime.getHistory(ui.task.id)?.userInputs[0]?.response, "src/two.ts");
+    assert.equal(ui.runtime.getHistory(ui.task.id)?.executions[0]?.status, "started");
+  } finally {
+    await ui.close();
+  }
+});
+
+test("mounted timeline reuses ElicitationDialog for native multi-question and multi-select input", async () => {
+  const ui = await mount([
+    { type: "input.accepted" },
+    { type: "execution.started" },
+    {
+      type: "user-input.requested",
+      prompt: "Please answer these questions",
+      inputKind: "form",
+      presentation: {
+        questions: [
+          {
+            question: "Which colors should I use?",
+            header: "Colors",
+            multiSelect: true,
+            options: [
+              { value: "red", label: "Red", description: "Warm" },
+              { value: "blue", label: "Blue" },
+            ],
+          },
+          {
+            question: "Use a dark theme?",
+            header: "Theme",
+            options: [
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
+            ],
+          },
+        ],
+        origin: {
+          kind: "subagent",
+          agentId: "child-1",
+          agentType: "worker",
+          childSessionId: "child-session",
+          parentSessionId: "native-session",
+        },
+      },
+    },
+  ]);
+  try {
+    await ui.send("ask questions");
+    await ui.advance(3);
+    await waitFor(() => {
+      assert.ok(ui.container.textContent?.includes("Which colors should I use?"));
+      assert.ok(ui.container.querySelector('[role="checkbox"]'));
+      assert.ok(ui.container.querySelector('[data-interaction-origin-badge="subagent"]'));
+    });
+    const request = ui.runtime.getHistory(ui.task.id)?.userInputs[0];
+    assert.equal(request?.taskId, ui.task.id);
+    assert.equal(request?.participantId, ui.task.participant.id);
+    assert.equal(request?.sessionId, ui.task.session.id);
+    assert.equal(request?.executionId, ui.runtime.getHistory(ui.task.id)?.executions[0]?.id);
+    assert.deepEqual(
+      request?.presentation?.questions.map((question) => question.multiSelect),
+      [true, undefined],
+    );
+
+    const colorOption = (label: string) => {
+      const found = [...ui.container.querySelectorAll('[role="checkbox"]')].find((item) =>
+        item.textContent?.includes(label),
+      );
+      assert.ok(found, `missing checkbox option: ${label}`);
+      return found as HTMLButtonElement;
+    };
+    await act(async () => colorOption("Red").click());
+    await act(async () => colorOption("Blue").click());
+    await act(async () =>
+      (ui.container.querySelector('button[title="下一题"]') as HTMLButtonElement).click(),
+    );
+    await waitFor(() => assert.ok(ui.container.textContent?.includes("Use a dark theme?")));
+    const yesOption = [...ui.container.querySelectorAll('[role="option"]')].find((item) =>
+      item.textContent?.includes("Yes"),
+    );
+    assert.ok(yesOption, "missing single-choice option: Yes");
+    await act(async () => (yesOption as HTMLButtonElement).click());
+    await waitFor(() =>
+      assert.equal(ui.runtime.getHistory(ui.task.id)?.userInputs[0]?.status, "forwarded"),
+    );
+    assert.deepEqual(ui.runtime.getHistory(ui.task.id)?.userInputs[0]?.response, {
+      action: "accept",
+      content: {
+        answers: {
+          "Which colors should I use?": "red, blue",
+          "Use a dark theme?": "yes",
+        },
+        answer_0: ["red", "blue"],
+        answer_1: "yes",
+      },
+    });
   } finally {
     await ui.close();
   }
