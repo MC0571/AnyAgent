@@ -101,6 +101,7 @@ export function createAnyAgentService(
         "execution.run",
         "execution.revise",
         "assistant.feedback",
+        "workspace.file-rewind",
         "approval.respond",
         "user-input.respond",
         "execution.interrupt",
