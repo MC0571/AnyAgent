@@ -382,6 +382,7 @@ test("mounted ZCode permission request uses PermissionDialog and replies through
       assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.status, "forwarded"),
     );
     assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.repliedOptionId, "allow");
+    assert.ok(!ui.container.textContent?.includes("等待 Engine 确认处理"));
   } finally {
     await ui.close();
   }

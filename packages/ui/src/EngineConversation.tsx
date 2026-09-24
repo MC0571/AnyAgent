@@ -946,7 +946,7 @@ export function EngineConversation({
           optionId,
           ...(feedback === undefined ? {} : { feedback }),
         }),
-      () => "审批答复已提交，等待 Engine 确认处理。",
+      () => null,
     );
   };
 
@@ -964,7 +964,7 @@ export function EngineConversation({
           requestId: request.id,
           response,
         }),
-      () => "用户输入答复已提交，等待 Engine 确认处理。",
+      () => null,
     );
   };
 
