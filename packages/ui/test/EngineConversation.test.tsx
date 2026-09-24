@@ -1421,7 +1421,11 @@ test("EngineConversation sends through the product composer and renders ordered 
             composerDraft: drafts.drafts[selectedTaskId],
             onRecoveredDraftChange: drafts.onRecoveredDraftChange,
             onRecoveredConfigChange: drafts.onRecoveredConfigChange,
+            draftStorageIssue: drafts.issues[selectedTaskId],
+            onRecoveredSubmitPrepare: drafts.onSubmitPrepare,
             onComposerDraftSubmitted: drafts.onSubmitted,
+            onRecoveredSubmitUncertain: drafts.onSubmitUncertain,
+            onResolveRecoveredReview: drafts.onResolveReview,
             onQueueEditPrepare: drafts.onQueueEditPrepare,
             onQueueDraftRecovered: drafts.onQueueRecovered,
             onQueueRecoveryReconcile: drafts.onQueueRecoveryReconcile,
@@ -1617,6 +1621,154 @@ test("EngineConversation sends through the product composer and renders ordered 
     } finally {
       Object.defineProperty(storagePrototype, "setItem", originalSetItem);
     }
+
+    await act(async () => root.render(queueAppFor(taskId)));
+    const recoveredA = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E: { getText: () => string; setText: (value: string) => void };
+    };
+    await waitFor(() =>
+      assert.equal(recoveredA.__zcodeLexicalInputE2E.getText(), "Recovered after navigation"),
+    );
+    Object.defineProperty(storagePrototype, "setItem", {
+      configurable: true,
+      value: () => {
+        throw new Error("draft write unavailable");
+      },
+    });
+    const submittedBeforeFailure = submissions.length;
+    try {
+      await act(async () => recoveredA.__zcodeLexicalInputE2E.setText("Edited recovered draft"));
+      await waitFor(() =>
+        assert.match(
+          container.querySelector('[data-testid="engine-queue-draft-storage-warning"]')
+            ?.textContent ?? "",
+          /未能写入本地存储/,
+        ),
+      );
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+          ?.click(),
+      );
+      assert.equal(
+        submissions.length,
+        submittedBeforeFailure,
+        "write failure must block Host send",
+      );
+    } finally {
+      Object.defineProperty(storagePrototype, "setItem", originalSetItem);
+    }
+    await act(async () =>
+      recoveredA.__zcodeLexicalInputE2E.setText("Edited recovered draft, safely stored"),
+    );
+    await waitFor(() =>
+      assert.equal(
+        container.querySelector('[data-testid="engine-queue-draft-storage-warning"]'),
+        null,
+      ),
+    );
+    const originalRemoveItemForClear = Object.getOwnPropertyDescriptor(
+      storagePrototype,
+      "removeItem",
+    )!;
+    Object.defineProperty(storagePrototype, "setItem", {
+      configurable: true,
+      value: () => {
+        throw new Error("draft write unavailable");
+      },
+    });
+    Object.defineProperty(storagePrototype, "removeItem", {
+      configurable: true,
+      value: () => {
+        throw new Error("draft removal unavailable");
+      },
+    });
+    try {
+      await act(async () => recoveredA.__zcodeLexicalInputE2E.setText(""));
+      await waitFor(() =>
+        assert.equal(
+          recoveredA.__zcodeLexicalInputE2E.getText(),
+          "Edited recovered draft, safely stored",
+        ),
+      );
+      assert.match(
+        container.querySelector('[data-testid="engine-queue-draft-storage-warning"]')
+          ?.textContent ?? "",
+        /未能写入本地存储/,
+      );
+    } finally {
+      Object.defineProperty(storagePrototype, "setItem", originalSetItem);
+      Object.defineProperty(storagePrototype, "removeItem", originalRemoveItemForClear);
+    }
+    const originalSetItemFunction = originalSetItem.value as Storage["setItem"];
+    const originalRemoveItem = Object.getOwnPropertyDescriptor(storagePrototype, "removeItem")!;
+    Object.defineProperty(storagePrototype, "setItem", {
+      configurable: true,
+      value(this: Storage, key: string, value: string) {
+        if (
+          key.startsWith("zcode-v4-composer-drafts:") &&
+          !Object.hasOwn(JSON.parse(value).scopes, `anyagent-queue-edit:${taskId}`)
+        )
+          throw new Error("draft clear unavailable");
+        return originalSetItemFunction.call(this, key, value);
+      },
+    });
+    Object.defineProperty(storagePrototype, "removeItem", {
+      configurable: true,
+      value(key: string) {
+        if (key.startsWith("zcode-v4-composer-drafts:")) throw new Error("draft clear unavailable");
+        return (originalRemoveItem.value as Storage["removeItem"]).call(this, key);
+      },
+    });
+    try {
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+          ?.click(),
+      );
+      await waitFor(() => assert.equal(submissions.length, submittedBeforeFailure + 1));
+      await waitFor(() =>
+        assert.match(
+          container.querySelector('[data-testid="engine-queue-draft-storage-warning"]')
+            ?.textContent ?? "",
+          /提交或清理结果待核对/,
+        ),
+      );
+      assert.equal(
+        readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)
+          ?.queueEditRequiresReview,
+        true,
+      );
+      await act(async () => root.render(appFor(taskBId)));
+      await act(async () => root.render(queueAppFor(taskId)));
+      await waitFor(() =>
+        assert.match(
+          container.querySelector('[data-testid="engine-queue-draft-storage-warning"]')
+            ?.textContent ?? "",
+          /旧草稿不会自动重发/,
+        ),
+      );
+      const restartedEditor = container.querySelector<HTMLElement>(
+        '[data-testid="engine-composer-input"]',
+      ) as HTMLElement & { __zcodeLexicalInputE2E?: { getText: () => string } };
+      assert.equal(restartedEditor.__zcodeLexicalInputE2E?.getText(), "");
+    } finally {
+      Object.defineProperty(storagePrototype, "setItem", originalSetItem);
+      Object.defineProperty(storagePrototype, "removeItem", originalRemoveItem);
+    }
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="engine-queue-draft-review-discard"]')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(
+        readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`),
+        null,
+      ),
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();

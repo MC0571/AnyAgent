@@ -379,7 +379,11 @@ export function EngineConversation({
   composerDraft,
   onRecoveredDraftChange,
   onRecoveredConfigChange,
+  draftStorageIssue,
+  onRecoveredSubmitPrepare,
   onComposerDraftSubmitted,
+  onRecoveredSubmitUncertain,
+  onResolveRecoveredReview,
   onQueueEditPrepare,
   onQueueDraftRecovered,
   onQueueRecoveryReconcile,
@@ -398,12 +402,20 @@ export function EngineConversation({
   conversationFindNavigationRequestId?: number;
   onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
   composerDraft?: EngineTaskComposerDraft;
-  onRecoveredDraftChange?: (taskId: string, text: string, editorStateJson?: string) => void;
+  onRecoveredDraftChange?: (
+    taskId: string,
+    text: string,
+    editorStateJson?: string,
+  ) => string | void;
   onRecoveredConfigChange?: (
     taskId: string,
     config: NonNullable<EngineTaskComposerDraft["config"]>,
   ) => void;
-  onComposerDraftSubmitted?: (taskId: string, submittedText: string) => void;
+  draftStorageIssue?: "storage-failed" | "review-required";
+  onRecoveredSubmitPrepare?: (taskId: string, submittedText: string) => boolean;
+  onComposerDraftSubmitted?: (taskId: string, submittedText: string) => boolean;
+  onRecoveredSubmitUncertain?: (taskId: string) => void;
+  onResolveRecoveredReview?: (taskId: string, action: "restore" | "discard") => boolean;
   onQueueEditPrepare?: (
     taskId: string,
     inputId: string,
@@ -1687,6 +1699,13 @@ export function EngineConversation({
     if (selectedWebContexts.length > 0) {
       submittedText = buildPromptWithWebElementContexts(submittedText, selectedWebContexts);
     }
+    if (onRecoveredSubmitPrepare && !onRecoveredSubmitPrepare(visibleTask.id, cleanText)) {
+      setNotice({
+        kind: "error",
+        message: "恢复草稿未能安全保存或提交状态待核对；输入仍在，请勿重复发送。",
+      });
+      return false;
+    }
     const delivery = shouldQueue ? "queue" : "startNow";
     const configKey = JSON.stringify(submission ?? null);
     const queueKey = shouldQueue
@@ -1755,7 +1774,10 @@ export function EngineConversation({
       () => submitSuccessMessage?.() ?? null,
     )
       .then((accepted) => {
-        if (!accepted) return;
+        if (!accepted) {
+          onRecoveredSubmitUncertain?.(visibleTask.id);
+          return;
+        }
         if (queuedSubmissionRef.current?.key === queueKey) queuedSubmissionRef.current = null;
         try {
           const nextHistory = appendPromptHistoryEntry(
@@ -1768,9 +1790,14 @@ export function EngineConversation({
         } catch {
           // History is optional; an unavailable browser store must not undo an accepted input.
         }
+        const draftCleared = onComposerDraftSubmitted?.(visibleTask.id, cleanText);
+        if (draftCleared === false)
+          setNotice({
+            kind: "error",
+            message: "输入已被接受，但本地旧草稿清理失败。请核对历史，勿直接重新发送。",
+          });
         if (inputApiRef.current === editor && editor?.getText().trim() === cleanText)
           editor?.clear();
-        onComposerDraftSubmitted?.(visibleTask.id, cleanText);
         if (selectedAttachments.length > 0) {
           setAttachmentsByTask((current) => ({
             ...current,
@@ -2440,6 +2467,39 @@ export function EngineConversation({
               </p>
             ) : null}
             <div className="chat-composer-region z-20 w-full shrink-0 @container/composer">
+              {draftStorageIssue ? (
+                <div
+                  role="alert"
+                  data-testid="engine-queue-draft-storage-warning"
+                  className="mb-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning"
+                >
+                  <p>
+                    {draftStorageIssue === "review-required"
+                      ? "队列撤回草稿的提交或清理结果待核对。请先检查此 Task 历史；旧草稿不会自动重发。"
+                      : "队列撤回草稿未能写入本地存储。关闭 App 前请保留输入；发送已暂停。"}
+                  </p>
+                  {draftStorageIssue === "review-required" ? (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded border border-current px-2 py-1"
+                        data-testid="engine-queue-draft-review-restore"
+                        onClick={() => onResolveRecoveredReview?.(visibleTask.id, "restore")}
+                      >
+                        核对后恢复
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-current px-2 py-1"
+                        data-testid="engine-queue-draft-review-discard"
+                        onClick={() => onResolveRecoveredReview?.(visibleTask.id, "discard")}
+                      >
+                        清除旧稿
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <ConversationQueuePanel
                 queue={{
                   items: queuedInputs.map((input) => ({
@@ -2487,7 +2547,16 @@ export function EngineConversation({
                     } catch {
                       // Plain text remains recoverable when the editor state cannot be serialized.
                     }
-                    onRecoveredDraftChange(visibleTask.id, value, editorStateJson);
+                    const restoreText = onRecoveredDraftChange(
+                      visibleTask.id,
+                      value,
+                      editorStateJson,
+                    );
+                    if (restoreText && !value.trim())
+                      queueMicrotask(() => {
+                        if (!inputApiRef.current?.getText().trim())
+                          inputApiRef.current?.setText(restoreText);
+                      });
                   }}
                   onImportSharedContext={isZCodeHarness ? importSharedContext : undefined}
                   attachmentAction={platform.canSelectFilePath ? attachmentAction : undefined}
