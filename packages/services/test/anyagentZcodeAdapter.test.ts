@@ -1593,6 +1593,10 @@ test("ZCode file rewind resolves its own native turn, compares preview, and rech
       target: { rowId: 44, entityId: "native-turn-44" },
     });
     assert.equal(rows[0]?.fileChanges?.state, "reverted");
+    assert.equal(
+      (await fixture.adapter.getFileChanges!({ session, executionId: run.executionId }))?.state,
+      "reverted",
+    );
   } finally {
     fixture.adapter.dispose();
   }

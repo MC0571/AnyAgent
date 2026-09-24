@@ -597,6 +597,7 @@ export function createZCodeAdapter(options: {
       target: { rowId: number; entityId: string };
       files: number;
       canRewind: boolean;
+      state?: "active" | "reverted";
     }> = [];
     try {
       while (true) {
@@ -630,6 +631,7 @@ export function createZCodeAdapter(options: {
             target: { rowId: row.rowId, entityId: row.entityId },
             files: row.fileChanges?.files ?? 0,
             canRewind: row.actions?.canRewindFiles === true,
+            state: row.fileChanges?.state,
           });
         }
         if (!page.hasMore || page.rows.length === 0) break;
@@ -1876,7 +1878,7 @@ export function createZCodeAdapter(options: {
         baseRevision: target.baseRevision,
         baseLogEpoch: target.baseLogEpoch,
       });
-      return { ...changes, canRewind: target.canRewind };
+      return { ...changes, canRewind: target.canRewind, state: target.state };
     },
     async previewFileRewind({ session, executionId }) {
       if (!sessions.has(session) || !options.agent.conversationFileRewindPreviewV4)
