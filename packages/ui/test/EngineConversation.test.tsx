@@ -1915,8 +1915,14 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
       },
     ],
     events: [firstDelta],
-    approvals: [approval("approval-one"), { ...approval("approval-two"), options: [] }],
-    userInputs: [request("request-one"), { ...request("request-two"), options: [] }],
+    approvals: [
+      { ...approval("approval-one"), requestEventId: "approval-request-1" },
+      { ...approval("approval-two"), options: [] },
+    ],
+    userInputs: [
+      { ...request("request-one"), requestEventId: "user-input-request-1" },
+      { ...request("request-two"), options: [] },
+    ],
   };
   const render = async () =>
     act(async () => {
@@ -1973,14 +1979,27 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
     assert.ok(first.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING);
     assert.ok(tool.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
     assert.match(second.textContent ?? "", /after/);
+    const orderedApproval = execution.querySelector<HTMLElement>(
+      '[data-testid="engine-approval-approval-one"]',
+    );
+    const orderedUserInput = execution.querySelector<HTMLElement>(
+      '[data-testid="engine-user-input-request-one"]',
+    );
+    assert.ok(orderedApproval && orderedUserInput);
+    assert.ok(tool.compareDocumentPosition(orderedApproval) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(
+      orderedApproval.compareDocumentPosition(orderedUserInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    assert.ok(orderedUserInput.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
     for (const id of ["approval-one", "approval-two", "request-one", "request-two"]) {
       const control = execution.querySelector<HTMLElement>(
         `[data-testid="engine-${id.startsWith("approval") ? "approval" : "user-input"}-${id}"]`,
       );
       assert.ok(control, `${id} must remain visible`);
-      assert.ok(second.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (id.endsWith("two"))
+        assert.ok(second.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING);
     }
-    assert.match(execution.textContent ?? "", /内部顺序未知/);
+    assert.doesNotMatch(execution.textContent ?? "", /内部顺序未知/);
     for (const id of ["approval-two", "request-two"]) {
       assert.match(
         execution.querySelector(

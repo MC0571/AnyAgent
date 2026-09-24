@@ -2716,6 +2716,13 @@ test("expired or finished-Execution interactions never reach the Engine", async 
     );
     const approval = runtime.getHistory(task.id)!.approvals[0]!;
     const request = runtime.getHistory(task.id)!.userInputs[0]!;
+    const requestedEvents = runtime
+      .getHistory(task.id)!
+      .events.filter(
+        (event) => event.type === "approval.requested" || event.type === "user-input.requested",
+      );
+    assert.equal(approval.requestEventId, requestedEvents[0]?.id);
+    assert.equal(request.requestEventId, requestedEvents[1]?.id);
     now = 10;
     await assert.rejects(
       () => runtime.replyToApproval({ ...scope, approvalId: approval.id, optionId: "allow" }),

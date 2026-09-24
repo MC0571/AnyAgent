@@ -1099,6 +1099,18 @@ export function EngineConversationTimeline({
             const answerDisplay = visibleAssistantAnswer(executionTurn);
             const { finalReplacesPartialStream, finalAlreadyShown } = answerDisplay;
             const toolParts = new Map(toolEvents(executionTurn).map((item) => [item.id, item]));
+            const approvalById = new Map(executionTurn.approvals.map((item) => [item.id, item]));
+            const userInputById = new Map(executionTurn.userInputs.map((item) => [item.id, item]));
+            const placedApprovalIds = new Set(
+              executionTurn.items
+                .filter((item) => item.kind === "approval")
+                .map((item) => item.approvalId),
+            );
+            const placedUserInputIds = new Set(
+              executionTurn.items
+                .filter((item) => item.kind === "user-input")
+                .map((item) => item.requestId),
+            );
             const hasAssistantAnswer = deltas.length > 0 || execution.result !== null;
             const latestDeltaKey = deltas.at(-1)?.key;
             const completionTime = execution.terminalAt;
@@ -1242,6 +1254,31 @@ export function EngineConversationTimeline({
                       />
                     ) : null;
                   }
+                  if (item.kind === "approval") {
+                    const approval = approvalById.get(item.approvalId);
+                    return approval ? (
+                      <ApprovalEntry
+                        key={approval.id}
+                        approval={approval}
+                        workspacePath={workspacePath}
+                        disabledReason={readOnlySource ? "继承来源只读。" : approvalBlockedReason}
+                        busyAction={busyAction}
+                        onReply={onReplyApproval}
+                      />
+                    ) : null;
+                  }
+                  if (item.kind === "user-input") {
+                    const request = userInputById.get(item.requestId);
+                    return request ? (
+                      <InlineUserInput
+                        key={request.id}
+                        request={request}
+                        disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
+                        busyAction={busyAction}
+                        onReply={onReplyUserInput}
+                      />
+                    ) : null;
+                  }
                 })}
                 {execution.result && !finalAlreadyShown ? (
                   <Message
@@ -1324,30 +1361,29 @@ export function EngineConversationTimeline({
                 {execution.error ? (
                   <p className="ml-4 text-sm text-destructive">{execution.error}</p>
                 ) : null}
-                {executionTurn.approvals.length || executionTurn.userInputs.length ? (
-                  <p className="ml-4 text-xs text-foreground-subtle">
-                    审批与用户输入属于此 Execution；原生请求身份未公开，内部顺序未知。
-                  </p>
-                ) : null}
-                {executionTurn.approvals.map((approval) => (
-                  <ApprovalEntry
-                    key={approval.id}
-                    approval={approval}
-                    workspacePath={workspacePath}
-                    disabledReason={readOnlySource ? "继承来源只读。" : approvalBlockedReason}
-                    busyAction={busyAction}
-                    onReply={onReplyApproval}
-                  />
-                ))}
-                {executionTurn.userInputs.map((request) => (
-                  <InlineUserInput
-                    key={request.id}
-                    request={request}
-                    disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
-                    busyAction={busyAction}
-                    onReply={onReplyUserInput}
-                  />
-                ))}
+                {executionTurn.approvals
+                  .filter((approval) => !placedApprovalIds.has(approval.id))
+                  .map((approval) => (
+                    <ApprovalEntry
+                      key={approval.id}
+                      approval={approval}
+                      workspacePath={workspacePath}
+                      disabledReason={readOnlySource ? "继承来源只读。" : approvalBlockedReason}
+                      busyAction={busyAction}
+                      onReply={onReplyApproval}
+                    />
+                  ))}
+                {executionTurn.userInputs
+                  .filter((request) => !placedUserInputIds.has(request.id))
+                  .map((request) => (
+                    <InlineUserInput
+                      key={request.id}
+                      request={request}
+                      disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
+                      busyAction={busyAction}
+                      onReply={onReplyUserInput}
+                    />
+                  ))}
                 {!deltas.length && execution.result === null && execution.status === "unknown" ? (
                   <p className="ml-4 rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
                     Engine 执行结果未知；当前没有可确认的回答正文。

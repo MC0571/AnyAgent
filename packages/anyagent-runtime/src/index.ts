@@ -2748,7 +2748,7 @@ export class TaskRuntime {
           issueAdded = true;
         }
       } else if (!TERMINAL_EXECUTION_STATUSES.has(current.data.status)) {
-        terminalApplied = this.#applyEvent(target, current, event);
+        terminalApplied = this.#applyEvent(target, current, event, eventId);
       }
     }
 
@@ -2762,6 +2762,7 @@ export class TaskRuntime {
     target: RunTarget,
     execution: StoredRecord<ExecutionData>,
     event: EngineEvent,
+    productEventId: string,
   ): boolean {
     const now = event.observedAt;
     const data = execution.data;
@@ -2816,6 +2817,7 @@ export class TaskRuntime {
       const id = this.#newId("approval");
       const approval: ApprovalData = {
         id,
+        requestEventId: productEventId,
         taskId: target.taskId,
         participantId: target.participantId,
         sessionId: target.sessionId,
@@ -2874,6 +2876,7 @@ export class TaskRuntime {
       const id = this.#newId("user-input");
       const request: UserInputData = {
         id,
+        requestEventId: productEventId,
         taskId: target.taskId,
         participantId: target.participantId,
         sessionId: target.sessionId,

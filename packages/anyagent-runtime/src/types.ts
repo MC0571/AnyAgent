@@ -254,6 +254,8 @@ export interface RuntimeEvent {
 
 export interface RuntimeApproval {
   readonly id: string;
+  /** Product event that first requested this approval; absent for older records. */
+  readonly requestEventId?: string;
   readonly taskId: string;
   readonly participantId: string;
   readonly sessionId: string;
@@ -276,6 +278,8 @@ export interface RuntimeApproval {
 
 export interface RuntimeUserInput {
   readonly id: string;
+  /** Product event that first requested this input; absent for older records. */
+  readonly requestEventId?: string;
   readonly taskId: string;
   readonly participantId: string;
   readonly sessionId: string;

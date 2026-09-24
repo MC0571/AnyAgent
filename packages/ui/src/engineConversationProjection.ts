@@ -20,7 +20,9 @@ export type EngineDeltaBlock = {
 
 export type EngineExecutionItem =
   | { kind: "delta"; block: EngineDeltaBlock }
-  | { kind: "tool"; toolCallId: string };
+  | { kind: "tool"; toolCallId: string }
+  | { kind: "approval"; approvalId: string }
+  | { kind: "user-input"; requestId: string };
 
 export type EngineExecutionTurn = {
   execution: EngineExecution;
@@ -64,11 +66,19 @@ function stringField(event: EngineEvent, field: string): string | null {
 function projectExecutionItems(
   executionId: string,
   events: readonly EngineEvent[],
+  approvals: readonly EngineApproval[],
+  userInputs: readonly EngineUserInput[],
 ): { items: EngineExecutionItem[]; deltas: EngineDeltaBlock[] } {
   const items: EngineExecutionItem[] = [];
   const blocks: Array<{ block: EngineDeltaBlock; events: EngineEvent[]; identity: string }> = [];
   const seenEventIds = new Set<string>();
   const seenToolIds = new Set<string>();
+  const approvalByEvent = new Map(
+    approvals.filter((item) => item.requestEventId).map((item) => [item.requestEventId, item]),
+  );
+  const userInputByEvent = new Map(
+    userInputs.filter((item) => item.requestEventId).map((item) => [item.requestEventId, item]),
+  );
   let previousWasDelta = false;
   for (const event of events) {
     if (event.duplicateOf || seenEventIds.has(event.id)) continue;
@@ -101,6 +111,16 @@ function projectExecutionItems(
       continue;
     }
     previousWasDelta = false;
+    if (event.type === "approval.requested") {
+      const approval = approvalByEvent.get(event.id);
+      if (approval) items.push({ kind: "approval", approvalId: approval.id });
+      continue;
+    }
+    if (event.type === "user-input.requested") {
+      const request = userInputByEvent.get(event.id);
+      if (request) items.push({ kind: "user-input", requestId: request.id });
+      continue;
+    }
     if (
       event.type === "tool.started" ||
       event.type === "tool.completed" ||
@@ -199,7 +219,7 @@ export function projectEngineConversation(
       );
       approvals.forEach((item) => usedApprovalIds.add(item.id));
       userInputs.forEach((item) => usedUserInputIds.add(item.id));
-      const content = projectExecutionItems(execution.id, executionEvents);
+      const content = projectExecutionItems(execution.id, executionEvents, approvals, userInputs);
       return {
         execution,
         events: executionEvents,
