@@ -176,7 +176,10 @@ export interface ConversationRowRenderContext {
   previewFileRewind?: (
     target: ConversationRowTarget,
   ) => Promise<V4ConversationFileRewindPreviewResult>;
-  applyFileRewind?: (target: ConversationRowTarget) => Promise<CommandAck>;
+  applyFileRewind?: (
+    target: ConversationRowTarget,
+    preview: V4ConversationFileRewindPreviewResult,
+  ) => Promise<Pick<CommandAck, "status" | "message">>;
   /** 已发送 image/video 预览；由 pane 绑定的 workspace transport 注入。 */
   readAttachment?: (
     params: ConversationAttachmentReadParams,

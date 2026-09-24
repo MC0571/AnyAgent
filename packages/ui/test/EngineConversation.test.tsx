@@ -2165,6 +2165,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       id === forkTask.id ? forkTask : id === zcodeTaskB.id ? zcodeTaskB : zcodeTask,
     getHistory: async (id: string) =>
       id === forkTask.id ? forkHistory : id === zcodeTaskB.id ? historyB : history,
+    getExecutionFileChanges: async () => null,
     getAssistantFeedback: async (id: string) => ({
       state: "current",
       values: id === zcodeTaskB.id ? {} : { "native-feedback-message": nativeFeedback },
@@ -2541,6 +2542,93 @@ test("an active ZCode Harness task switches models within its Session and submit
     await act(async () => root.unmount());
     container.remove();
     zcodeSessionStore.setSlashCommands(workspacePath, originalSlashCommands);
+    dom.window.close();
+  }
+});
+
+test("Engine file rewind uses the native summary and preview dialog through mounted controls", async () => {
+  const dom = installDom();
+  const [{ EngineExecutionFileSummary }, { ZCodeIntlProvider }, { TooltipProvider }] =
+    await Promise.all([
+      import("../src/EngineExecutionFileSummary.js"),
+      import("../src/i18n/IntlProvider.js"),
+      import("../src/components/ui/tooltip.js"),
+    ]);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const preview = {
+    canApply: true,
+    safeFiles: [
+      {
+        action: "delete" as const,
+        operationCount: 1,
+        path: "/tmp/anyagent-ui/m1-rewind.txt",
+        toolNames: ["Write"],
+      },
+    ],
+    unsafeFiles: [],
+    ignoredFiles: [],
+  };
+  let reverted = false;
+  const applied: Array<{ executionId: string; preview: typeof preview }> = [];
+  const props = {
+    executionId: "execution-file-rewind",
+    workspacePath: "/tmp/anyagent-ui",
+    loadChanges: async () => ({
+      canRewind: !reverted,
+      files: 1,
+      additions: reverted ? 0 : 1,
+      deletions: 0,
+      state: reverted ? ("reverted" as const) : ("active" as const),
+      items: [],
+    }),
+    previewRewind: async () => preview,
+    applyRewind: async (executionId: string, expectedPreview: typeof preview) => {
+      applied.push({ executionId, preview: expectedPreview });
+      reverted = true;
+      return { status: "applied" as const, reason: null };
+    },
+  };
+  try {
+    await act(async () =>
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(TooltipProvider, null, createElement(EngineExecutionFileSummary, props)),
+        ),
+      ),
+    );
+    await waitFor(
+      () => assert.match(container.textContent ?? "", /1 个文件|1 file/),
+      "native file summary should show the Engine execution changes",
+    );
+    const rewind = Array.from(container.querySelectorAll("button")).find((button) =>
+      /撤销|Undo/i.test(button.textContent ?? ""),
+    );
+    assert.ok(rewind && !rewind.disabled);
+    await act(async () => rewind.click());
+    await waitFor(
+      () => assert.match(document.body.textContent ?? "", /m1-rewind\.txt/),
+      "native preview dialog should show the exact file",
+    );
+    const confirm = Array.from(document.body.querySelectorAll("button")).find((button) =>
+      /撤销文件|Rewind files/i.test(button.textContent ?? ""),
+    );
+    assert.ok(confirm && !confirm.disabled);
+    await act(async () => confirm.click());
+    await waitFor(() => assert.equal(applied.length, 1), "native confirmation should apply once");
+    assert.equal(applied[0]?.executionId, props.executionId);
+    assert.deepEqual(applied[0]?.preview, preview);
+    await waitFor(
+      () => assert.match(container.textContent ?? "", /已撤销|reverted/i),
+      "the summary should refresh after the native action",
+    );
+    assert.equal(rewind.disabled, true);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
     dom.window.close();
   }
 });

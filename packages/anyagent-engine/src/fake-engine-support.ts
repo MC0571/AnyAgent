@@ -81,6 +81,7 @@ export function defaultFakeCapability(capability: EngineCapability): CapabilityS
   const unavailable =
     capability === "execution.reconcile" ||
     capability === "assistant.feedback" ||
+    capability === "workspace.file-rewind" ||
     capability === "session.fork" ||
     capability === "session.compact" ||
     capability === "execution.revise";
@@ -91,13 +92,15 @@ export function defaultFakeCapability(capability: EngineCapability): CapabilityS
       ? { reason: "Fake Engine has no native reconciliation query." }
       : capability === "assistant.feedback"
         ? { reason: "Fake Engine does not store assistant feedback." }
-        : capability === "session.fork"
-          ? { reason: "Fake Engine has no native conversation to fork." }
-          : capability === "execution.revise"
-            ? { reason: "Fake Engine has no native conversation branch to revise." }
-            : capability === "session.compact"
-              ? { reason: "Fake Engine has no native Session compaction command." }
-              : {}),
+        : capability === "workspace.file-rewind"
+          ? { reason: "Fake Engine does not track native workspace checkpoints." }
+          : capability === "session.fork"
+            ? { reason: "Fake Engine has no native conversation to fork." }
+            : capability === "execution.revise"
+              ? { reason: "Fake Engine has no native conversation branch to revise." }
+              : capability === "session.compact"
+                ? { reason: "Fake Engine has no native Session compaction command." }
+                : {}),
   };
 }
 
@@ -189,6 +192,7 @@ export const CAPABILITIES: readonly EngineCapability[] = [
   "approval.respond",
   "user-input.respond",
   "assistant.feedback",
+  "workspace.file-rewind",
 ];
 
 export function defaultScript(round: number): readonly FakeEngineStep[] {

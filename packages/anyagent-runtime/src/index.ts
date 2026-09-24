@@ -9,6 +9,8 @@ import {
   type EngineCapabilitySnapshot,
   type EngineEvent,
   type EngineExecutionRef,
+  type EngineFileChanges,
+  type EngineFileRewindPreview,
   type EngineJsonObject,
   type EngineJsonValue,
   type EngineSessionRef,
@@ -17,7 +19,9 @@ import {
 import { RuntimeStore, type StoredRecord } from "./store.js";
 import type {
   CompactSession,
+  ApplyFileRewind,
   CreateTaskInput,
+  ExecutionFileTarget,
   ForkTaskInput,
   ReplyToApproval,
   ReplyToUserInput,
@@ -32,6 +36,7 @@ import type {
   RuntimeEngineProjection,
   RuntimeEnvironment,
   RuntimeEvent,
+  RuntimeFileRewindOperation,
   RuntimeAssistantFeedbackResult,
   RuntimeCompactOperation,
   RuntimeExecution,
@@ -1107,6 +1112,7 @@ export class TaskRuntime {
             `Queued Input cannot be promoted while Input ${unresolved[0]!.id} is unresolved.`,
           );
         this.#assertNoActiveCompact(task.id, session.id);
+        this.#assertNoActiveFileRewind(task.id, session.id);
         queuedRecord.data.status = "received";
         queuedRecord.data.error = null;
         data = queuedRecord.data;
@@ -1122,6 +1128,7 @@ export class TaskRuntime {
           receivedAt,
         );
       } else {
+        this.#assertNoActiveFileRewind(task.id, session.id);
         const queuedRecords = records.filter((record) => record.data.status === "queued");
         const dispatchedRecords = records.filter((record) =>
           DISPATCHED_INPUT_STATUSES.has(record.data.status),
@@ -1923,6 +1930,124 @@ export class TaskRuntime {
         ...(uncertain ? { unknownEvidence: evidence } : { failureEvidence: evidence }),
         ...(!uncertain ? { terminalAt: this.#now() } : {}),
         reason,
+      });
+    }
+  }
+
+  async getExecutionFileChanges(input: ExecutionFileTarget): Promise<EngineFileChanges | null> {
+    this.#assertOpen();
+    const target = await this.#readyFileTarget(input);
+    if (!target.engine.getFileChanges) return null;
+    return target.engine.getFileChanges({
+      session: target.nativeSession,
+      executionId: target.nativeExecution,
+    });
+  }
+
+  async previewFileRewind(input: ExecutionFileTarget): Promise<EngineFileRewindPreview> {
+    this.#assertOpen();
+    const target = await this.#readyFileTarget(input);
+    this.#assertSessionIdle(target.task.id, target.session.id);
+    if (!target.engine.previewFileRewind)
+      throw new RuntimeEligibilityError("This Engine has no file rewind preview.", "unsupported");
+    return target.engine.previewFileRewind({
+      session: target.nativeSession,
+      executionId: target.nativeExecution,
+    });
+  }
+
+  async applyFileRewind(input: ApplyFileRewind): Promise<RuntimeFileRewindOperation> {
+    this.#assertOpen();
+    if (!input.expectedPreview?.canApply || input.expectedPreview.safeFiles.length === 0)
+      throw new RuntimeEligibilityError("A safe file rewind preview is required.");
+    const target = await this.#readyFileTarget(input);
+    this.#assertSessionIdle(target.task.id, target.session.id);
+    if (!target.engine.applyFileRewind)
+      throw new RuntimeEligibilityError("This Engine has no file rewind command.", "unsupported");
+
+    const operationId = this.#newId("file-rewind");
+    const requestedAt = this.#now();
+    const operation: RuntimeFileRewindOperation = {
+      id: operationId,
+      taskId: input.taskId,
+      participantId: input.participantId,
+      sessionId: input.sessionId,
+      executionId: input.executionId,
+      status: "requested",
+      requestedAt,
+      terminalAt: null,
+      evidence: { source: "host", evidenceId: operationId, detail: "File rewind requested." },
+      reason: null,
+    };
+    this.#store.transaction(() => {
+      const latest = this.#qualifyFileTarget(input);
+      if (
+        latest.nativeSession !== target.nativeSession ||
+        latest.nativeExecution !== target.nativeExecution
+      )
+        throw new RuntimeEligibilityError("The native file rewind target changed.");
+      this.#assertSessionIdle(latest.task.id, latest.session.id);
+      this.#store.insert(
+        this.#record(
+          "file-rewind-operation",
+          operationId,
+          input.taskId,
+          input.sessionId,
+          null,
+          operation,
+          operation.status,
+          requestedAt,
+          requestedAt,
+          operationId,
+          input.executionId,
+        ),
+      );
+    });
+    this.#publish(input.taskId, "file-rewind-operation", operationId);
+    const guard = this.#dispatchGuard({
+      taskId: input.taskId,
+      participantId: input.participantId,
+      sessionId: input.sessionId,
+      authorizationId: input.authorizationId,
+      capability: "workspace.file-rewind",
+      engine: target.engine,
+      nativeSessionId: target.nativeSession,
+    });
+    const beforeDispatch = () => {
+      guard();
+      const latest = this.#qualifyFileTarget(input);
+      if (latest.nativeExecution !== target.nativeExecution)
+        throw new RuntimeEligibilityError("The native Execution changed before file rewind.");
+      this.#assertSessionIdle(input.taskId, input.sessionId, undefined, operationId);
+    };
+    try {
+      const receipt = await target.engine.applyFileRewind({
+        session: target.nativeSession,
+        executionId: target.nativeExecution,
+        expectedPreview: input.expectedPreview,
+        commandId: operationId,
+        beforeDispatch,
+      });
+      return this.#finishFileRewind(operationId, {
+        status: receipt.status,
+        terminalAt: receipt.status === "unknown" ? null : this.#now(),
+        evidence: receipt.evidence ?? null,
+        reason: receipt.reason ?? null,
+      });
+    } catch (error) {
+      const unknown =
+        error instanceof EngineContractError
+          ? error.failure.sideEffects !== "none" || error.kind === "result-unknown"
+          : !(error instanceof RuntimeEligibilityError);
+      return this.#finishFileRewind(operationId, {
+        status: unknown ? "unknown" : "rejected",
+        terminalAt: unknown ? null : this.#now(),
+        evidence: {
+          source: unknown ? "adapter" : "host",
+          evidenceId: `${operationId}:${unknown ? "unknown" : "rejected"}`,
+          detail: errorMessage(error),
+        },
+        reason: errorMessage(error),
       });
     }
   }
@@ -3262,12 +3387,70 @@ export class TaskRuntime {
     }
   }
 
+  #qualifyFileTarget(input: ExecutionFileTarget) {
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "workspace.file-rewind",
+    );
+    const execution = this.#require<ExecutionData>("execution", input.executionId);
+    this.#assertRelated(
+      execution.data.taskId,
+      execution.data.participantId,
+      execution.data.sessionId,
+      input,
+    );
+    if (!TERMINAL_EXECUTION_STATUSES.has(execution.data.status))
+      throw new RuntimeEligibilityError("File rewind requires a terminal Execution.", "terminal");
+    const nativeSession = session.data.nativeSessionId;
+    if (!nativeSession || this.#liveSessions.get(session.id) !== nativeSession)
+      throw new RuntimeEligibilityError("The native Session is not attached in this Host.");
+    const nativeExecution = execution.data.nativeExecutionId;
+    if (!nativeExecution)
+      throw new RuntimeEligibilityError("The Execution has no verified native handle.");
+    return {
+      task,
+      session,
+      execution,
+      engine: this.#engineFor(task.data),
+      nativeSession: nativeSession as EngineSessionRef,
+      nativeExecution: nativeExecution as EngineExecutionRef,
+    };
+  }
+
+  async #readyFileTarget(input: ExecutionFileTarget) {
+    const initial = this.#qualifyFileTarget(input);
+    const snapshot = await this.#capabilities(initial.engine);
+    this.#assertCapability(
+      snapshot,
+      initial.task.data.engineId,
+      initial.task.data.environment.id,
+      "workspace.file-rewind",
+      initial.task.data.engine.configurationVersion,
+      initial.task.data.engine.adapterVersion,
+    );
+    const latest = this.#qualifyFileTarget(input);
+    if (
+      latest.nativeSession !== initial.nativeSession ||
+      latest.nativeExecution !== initial.nativeExecution
+    )
+      throw new RuntimeEligibilityError("The native file rewind target changed.");
+    return latest;
+  }
+
   #requireActiveTask(task: StoredRecord<TaskData>): void {
     if (task.data.status !== "active")
       throw new RuntimeEligibilityError(`Task ${task.id} is ${task.data.status}.`);
   }
 
-  #assertSessionIdle(taskId: string, sessionId: string, exceptCompactId?: string): void {
+  #assertSessionIdle(
+    taskId: string,
+    sessionId: string,
+    exceptCompactId?: string,
+    exceptFileRewindId?: string,
+  ): void {
     const pendingInput = this.#store
       .list<InputData>("input", taskId)
       .find(
@@ -3279,6 +3462,22 @@ export class TaskRuntime {
     if (pendingInput)
       throw new RuntimeEligibilityError(`Session already has unresolved input ${pendingInput.id}.`);
     this.#assertNoActiveCompact(taskId, sessionId, exceptCompactId);
+    this.#assertNoActiveFileRewind(taskId, sessionId, exceptFileRewindId);
+  }
+
+  #assertNoActiveFileRewind(taskId: string, sessionId: string, exceptFileRewindId?: string): void {
+    const pendingRewind = this.#store
+      .list<RuntimeFileRewindOperation>("file-rewind-operation", taskId)
+      .find(
+        (record) =>
+          record.data.sessionId === sessionId &&
+          record.id !== exceptFileRewindId &&
+          record.data.status === "requested",
+      );
+    if (pendingRewind)
+      throw new RuntimeEligibilityError(
+        `Session already has unresolved file rewind ${pendingRewind.id}.`,
+      );
   }
 
   #assertNoActiveCompact(taskId: string, sessionId: string, exceptCompactId?: string): void {
@@ -3588,6 +3787,36 @@ export class TaskRuntime {
           operation.id,
         );
       }
+      for (const operation of this.#store.list<RuntimeFileRewindOperation>(
+        "file-rewind-operation",
+        session.taskId,
+      )) {
+        if (operation.data.sessionId !== session.id || operation.data.status !== "requested")
+          continue;
+        const data: RuntimeFileRewindOperation = {
+          ...operation.data,
+          status: "unknown",
+          evidence: {
+            source: "host",
+            evidenceId: `${operation.id}:restart`,
+            detail: "Runtime restarted before native file rewind result was known.",
+          },
+          reason: "Native file rewind cannot be automatically resent after restart.",
+        };
+        this.#save(
+          "file-rewind-operation",
+          operation.id,
+          operation.taskId,
+          session.id,
+          null,
+          data,
+          data.status,
+          operation.createdAt,
+          recoveredAt,
+          operation.id,
+          data.executionId,
+        );
+      }
     }
   }
 
@@ -3647,6 +3876,9 @@ export class TaskRuntime {
         .map((record) => record.data),
       compactOperations: this.#store
         .list<RuntimeCompactOperation>("compact-operation", taskId)
+        .map((record) => record.data),
+      fileRewindOperations: this.#store
+        .list<RuntimeFileRewindOperation>("file-rewind-operation", taskId)
         .map((record) => record.data),
       integrityIssues: this.#store
         .list<RuntimeIntegrityIssue>("integrity-issue", taskId)
@@ -3867,6 +4099,29 @@ export class TaskRuntime {
       id,
     );
     this.#publish(record.taskId, "compact-operation", id);
+    return this.#clone(data);
+  }
+
+  #finishFileRewind(
+    id: string,
+    changes: Pick<RuntimeFileRewindOperation, "status" | "terminalAt" | "evidence" | "reason">,
+  ): RuntimeFileRewindOperation {
+    const record = this.#require<RuntimeFileRewindOperation>("file-rewind-operation", id);
+    const data = { ...record.data, ...changes };
+    this.#save(
+      "file-rewind-operation",
+      id,
+      record.taskId,
+      record.sessionId,
+      null,
+      data,
+      data.status,
+      record.createdAt,
+      this.#now(),
+      id,
+      data.executionId,
+    );
+    this.#publish(record.taskId, "file-rewind-operation", id);
     return this.#clone(data);
   }
 

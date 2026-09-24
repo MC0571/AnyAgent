@@ -243,6 +243,15 @@ export function createAnyAgentService(
     async setAssistantFeedback(input) {
       return runtime.setAssistantFeedback(input);
     },
+    async getExecutionFileChanges(input) {
+      return runtime.getExecutionFileChanges(input);
+    },
+    async previewFileRewind(input) {
+      return runtime.previewFileRewind(input);
+    },
+    async applyFileRewind(input) {
+      return runtime.applyFileRewind(input);
+    },
     async compactSession(input) {
       return runtime.compactSession(input);
     },

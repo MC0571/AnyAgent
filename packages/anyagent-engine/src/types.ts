@@ -1,3 +1,14 @@
+import type {
+  EngineFileChanges,
+  EngineFileRewindPreview,
+  EngineFileRewindReceipt,
+} from "./file-workspace.js";
+export type {
+  EngineFileChanges,
+  EngineFileRewindPreview,
+  EngineFileRewindReceipt,
+} from "./file-workspace.js";
+
 export type CapabilitySupport = "supported" | "unsupported" | "unknown";
 
 export type CapabilityAvailability =
@@ -24,6 +35,7 @@ export type EngineCapability =
   | "events.stream"
   | "events.tool"
   | "events.file"
+  | "workspace.file-rewind"
   | "approval.respond"
   | "user-input.respond"
   | "assistant.feedback";
@@ -70,7 +82,8 @@ export type EngineOperation =
   | "execution.revise"
   | "execution.interrupt"
   | "approval.respond"
-  | "assistant.feedback";
+  | "assistant.feedback"
+  | "workspace.file-rewind";
 
 export type EngineFailureKind =
   | "unsupported"
@@ -411,6 +424,21 @@ export interface EngineAdapter {
     /** Revalidate Host ownership, authorization and current capability after Adapter I/O. */
     readonly beforeDispatch?: () => void;
   }): Promise<EngineAssistantFeedbackReceipt>;
+  getFileChanges?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+  }): Promise<EngineFileChanges | null>;
+  previewFileRewind?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+  }): Promise<EngineFileRewindPreview>;
+  applyFileRewind?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+    readonly expectedPreview: EngineFileRewindPreview;
+    readonly commandId: string;
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineFileRewindReceipt>;
   interrupt(input: {
     readonly session: EngineSessionRef;
     readonly executionId: EngineExecutionRef;

@@ -88,6 +88,7 @@ class ManualEngine implements EngineAdapter {
       "approval.respond",
       "user-input.respond",
       "assistant.feedback",
+      "workspace.file-rewind",
     ].map((name) => [
       name,
       {
@@ -124,6 +125,8 @@ class ManualEngine implements EngineAdapter {
   beforeFeedbackDispatch: (() => Promise<void>) | null = null;
   readonly feedbackByTarget = new Map<string, "like" | "dislike" | null>();
   interruptStatus: EngineCommandReceipt["status"] = "requested";
+  fileRewindEffects = 0;
+  beforeFileDispatch: (() => Promise<void>) | null = null;
 
   getCapabilities(): EngineCapabilitySnapshot {
     return {
@@ -226,6 +229,40 @@ class ManualEngine implements EngineAdapter {
   }
   async closeSession(): Promise<EngineCommandReceipt> {
     return { status: "closed" };
+  }
+  async getFileChanges() {
+    return {
+      files: 1,
+      additions: 1,
+      deletions: 0,
+      state: "active" as const,
+      canRewind: true,
+      items: [],
+    };
+  }
+  async previewFileRewind() {
+    return {
+      canApply: true,
+      safeFiles: [
+        {
+          action: "delete" as const,
+          operationCount: 1,
+          path: "/work/project-a/changed.txt",
+          toolNames: ["Write"],
+        },
+      ],
+      unsafeFiles: [],
+      ignoredFiles: [],
+    };
+  }
+  async applyFileRewind(input: Parameters<NonNullable<EngineAdapter["applyFileRewind"]>>[0]) {
+    await this.beforeFileDispatch?.();
+    input.beforeDispatch?.();
+    this.fileRewindEffects++;
+    return {
+      status: "applied" as const,
+      evidence: { source: "engine" as const, evidenceId: input.commandId },
+    };
   }
 
   emit(
@@ -767,6 +804,7 @@ const authorization: RuntimeAuthorization = {
     "execution.run",
     "execution.revise",
     "assistant.feedback",
+    "workspace.file-rewind",
     "approval.respond",
     "user-input.respond",
     "execution.interrupt",
@@ -1824,6 +1862,84 @@ test("assistant feedback is bound to an Execution message and repeated updates a
       outcome: "completed",
     });
     await assert.rejects(() => runtime.setAssistantFeedback(request), /Task .* is completed/i);
+  } finally {
+    engine.closeEvents(0);
+    runtime.close();
+  }
+});
+
+test("file rewind is scoped to one terminal Execution and records native outcome", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      text: "write a file",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "file-input-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const execution = runtime.getHistory(task.id)!.executions[0]!;
+    const target = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      executionId: execution.id,
+    };
+    await assert.rejects(() => runtime.previewFileRewind(target), /terminal Execution/u);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "done",
+      evidence: { source: "engine", evidenceId: "file-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    assert.equal((await runtime.getExecutionFileChanges(target))?.files, 1);
+    const preview = await runtime.previewFileRewind(target);
+    const other = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await assert.rejects(
+      () =>
+        runtime.applyFileRewind({
+          ...target,
+          taskId: other.id,
+          participantId: other.participant.id,
+          sessionId: other.session.id,
+          expectedPreview: preview,
+        }),
+      /different Task, participant, or Session/u,
+    );
+    const applied = await runtime.applyFileRewind({ ...target, expectedPreview: preview });
+    assert.equal(applied.status, "applied");
+    assert.equal(applied.executionId, execution.id);
+    assert.equal(engine.fileRewindEffects, 1);
+    assert.equal(runtime.getHistory(task.id)?.fileRewindOperations?.[0]?.status, "applied");
+
+    let release!: () => void;
+    engine.beforeFileDispatch = () => new Promise<void>((resolve) => (release = resolve));
+    const pending = runtime.applyFileRewind({ ...target, expectedPreview: preview });
+    await until(() => Boolean(release));
+    await assert.rejects(
+      () => runtime.submitInput({ ...target, text: "too early" }),
+      /unresolved file rewind/u,
+    );
+    engine.setCapability("workspace.file-rewind", {
+      support: "unsupported",
+      availability: "unknown",
+    });
+    release();
+    const rejected = await pending;
+    assert.equal(rejected.status, "rejected");
+    assert.equal(engine.fileRewindEffects, 1);
+    assert.equal(runtime.getHistory(task.id)?.fileRewindOperations?.[1]?.status, "rejected");
   } finally {
     engine.closeEvents(0);
     runtime.close();

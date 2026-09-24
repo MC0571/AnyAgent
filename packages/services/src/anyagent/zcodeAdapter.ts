@@ -13,6 +13,7 @@ import type {
   EngineEvent,
   EngineEventPayload,
   EngineExecutionRef,
+  EngineFileRewindPreview,
   EngineApprovalPresentation,
   EngineApprovalOptionPresentation,
   EngineJsonObject,
@@ -43,7 +44,14 @@ type AgentPort = Pick<
   | "onDynamicSessionEvent"
   | "onAgentRuntimeLifecycle"
 > &
-  Partial<Pick<IZCodeAgentService, "queryConversationCommandsV4">>;
+  Partial<
+    Pick<
+      IZCodeAgentService,
+      | "queryConversationCommandsV4"
+      | "conversationFileChangesV4"
+      | "conversationFileRewindPreviewV4"
+    >
+  >;
 
 function compactTerminalFromRows(
   rows: Awaited<ReturnType<AgentPort["conversationRowsRangeV4"]>>["rows"],
@@ -188,7 +196,8 @@ function operationError(
     | "execution.run"
     | "execution.revise"
     | "approval.respond"
-    | "execution.interrupt",
+    | "execution.interrupt"
+    | "workspace.file-rewind",
   message: string,
   kind:
     | "unsupported"
@@ -426,6 +435,11 @@ export function createZCodeAdapter(options: {
       "events.stream": status("supported"),
       "events.tool": status("supported"),
       "events.file": status("unknown", "公开文件差异需结合 v4 行查询，当前未完成映射"),
+      "workspace.file-rewind": status(
+        options.agent.conversationFileChangesV4 && options.agent.conversationFileRewindPreviewV4
+          ? "supported"
+          : "unsupported",
+      ),
       "approval.respond": status("supported"),
       "user-input.respond": status("supported"),
       "assistant.feedback": status("supported"),
@@ -570,6 +584,86 @@ export function createZCodeAdapter(options: {
       baseLogEpoch,
       attachments: targets[0]!.attachments,
     };
+  }
+
+  async function resolveFileTarget(
+    session: EngineSessionRef,
+    sourceExecutionId: EngineExecutionRef,
+  ) {
+    let beforeRowId: number | undefined;
+    let baseRevision: number | undefined;
+    let baseLogEpoch: string | undefined;
+    const matches: Array<{
+      target: { rowId: number; entityId: string };
+      files: number;
+      canRewind: boolean;
+    }> = [];
+    try {
+      while (true) {
+        const page = await options.agent.conversationRowsRangeV4({
+          ...workspace,
+          sessionId: session,
+          ...(beforeRowId === undefined ? {} : { beforeRowId }),
+          limit: 200,
+        });
+        if (baseRevision === undefined) {
+          baseRevision = page.atRevision;
+          baseLogEpoch = page.atLogEpoch;
+        } else if (baseRevision !== page.atRevision || baseLogEpoch !== page.atLogEpoch) {
+          throw operationError(
+            "workspace.file-rewind",
+            "The native conversation changed during file target lookup.",
+            "temporarily-unavailable",
+            "none",
+          );
+        }
+        for (const row of page.rows) {
+          if (row.kind !== "turnHeader" || row.sourceCommandId !== sourceExecutionId) continue;
+          if (!row.entityId || !Number.isSafeInteger(row.rowId))
+            throw operationError(
+              "workspace.file-rewind",
+              "The native file turn has no stable identity.",
+              "unsupported",
+              "none",
+            );
+          matches.push({
+            target: { rowId: row.rowId, entityId: row.entityId },
+            files: row.fileChanges?.files ?? 0,
+            canRewind: row.actions?.canRewindFiles === true,
+          });
+        }
+        if (!page.hasMore || page.rows.length === 0) break;
+        const nextBeforeRowId = page.rows[0]?.rowId;
+        if (
+          nextBeforeRowId === undefined ||
+          !Number.isSafeInteger(nextBeforeRowId) ||
+          (beforeRowId !== undefined && nextBeforeRowId >= beforeRowId)
+        )
+          throw operationError(
+            "workspace.file-rewind",
+            "The native file row cursor did not advance.",
+            "temporarily-unavailable",
+            "none",
+          );
+        beforeRowId = nextBeforeRowId;
+      }
+    } catch (error) {
+      if (error instanceof EngineContractError) throw error;
+      throw operationError(
+        "workspace.file-rewind",
+        error instanceof Error ? error.message : String(error),
+        "temporarily-unavailable",
+        "none",
+      );
+    }
+    if (matches.length !== 1 || baseRevision === undefined || !baseLogEpoch)
+      throw operationError(
+        "workspace.file-rewind",
+        "No unique native file turn belongs to this Execution.",
+        "unsupported",
+        "none",
+      );
+    return { ...matches[0]!, baseRevision, baseLogEpoch };
   }
 
   function publish(run: PendingRun, payload: EngineEventPayload, native?: ZCodeSessionEvent): void {
@@ -1770,6 +1864,112 @@ export function createZCodeAdapter(options: {
           reason: error instanceof Error ? error.message : String(error),
         };
       }
+    },
+    async getFileChanges({ session, executionId }) {
+      if (!sessions.has(session) || !options.agent.conversationFileChangesV4) return null;
+      const target = await resolveFileTarget(session, executionId);
+      if (target.files === 0) return null;
+      const changes = await options.agent.conversationFileChangesV4({
+        ...workspace,
+        sessionId: session,
+        target: target.target,
+        baseRevision: target.baseRevision,
+        baseLogEpoch: target.baseLogEpoch,
+      });
+      return { ...changes, canRewind: target.canRewind };
+    },
+    async previewFileRewind({ session, executionId }) {
+      if (!sessions.has(session) || !options.agent.conversationFileRewindPreviewV4)
+        throw operationError(
+          "workspace.file-rewind",
+          "Native file rewind preview is unavailable.",
+          "unsupported",
+          "none",
+        );
+      const target = await resolveFileTarget(session, executionId);
+      if (!target.canRewind || target.files === 0)
+        throw operationError(
+          "workspace.file-rewind",
+          "This native turn cannot rewind files.",
+          "unsupported",
+          "none",
+        );
+      return options.agent.conversationFileRewindPreviewV4({
+        ...workspace,
+        sessionId: session,
+        target: target.target,
+        baseRevision: target.baseRevision,
+        baseLogEpoch: target.baseLogEpoch,
+      });
+    },
+    async applyFileRewind({ session, executionId, expectedPreview, commandId, beforeDispatch }) {
+      if (!sessions.has(session) || !options.agent.conversationFileRewindPreviewV4)
+        return { status: "rejected", reason: "Native file rewind is unavailable." };
+      const target = await resolveFileTarget(session, executionId);
+      if (!target.canRewind || target.files === 0)
+        return { status: "rejected", reason: "This native turn cannot rewind files." };
+      const freshPreview: EngineFileRewindPreview =
+        await options.agent.conversationFileRewindPreviewV4({
+          ...workspace,
+          sessionId: session,
+          target: target.target,
+          baseRevision: target.baseRevision,
+          baseLogEpoch: target.baseLogEpoch,
+        });
+      if (
+        !freshPreview.canApply ||
+        JSON.stringify(freshPreview) !== JSON.stringify(expectedPreview)
+      )
+        return {
+          status: "rejected",
+          reason: "The native file rewind preview changed; review it again before applying.",
+        };
+      beforeDispatch?.();
+      const envelope = {
+        ...command("applyFileRewind", session, { target: target.target }),
+        commandId,
+        baseRevision: target.baseRevision,
+        baseLogEpoch: target.baseLogEpoch,
+      };
+      let ack;
+      try {
+        ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
+      } catch (error) {
+        try {
+          const query = await options.agent.queryConversationCommandsV4?.({
+            ...workspace,
+            commands: [{ sessionId: session, commandId }],
+          });
+          const recovered = query?.results.find(
+            (item) => item.key.sessionId === session && item.key.commandId === commandId,
+          )?.result;
+          if (recovered && recovered !== "unknown") ack = recovered;
+        } catch {
+          // Do not resend a potentially applied file mutation.
+        }
+        if (!ack)
+          return {
+            status: "unknown",
+            reason: error instanceof Error ? error.message : String(error),
+          };
+      }
+      if (
+        (ack.status === "accepted" || ack.status === "duplicate") &&
+        ack.result?.type === "applyFileRewind"
+      )
+        return {
+          status: ack.result.applied ? "applied" : "rejected",
+          evidence: {
+            source: "engine",
+            evidenceId: commandId,
+            detail: ack.result.response,
+          },
+          ...(ack.result.applied ? {} : { reason: ack.result.response }),
+        };
+      return {
+        status: ack.status === "rejected" || ack.status === "stale" ? "rejected" : "unknown",
+        reason: ack.reasonCode ?? ack.message ?? `Native file rewind status: ${ack.status}.`,
+      };
     },
     async setAssistantFeedback({
       session,

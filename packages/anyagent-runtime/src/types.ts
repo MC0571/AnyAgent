@@ -1,5 +1,4 @@
 import type {
-  EngineAssistantFeedbackReceipt,
   CapabilityStatus,
   EngineCapability,
   EngineApprovalOption,
@@ -13,12 +12,22 @@ import type {
   SubmitInput,
   RuntimeAttachmentStageRequest,
   RuntimeCompactOperation,
+  RuntimeFileRewindOperation,
+  SetAssistantFeedback,
+  RuntimeAssistantFeedbackResult,
 } from "./runtime-operation-types.js";
 
 export type {
   CompactSession,
   RuntimeAttachmentStageRequest,
   RuntimeCompactOperation,
+  RuntimeFileRewindOperation,
+  ExecutionFileTarget,
+  ApplyFileRewind,
+  RuntimeExecutionFileChanges,
+  RuntimeFileRewindPreview,
+  SetAssistantFeedback,
+  RuntimeAssistantFeedbackResult,
   SubmitInput,
 } from "./runtime-operation-types.js";
 
@@ -63,6 +72,7 @@ export type RuntimeIdKind =
   | "input"
   | "attachment"
   | "compact"
+  | "file-rewind"
   | "execution"
   | "event"
   | "approval"
@@ -102,6 +112,7 @@ export type RuntimeAuthorizationScope =
   | "execution.run"
   | "execution.revise"
   | "assistant.feedback"
+  | "workspace.file-rewind"
   | "approval.respond"
   | "user-input.respond"
   | "execution.interrupt"
@@ -317,20 +328,6 @@ export interface RuntimeStopRequest {
   readonly reason: string | null;
 }
 
-export interface SetAssistantFeedback {
-  readonly taskId: string;
-  readonly participantId: string;
-  readonly sessionId: string;
-  readonly authorizationId: string;
-  /** Product Execution that emitted the selected assistant message. */
-  readonly executionId: string;
-  /** Opaque Engine message identity preserved on this Execution's delta event. */
-  readonly messageId: string;
-  readonly feedback: "like" | "dislike" | null;
-}
-
-export type RuntimeAssistantFeedbackResult = EngineAssistantFeedbackReceipt;
-
 export interface RuntimeIntegrityIssue {
   readonly id: string;
   readonly taskId: string;
@@ -359,6 +356,7 @@ export interface TaskHistory {
   readonly userInputs: readonly RuntimeUserInput[];
   readonly stopRequests: readonly RuntimeStopRequest[];
   readonly compactOperations: readonly RuntimeCompactOperation[];
+  readonly fileRewindOperations?: readonly RuntimeFileRewindOperation[];
   readonly integrityIssues: readonly RuntimeIntegrityIssue[];
 }
 
@@ -371,6 +369,7 @@ export type RuntimeChangeKind =
   | "user-input"
   | "stop-request"
   | "compact-operation"
+  | "file-rewind-operation"
   | "integrity-issue";
 export interface RuntimeChange {
   readonly kind: RuntimeChangeKind;

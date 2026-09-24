@@ -1,4 +1,10 @@
-import type { EngineEvidence, EngineSessionRef } from "@anyagent/engine-contract";
+import type {
+  EngineAssistantFeedbackReceipt,
+  EngineEvidence,
+  EngineFileChanges,
+  EngineFileRewindPreview,
+  EngineSessionRef,
+} from "@anyagent/engine-contract";
 import type {
   RuntimeAttachmentReference,
   RuntimeEnvironment,
@@ -56,3 +62,42 @@ export interface RuntimeCompactOperation {
   readonly unknownEvidence: EngineEvidence | null;
   readonly reason: string | null;
 }
+
+export interface ExecutionFileTarget {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly authorizationId: string;
+  readonly executionId: string;
+}
+
+export interface ApplyFileRewind extends ExecutionFileTarget {
+  /** The preview displayed to the user; the Adapter compares it with a fresh native preview. */
+  readonly expectedPreview: EngineFileRewindPreview;
+}
+
+export type RuntimeExecutionFileChanges = EngineFileChanges;
+export type RuntimeFileRewindPreview = EngineFileRewindPreview;
+
+export interface RuntimeFileRewindOperation extends Omit<ExecutionFileTarget, "authorizationId"> {
+  readonly id: string;
+  readonly status: "requested" | "applied" | "rejected" | "unknown";
+  readonly requestedAt: number;
+  readonly terminalAt: number | null;
+  readonly evidence: EngineEvidence | null;
+  readonly reason: string | null;
+}
+
+export interface SetAssistantFeedback {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly authorizationId: string;
+  /** Product Execution that emitted the selected assistant message. */
+  readonly executionId: string;
+  /** Opaque Engine message identity preserved on this Execution's delta event. */
+  readonly messageId: string;
+  readonly feedback: "like" | "dislike" | null;
+}
+
+export type RuntimeAssistantFeedbackResult = EngineAssistantFeedbackReceipt;

@@ -18,7 +18,13 @@ interface NativeAssistantRow {
   sourceCommandId?: string;
   state?: string;
   marker?: { type: string; status?: string };
-  actions?: { canFork?: true; canEdit?: true; canRetry?: true };
+  actions?: { canFork?: true; canEdit?: true; canRetry?: true; canRewindFiles?: true };
+  fileChanges?: {
+    files: number;
+    additions: number;
+    deletions: number;
+    state?: "active" | "reverted";
+  };
   attachments?: { ref: string; fileName: string; mime: string; bytes: number }[];
 }
 
@@ -167,6 +173,34 @@ function harness({
             row.feedback = payload.feedback;
         }
       }
+      if (envelope.type === "applyFileRewind") {
+        const target = (envelope.payload as { target: { rowId: number } }).target;
+        const row = rows.find((candidate) => candidate.rowId === target.rowId);
+        if (row?.fileChanges) row.fileChanges.state = "reverted";
+        if (row?.actions) delete row.actions.canRewindFiles;
+        return {
+          status: "accepted",
+          commandId: envelope.commandId,
+          result: {
+            type: "applyFileRewind",
+            applied: true,
+            preview: {
+              canApply: true,
+              safeFiles: [
+                {
+                  action: "delete",
+                  operationCount: 1,
+                  path: "/tmp/workspace/changed.txt",
+                  toolNames: ["Write"],
+                },
+              ],
+              unsafeFiles: [],
+              ignoredFiles: [],
+            },
+            response: "One file reverted.",
+          },
+        };
+      }
       if (envelope.type === "forkAssistant") {
         if (forkSendFails) throw new Error("native reply lost");
         if (forkCommandStatus === "stale")
@@ -243,6 +277,35 @@ function harness({
         hasMore: eligible.length > pageRows.length,
       };
     },
+    conversationFileChangesV4: async () => ({
+      files: 1,
+      additions: 1,
+      deletions: 0,
+      state: rows.find((row) => row.kind === "turnHeader")?.fileChanges?.state ?? "active",
+      items: [
+        {
+          path: "/tmp/workspace/changed.txt",
+          additions: 1,
+          deletions: 0,
+          writeCount: 1,
+          toolNames: ["Write"],
+          patches: [],
+        },
+      ],
+    }),
+    conversationFileRewindPreviewV4: async () => ({
+      canApply: true,
+      safeFiles: [
+        {
+          action: "delete",
+          operationCount: 1,
+          path: "/tmp/workspace/changed.txt",
+          toolNames: ["Write"],
+        },
+      ],
+      unsafeFiles: [],
+      ignoredFiles: [],
+    }),
   } as unknown as AgentPort;
   const nativeAdapter = createZCodeAdapter({
     agent,
@@ -1467,6 +1530,69 @@ test("ZCode maps a native stale-revision feedback ACK to a retryable result", as
     });
     assert.equal(result.status, "temporarily-unavailable");
     assert.equal(fixture.rows[0]?.feedback, undefined);
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("ZCode file rewind resolves its own native turn, compares preview, and rechecks dispatch", async () => {
+  const rows: NativeAssistantRow[] = [];
+  const fixture = harness({ rows });
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({ session, input: "write a file" });
+    completeNativeSource(fixture);
+    rows.push({
+      rowId: 44,
+      entityId: "native-turn-44",
+      kind: "turnHeader",
+      turnId: "turn-44",
+      sourceCommandId: run.executionId,
+      fileChanges: { files: 1, additions: 1, deletions: 0, state: "active" },
+      actions: { canRewindFiles: true },
+    });
+    assert.equal(
+      (await fixture.adapter.getFileChanges!({ session, executionId: run.executionId }))?.canRewind,
+      true,
+    );
+    const preview = await fixture.adapter.previewFileRewind!({
+      session,
+      executionId: run.executionId,
+    });
+    const request = {
+      session,
+      executionId: run.executionId,
+      expectedPreview: preview,
+      commandId: "product-file-rewind-44",
+    };
+    assert.equal(
+      (
+        await fixture.adapter.applyFileRewind!({
+          ...request,
+          expectedPreview: { ...preview, safeFiles: [] },
+        })
+      ).status,
+      "rejected",
+    );
+    await assert.rejects(
+      fixture.adapter.applyFileRewind!({
+        ...request,
+        beforeDispatch: () => {
+          throw new Error("authorization expired");
+        },
+      }),
+      /authorization expired/u,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "applyFileRewind").length, 0);
+    const receipt = await fixture.adapter.applyFileRewind!({
+      ...request,
+      beforeDispatch: () => {},
+    });
+    assert.equal(receipt.status, "applied");
+    assert.deepEqual(fixture.commands.find((entry) => entry.type === "applyFileRewind")?.payload, {
+      target: { rowId: 44, entityId: "native-turn-44" },
+    });
+    assert.equal(rows[0]?.fileChanges?.state, "reverted");
   } finally {
     fixture.adapter.dispose();
   }

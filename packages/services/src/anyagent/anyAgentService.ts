@@ -13,6 +13,11 @@ import type {
   ForkTaskInput,
   RuntimeAttachmentReference,
   RuntimeAssistantFeedbackResult,
+  RuntimeExecutionFileChanges,
+  RuntimeFileRewindPreview,
+  RuntimeFileRewindOperation,
+  ExecutionFileTarget,
+  ApplyFileRewind,
   CompactSession,
   SetAssistantFeedback,
   StageRuntimeAttachmentInput,
@@ -62,6 +67,9 @@ export interface IAnyAgentService {
   }): Promise<void>;
   reviseTurn(input: ReviseTurn): Promise<void>;
   setAssistantFeedback(input: SetAssistantFeedback): Promise<RuntimeAssistantFeedbackResult>;
+  getExecutionFileChanges(input: ExecutionFileTarget): Promise<RuntimeExecutionFileChanges | null>;
+  previewFileRewind(input: ExecutionFileTarget): Promise<RuntimeFileRewindPreview>;
+  applyFileRewind(input: ApplyFileRewind): Promise<RuntimeFileRewindOperation>;
   compactSession(input: CompactSession): Promise<RuntimeCompactOperation>;
   replyToApproval(input: ReplyToApproval): Promise<void>;
   replyToUserInput(input: ReplyToUserInput): Promise<void>;

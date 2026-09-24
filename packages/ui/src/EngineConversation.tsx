@@ -2,7 +2,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrainIcon } from "lucide-react";
 import type { IAnyAgentService } from "@zcode/services";
-import type { EngineCapability, EngineUserInputAnswer } from "@anyagent/engine-contract";
+import type {
+  EngineCapability,
+  EngineFileRewindPreview,
+  EngineUserInputAnswer,
+} from "@anyagent/engine-contract";
 import {
   Attachment,
   AttachmentInfo,
@@ -505,6 +509,11 @@ export function EngineConversation({
       ? "当前轮次尚未结束，暂不能编辑历史输入。"
       : currentTaskBlock(visibleTask, "execution.revise", engines, refreshFailed)
     : "当前 Task 不可用。";
+  const fileRewindBlockedReason = visibleTask
+    ? hasPendingRound
+      ? "当前轮次尚未结束，暂不能撤销历史文件变化。"
+      : currentTaskBlock(visibleTask, "workspace.file-rewind", engines, refreshFailed)
+    : "当前 Task 不可用。";
   const assistantFeedbackBlockedReason = visibleTask
     ? (currentTaskBlock(visibleTask, "assistant.feedback", engines, refreshFailed) ??
       (visibleTask.engine.engineId === "zcode" && visibleFeedback?.state !== "current"
@@ -959,6 +968,61 @@ export function EngineConversation({
     );
   };
 
+  const fileActionTarget = useMemo(
+    () =>
+      visibleTask
+        ? {
+            taskId: visibleTask.id,
+            participantId: visibleTask.participant.id,
+            sessionId: visibleTask.session.id,
+            authorizationId: visibleTask.authorizationId,
+          }
+        : null,
+    [
+      visibleTask?.id,
+      visibleTask?.participant.id,
+      visibleTask?.session.id,
+      visibleTask?.authorizationId,
+    ],
+  );
+  const loadFileChanges = useCallback(
+    (executionId: string) =>
+      fileActionTarget
+        ? service.getExecutionFileChanges({ ...fileActionTarget, executionId })
+        : Promise.resolve(null),
+    [fileActionTarget, service],
+  );
+  const previewFileRewind = useCallback(
+    (executionId: string) => {
+      if (!fileActionTarget) throw new Error("当前 Task 不可用。");
+      return service.previewFileRewind({ ...fileActionTarget, executionId });
+    },
+    [fileActionTarget, service],
+  );
+  const applyFileRewind = useCallback(
+    async (executionId: string, expectedPreview: EngineFileRewindPreview) => {
+      if (!fileActionTarget) throw new Error("当前 Task 不可用。");
+      setBusyAction(`file-rewind:${executionId}`);
+      try {
+        const result = await service.applyFileRewind({
+          ...fileActionTarget,
+          executionId,
+          expectedPreview,
+        });
+        setRevision((value) => value + 1);
+        if (result.status !== "applied")
+          setNotice({
+            kind: "error",
+            message: result.reason ?? `文件撤销结果：${result.status}`,
+          });
+        return result;
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [fileActionTarget, service],
+  );
+
   const updateAssistantFeedback = (
     executionId: string,
     messageId: string,
@@ -1188,6 +1252,10 @@ export function EngineConversation({
               onForkExecution={forkExecution}
               revisionBlockedReason={revisionBlockedReason}
               onEditExecution={editExecution}
+              fileRewindBlockedReason={fileRewindBlockedReason}
+              onLoadFileChanges={isZCodeHarness ? loadFileChanges : undefined}
+              onPreviewFileRewind={isZCodeHarness ? previewFileRewind : undefined}
+              onApplyFileRewind={isZCodeHarness ? applyFileRewind : undefined}
               onPickEditAttachments={chooseLocalAttachments}
               conversationFindQuery={conversationFindQuery}
               conversationFindActiveIndex={conversationFindActiveIndex}

@@ -7,7 +7,12 @@ import {
   type ZCodePermissionOption,
   type ZCodePermissionRequest,
 } from "@zcode/shared";
-import type { EngineJsonObject, EngineUserInputAnswer } from "@anyagent/engine-contract";
+import type {
+  EngineFileChanges,
+  EngineFileRewindPreview,
+  EngineJsonObject,
+  EngineUserInputAnswer,
+} from "@anyagent/engine-contract";
 import type { EngineApproval, EngineInput, EngineUserInput } from "@/EngineUiParts.js";
 import { jsonLabel, recordStatusLabel, shortId, timeLabel } from "@/EngineUiParts.js";
 import type {
@@ -46,6 +51,7 @@ import {
 } from "@/components/ai-elements/attachments.js";
 import type { AssistantTextRow, UserInputRow } from "@zcode/shared/zcode-protocol-v4";
 import { AssistantCodeCommentFeatureProvider } from "@/AssistantCodeCommentFeatureProvider.js";
+import { EngineExecutionFileSummary } from "@/EngineExecutionFileSummary.js";
 import { useConversationTimelineFind } from "@/v4/useConversationTimelineFind.js";
 import type { ConversationTurnRenderUnit } from "@/v4/conversationTurnRenderUnits.js";
 import type { ConversationFindMatchState } from "@/v4/legacyChatViewTypes.js";
@@ -926,6 +932,10 @@ export function EngineConversationTimeline({
   onForkExecution,
   revisionBlockedReason = null,
   onEditExecution,
+  fileRewindBlockedReason,
+  onLoadFileChanges,
+  onPreviewFileRewind,
+  onApplyFileRewind,
   onPickEditAttachments,
   conversationFindQuery = "",
   conversationFindActiveIndex = -1,
@@ -963,6 +973,13 @@ export function EngineConversationTimeline({
     retainedAttachmentIds: readonly string[],
     addedAttachments: readonly EngineLocalAttachment[],
   ) => Promise<boolean>;
+  fileRewindBlockedReason?: string | null;
+  onLoadFileChanges?: (executionId: string) => Promise<EngineFileChanges | null>;
+  onPreviewFileRewind?: (executionId: string) => Promise<EngineFileRewindPreview>;
+  onApplyFileRewind?: (
+    executionId: string,
+    preview: EngineFileRewindPreview,
+  ) => Promise<{ status: "requested" | "applied" | "rejected" | "unknown"; reason: string | null }>;
   onPickEditAttachments?: () => Promise<EngineLocalAttachment[]>;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
@@ -1335,6 +1352,21 @@ export function EngineConversationTimeline({
                       />
                     ) : null}
                   </Message>
+                ) : null}
+                {!readOnlySource &&
+                ["completed", "failed", "stopped"].includes(execution.status) &&
+                onLoadFileChanges &&
+                onPreviewFileRewind &&
+                onApplyFileRewind ? (
+                  <EngineExecutionFileSummary
+                    executionId={execution.id}
+                    workspacePath={workspacePath}
+                    onOpenCodeViewer={onOpenCodeViewer}
+                    blockedReason={fileRewindBlockedReason}
+                    loadChanges={onLoadFileChanges}
+                    previewRewind={onPreviewFileRewind}
+                    applyRewind={onApplyFileRewind}
+                  />
                 ) : null}
                 {!deltas.length && !execution.result && !toolParts.size && streaming ? (
                   <p className="ml-4 text-xs text-foreground-subtle">正在处理…</p>
