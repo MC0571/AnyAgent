@@ -94,12 +94,11 @@ export function capabilityLabel(status: CapabilityState | undefined): string {
 }
 
 export function capabilityBlockReason(status: CapabilityState | undefined): string | null {
-  if (!status) return "能力状态未知。";
-  if (status.support === "unsupported") return status.reason ?? "Engine 不支持此操作。";
-  if (status.support === "unknown") return status.reason ?? "Engine 支持情况未知。";
-  if (status.availability === "authorization-required") return status.reason ?? "当前授权不足。";
-  if (status.availability === "temporarily-unavailable") return status.reason ?? "此能力暂不可用。";
-  if (status.availability === "unknown") return status.reason ?? "此能力当前是否可用未知。";
+  if (status?.support === "unsupported") return "此操作当前不可用。";
+  if (!status || status.support === "unknown" || status.availability === "unknown")
+    return "暂时无法确认此操作是否可用，请刷新状态。";
+  if (status.availability === "authorization-required") return "需要授权后才能继续。";
+  if (status.availability === "temporarily-unavailable") return "此操作暂时不可用，请稍后重试。";
   return null;
 }
 
@@ -177,19 +176,17 @@ export function provenanceLabel(provenance: Readonly<Record<string, string>> | u
 
 export function canActOnTask(task: EngineTask, capability: CapabilityName): string | null {
   if (capability !== "execution.interrupt") {
-    if (task.status !== "active")
-      return `Task 当前状态为“${taskStatusLabel(task.status)}”，不接收新的业务请求。`;
-    if (task.session.status !== "active")
-      return `产品 Session 当前状态为“${sessionStatusLabel(task.session.status)}”。`;
+    if (task.status !== "active") return "此对话已结束，不能继续发送。";
+    if (task.session.status !== "active") return "此对话目前无法继续，历史仍可查看。";
   }
-  if (task.currentEngine.state !== "current") return "Engine 当前能力未知，请刷新状态后重试。";
+  if (task.currentEngine.state !== "current") return "暂时无法确认此对话是否可继续，请刷新状态。";
   const { engine, currentEngine } = task;
   const mismatch =
     engine.adapterVersion !== currentEngine.adapterVersion ||
     engine.configurationVersion !== currentEngine.configurationVersion ||
     engine.environment !== currentEngine.environment;
   if (mismatch) {
-    return "Engine 配置、适配器或环境与创建时快照不同；请重新创建 Task 并重新授权后操作。";
+    return "当前设置已变化，请新建对话后继续。";
   }
   return capabilityBlockReason(currentEngine.capabilities[capability]);
 }

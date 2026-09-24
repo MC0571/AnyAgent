@@ -21,7 +21,6 @@ import {
   canActOnTask,
   jsonLabel,
   shortId,
-  taskStatusLabel,
   timeLabel,
 } from "@/EngineUiParts.js";
 import type { EngineHistory, EngineTask } from "@/EngineUiParts.js";
@@ -69,6 +68,7 @@ import {
   readPromptHistoryEntries,
 } from "@/lib/promptHistoryStorage.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import { toast } from "@/components/ui/toast.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type { ConversationFindMatchState } from "@/v4/legacyChatViewTypes.js";
@@ -189,23 +189,12 @@ function currentTaskBlock(
   refreshedEngines: Awaited<ReturnType<IAnyAgentService["listEngines"]>> | null,
   refreshFailed: boolean,
 ): string | null {
-  if (refreshFailed || refreshedEngines === null) return "Engine 当前状态未知，请刷新后重试。";
+  if (refreshFailed || refreshedEngines === null)
+    return "暂时无法确认此对话是否可继续，请刷新状态。";
   const current = refreshedEngines.find(
     (engine) => engine.engineId === task.currentEngine.engineId,
   );
-  if (!current || current.state !== "current") return "Engine 当前状态未知，请刷新后重试。";
-  if (capability !== "execution.interrupt" && task.status !== "active")
-    return `Task 当前状态为“${taskStatusLabel(task.status)}”，不接收新的业务请求。`;
-  if (capability !== "execution.interrupt" && task.session.status !== "active") {
-    return `产品 Session 当前状态为“${task.session.status}”，暂不可操作。`;
-  }
-  if (
-    task.engine.adapterVersion !== current.adapterVersion ||
-    task.engine.configurationVersion !== current.configurationVersion ||
-    task.engine.environment !== current.environment
-  ) {
-    return "当前 Engine 配置、适配器或环境与 Task 创建时快照不兼容；请重新创建 Task 并重新授权。";
-  }
+  if (!current || current.state !== "current") return "暂时无法确认此对话是否可继续，请刷新状态。";
   return canActOnTask({ ...task, currentEngine: current }, capability);
 }
 
@@ -254,7 +243,9 @@ export function EngineConversation({
   const [loading, setLoading] = useState(true);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const setNotice = (notice: Notice | null) => {
+    if (notice) toast(notice.message, { variant: notice.kind === "error" ? "warning" : "info" });
+  };
   const [attachmentsByTask, setAttachmentsByTask] = useState<
     Record<string, EngineComposerAttachment[]>
   >({});
@@ -363,11 +354,11 @@ export function EngineConversation({
           setTask(refreshedTask);
         }
       }
-    } catch (error) {
+    } catch {
       if (requestVersion === requestVersionRef.current) {
         setEngines(null);
         setRefreshFailed(true);
-        setNotice({ kind: "error", message: `刷新 Engine 状态失败：${errorText(error)}` });
+        setNotice({ kind: "error", message: "刷新失败，请稍后重试。" });
       }
     } finally {
       if (requestVersion === requestVersionRef.current) setLoading(false);
@@ -1194,22 +1185,6 @@ export function EngineConversation({
       className="@container/conversation flex h-full min-h-0 w-full flex-col bg-background text-foreground"
       data-testid="engine-conversation"
     >
-      {notice ? (
-        <div
-          role={notice.kind === "error" ? "alert" : "status"}
-          className={`mx-4 mt-3 rounded-md border px-3 py-2 text-sm ${notice.kind === "error" ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-surface text-foreground"}`}
-        >
-          {notice.message}
-          <button
-            type="button"
-            className="float-right ml-3 font-medium"
-            aria-label="关闭提示"
-            onClick={() => setNotice(null)}
-          >
-            关闭
-          </button>
-        </div>
-      ) : null}
       <div
         ref={conversationScrollRef}
         className="min-h-0 flex-1 overflow-y-auto px-4"
@@ -1221,9 +1196,6 @@ export function EngineConversation({
         }}
       >
         <div className={`mx-auto ${contentWidthClassName}`}>
-          {visibleTask?.closeReason ? (
-            <p className="pt-3 text-xs text-foreground-subtle">{visibleTask.closeReason}</p>
-          ) : null}
           {visibleTask && projection ? (
             <EngineConversationTimeline
               projection={projection}
@@ -1265,11 +1237,9 @@ export function EngineConversation({
           ) : (
             <div className="mx-auto grid h-full max-w-2xl place-items-center px-5 text-center">
               <div>
-                <h2 className="font-semibold">
-                  {loading ? "正在读取 Engine 任务…" : "选择或创建 Engine Task"}
-                </h2>
+                <h2 className="font-semibold">{loading ? "正在读取对话…" : "开始新对话"}</h2>
                 <p className="mt-2 text-sm text-foreground-subtle">
-                  在左侧任务列表选择已有 Task，或创建一个使用独立参与者与产品 Session 的新 Task。
+                  从左侧选择已有对话，或在下方发送消息。
                 </p>
               </div>
             </div>
@@ -1316,6 +1286,12 @@ export function EngineConversation({
                     <dt className="inline text-foreground-subtle">环境快照：</dt>
                     <dd className="inline">{visibleTask.engine.environment ?? "未知"}</dd>
                   </div>
+                  {visibleTask.closeReason ? (
+                    <div>
+                      <dt className="inline text-foreground-subtle">结束原因：</dt>
+                      <dd className="inline">{visibleTask.closeReason}</dd>
+                    </div>
+                  ) : null}
                 </dl>
               </section>
               <section>

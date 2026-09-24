@@ -269,9 +269,7 @@ test("mounted conversation forwards a real FakeEngine rejection decision and kee
   try {
     await ui.send("write a file");
     await ui.advance(3);
-    await waitFor(() =>
-      assert.ok(ui.container.textContent?.includes("审批 · write file · 等待答复")),
-    );
+    await waitFor(() => assert.ok(ui.container.textContent?.includes("需要批准 · write file")));
     await act(async () => ui.button("拒绝").click());
     await waitFor(() =>
       assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.status, "forwarded"),
@@ -285,7 +283,10 @@ test("mounted conversation forwards a real FakeEngine rejection decision and kee
         ),
     );
     assert.equal(ui.runtime.getHistory(ui.task.id)?.executions[0]?.status, "started");
-    assert.match(ui.container.textContent ?? "", /审批 · write file · 已转交 Engine/);
+    await waitFor(() =>
+      assert.equal(ui.container.querySelector('[data-testid^="engine-approval-"]'), null),
+    );
+    assert.doesNotMatch(ui.container.textContent ?? "", /allow_once|已转交 Engine/);
   } finally {
     await ui.close();
   }
@@ -312,7 +313,8 @@ test("mounted conversation shows approval expiry without forwarding an answer", 
     );
     assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.repliedOptionId, null);
     assert.equal(ui.runtime.getHistory(ui.task.id)?.executions[0]?.status, "started");
-    assert.match(ui.container.textContent ?? "", /审批 · expired write · 已过期/);
+    assert.match(ui.container.textContent ?? "", /授权请求已过期/);
+    assert.doesNotMatch(ui.container.textContent ?? "", /expired write|已转交 Engine/);
   } finally {
     await ui.close();
   }
@@ -383,6 +385,7 @@ test("mounted ZCode permission request uses PermissionDialog and replies through
     );
     assert.equal(ui.runtime.getHistory(ui.task.id)?.approvals[0]?.repliedOptionId, "allow");
     assert.ok(!ui.container.textContent?.includes("等待 Engine 确认处理"));
+    assert.equal(ui.container.querySelector('[data-testid^="engine-approval-"]'), null);
   } finally {
     await ui.close();
   }
@@ -685,10 +688,10 @@ test("mounted conversation blocks changed capabilities and recovers after refres
       await ui.refresh();
     };
     for (const [status, message] of [
-      [{ support: "supported", availability: "temporarily-unavailable" }, "此能力暂不可用"],
-      [{ support: "supported", availability: "authorization-required" }, "当前授权不足"],
-      [{ support: "unknown", availability: "unknown" }, "Engine 支持情况未知"],
-      [{ support: "unsupported", availability: "unknown" }, "Engine 不支持此操作"],
+      [{ support: "supported", availability: "temporarily-unavailable" }, "此操作暂时不可用"],
+      [{ support: "supported", availability: "authorization-required" }, "需要授权后才能继续"],
+      [{ support: "unknown", availability: "unknown" }, "暂时无法确认此操作是否可用"],
+      [{ support: "unsupported", availability: "unknown" }, "此操作当前不可用"],
     ] as const) {
       ui.fake.setCapability("execution.run", status);
       await refresh();
@@ -742,7 +745,7 @@ test("mounted conversation refuses new business after Task reaches a terminal st
         true,
       ),
     );
-    assert.match(ui.container.textContent ?? "", /不接收新的业务请求/);
+    assert.match(ui.container.textContent ?? "", /此对话已结束，不能继续发送/);
     await assert.rejects(
       () =>
         ui.runtime.submitInput({

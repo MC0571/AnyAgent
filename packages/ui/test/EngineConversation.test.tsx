@@ -636,7 +636,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     failNextSubmit = true;
     await act(async () => composerSubmit()?.click());
     await waitFor(
-      () => assert.ok(container.textContent?.includes("Fake host rejected this input")),
+      () => assert.ok(document.body.textContent?.includes("Fake host rejected this input")),
       "failed submission should report the Host rejection",
     );
     assert.ok(
@@ -1071,27 +1071,27 @@ test("EngineConversation sends through the product composer and renders ordered 
       { support: "supported", availability: "temporarily-unavailable" },
       "current",
       true,
-      "此能力暂不可用",
+      "此操作暂时不可用",
     );
     await checkCapability(
       { support: "supported", availability: "authorization-required" },
       "current",
       true,
-      "当前授权不足",
+      "需要授权后才能继续",
     );
     await checkCapability(
       { support: "unknown", availability: "unknown" },
       "current",
       true,
-      "Engine 支持情况未知",
+      "暂时无法确认此操作是否可用",
     );
     await checkCapability(
       { support: "unsupported", availability: "unknown" },
       "current",
       true,
-      "Engine 不支持此操作",
+      "此操作当前不可用",
     );
-    await checkCapability(available, "unknown", true, "Engine 当前状态未知");
+    await checkCapability(available, "unknown", true, "暂时无法确认此对话是否可继续");
     await checkCapability(available, "current", false, "");
 
     const composerInput = () =>
@@ -1103,14 +1103,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     failNextSubmit = true;
     await act(async () => composerInput().__zcodeLexicalInputE2E.setText("keep this draft"));
     await act(async () => composerSubmit()?.click());
-    await waitFor(
-      () =>
-        assert.match(
-          container.querySelector('[role="alert"]')?.textContent ?? "",
-          /Fake host rejected/,
-        ),
-      "failed submission should show the Host error",
-    );
+    assert.equal(container.querySelector('[role="alert"]'), null);
     assert.equal(composerInput().__zcodeLexicalInputE2E.getText(), "keep this draft");
 
     const frozenInputId = "input-frozen-running";
@@ -1263,10 +1256,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       "selecting Task B should load its own conversation",
     );
     assert.match(container.textContent ?? "", /Recovered prompt after project removal/);
-    assert.match(
-      container.querySelector('[role="alert"]')?.textContent ?? "",
-      /Project directory unavailable/,
-    );
+    assert.equal(container.querySelector('[role="alert"]'), null);
     assert.equal(composerSubmit()?.disabled, true);
     await act(async () => {
       clock += 1;
@@ -2005,7 +1995,7 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
         execution.querySelector(
           `[data-testid="engine-${id.startsWith("approval") ? "approval" : "user-input"}-${id}"]`,
         )?.textContent ?? "",
-        /未提供可答复选项/,
+        /暂时无法答复此请求/,
       );
     }
     history.executions[0] = {
@@ -2352,10 +2342,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     );
     assert.equal(submissions.length, 1, "/compact must not become submitInput text");
     assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/compact instructions");
-    assert.match(
-      container.querySelector('[role="status"]')?.textContent ?? "",
-      /独立维护操作.*不接受正文或附件.*输入已保留/,
-    );
+    assert.equal(container.querySelector('[role="status"]'), null);
     assert.equal(compactRequests.length, 0);
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/compact"));
     await act(async () =>
@@ -2376,7 +2363,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       () => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""),
       "completed maintenance should clear the slash draft",
     );
-    assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /上下文压缩已完成/);
+    assert.equal(container.querySelector('[role="status"]'), null);
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/skill"));
     await waitFor(

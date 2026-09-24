@@ -14,7 +14,7 @@ import type {
   EngineUserInputAnswer,
 } from "@anyagent/engine-contract";
 import type { EngineApproval, EngineInput, EngineUserInput } from "@/EngineUiParts.js";
-import { jsonLabel, recordStatusLabel, shortId, timeLabel } from "@/EngineUiParts.js";
+import { jsonLabel, timeLabel } from "@/EngineUiParts.js";
 import type {
   EngineDeltaBlock,
   EngineConversationProjection,
@@ -356,13 +356,10 @@ function InlineApproval({
   busyAction: string | null;
   onReply: (approvalId: string, optionId: string, feedback?: string) => void;
 }) {
-  const pending = approval.status === "pending";
   return (
     <Message from="assistant" data-testid={`engine-approval-${approval.id}`}>
       <MessageContent className="w-full max-w-2xl rounded-lg border border-warning/30 bg-warning/5 p-3">
-        <p className="text-sm font-medium">
-          审批 · {approval.operation} · {recordStatusLabel(approval.status)}
-        </p>
+        <p className="text-sm font-medium">需要批准 · {approval.operation}</p>
         {approval.scope ? (
           <p className="mt-1 text-xs text-foreground-subtle">范围：{approval.scope}</p>
         ) : null}
@@ -371,11 +368,9 @@ function InlineApproval({
             到期：{timeLabel(approval.expiresAt)}
           </p>
         ) : null}
-        {pending && approval.options.length === 0 ? (
-          <p className="mt-2 text-xs text-warning">
-            当前 Engine 未提供可答复选项，暂不能从此处作答。
-          </p>
-        ) : pending ? (
+        {approval.options.length === 0 ? (
+          <p className="mt-2 text-xs text-warning">暂时无法答复此请求。</p>
+        ) : (
           <div className="mt-3 flex flex-wrap gap-2">
             {approval.options.map((option) => {
               const requiresFreeText = option.id === WORKFLOW_REFINE_PERMISSION_OPTION_ID;
@@ -407,16 +402,9 @@ function InlineApproval({
               );
             })}
           </div>
-        ) : approval.repliedOptionId ? (
-          <p className="mt-2 text-xs text-foreground-subtle">
-            答复选项：{approval.repliedOptionId}
-          </p>
-        ) : null}
-        {disabledReason && pending ? (
-          <p className="mt-2 text-xs text-warning">{disabledReason}</p>
-        ) : null}
-        {pending &&
-        approval.options.some(
+        )}
+        {disabledReason ? <p className="mt-2 text-xs text-warning">{disabledReason}</p> : null}
+        {approval.options.some(
           (option) => option.id === WORKFLOW_REFINE_PERMISSION_OPTION_ID || option.requiresFeedback,
         ) ? (
           <p className="mt-2 text-xs text-warning">
@@ -529,15 +517,24 @@ function ApprovalEntry({
   busyAction: string | null;
   onReply: (approvalId: string, optionId: string, feedback?: string) => void;
 }) {
-  const request = approval.status === "pending" ? nativePermissionRequest(approval) : null;
-  if (request && !disabledReason) {
+  if (approval.status !== "pending") {
+    if (approval.status === "expired" || approval.status === "unknown")
+      return (
+        <p className="ml-4 text-xs text-foreground-subtle">
+          {approval.status === "expired" ? "授权请求已过期。" : "授权结果暂时无法确认。"}
+        </p>
+      );
+    return null;
+  }
+  const request = nativePermissionRequest(approval);
+  if (request) {
     return (
       <Message from="assistant" data-testid={`engine-approval-${approval.id}`}>
         <PermissionDialog
           key={approval.id}
           request={request}
           workspacePath={workspacePath}
-          responding={busyAction !== null}
+          responding={busyAction !== null || disabledReason !== null}
           onRespond={(requestId, option, feedback) => {
             if (requestId === approval.id) onReply(approval.id, option.optionId, feedback);
           }}
@@ -566,8 +563,17 @@ function InlineUserInput({
   busyAction: string | null;
   onReply: (requestId: string, response: EngineUserInputAnswer) => void;
 }) {
+  if (request.status !== "pending") {
+    if (request.status === "expired" || request.status === "unknown")
+      return (
+        <p className="ml-4 text-xs text-foreground-subtle">
+          {request.status === "expired" ? "提问已过期。" : "答复结果暂时无法确认。"}
+        </p>
+      );
+    return null;
+  }
   const elicitation = nativeElicitationRequest(request);
-  if (elicitation && request.status === "pending" && !disabledReason && busyAction === null) {
+  if (elicitation && !disabledReason && busyAction === null) {
     return (
       <Message from="assistant" data-testid={`engine-user-input-${request.id}`}>
         <ElicitationDialog
@@ -586,55 +592,41 @@ function InlineUserInput({
   return (
     <Message from="assistant" data-testid={`engine-user-input-${request.id}`}>
       <MessageContent className="w-full max-w-2xl rounded-lg border border-input-border bg-card p-3">
-        <p className="text-xs text-foreground-subtle">
-          需要你的输入 · {request.inputKind} · {recordStatusLabel(request.status)}
-        </p>
+        <p className="text-xs text-foreground-subtle">需要你的回答</p>
         <p className="mt-1 whitespace-pre-wrap text-sm">{request.prompt}</p>
         {request.expiresAt !== null ? (
           <p className="mt-1 text-xs text-foreground-subtle">
             到期：{timeLabel(request.expiresAt)}
           </p>
         ) : null}
-        {request.status === "pending" ? (
-          request.inputKind === "choice" && request.options.length === 0 ? (
-            <p className="mt-2 text-xs text-warning">
-              当前 Engine 未提供可答复选项，暂不能从此处作答。
-            </p>
-          ) : request.inputKind === "choice" ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {request.options.map((option) => (
-                <Button
-                  key={option.id}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!!disabledReason || busyAction !== null}
-                  title={disabledReason ?? undefined}
-                  onClick={() => onReply(request.id, option.id)}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          ) : request.inputKind === "text" ? (
-            <UserInputReply
-              requestId={request.id}
-              disabled={!!disabledReason || busyAction !== null}
-              onReply={onReply}
-            />
-          ) : (
-            <p className="mt-2 text-xs text-warning">
-              当前 Engine 未提供可验证的表单结构，暂不能从此处作答。
-            </p>
-          )
-        ) : request.response != null ? (
-          <pre className="mt-2 overflow-auto rounded bg-surface p-2 text-xs">
-            {jsonLabel(request.response)}
-          </pre>
-        ) : null}
-        {disabledReason && request.status === "pending" ? (
-          <p className="mt-2 text-xs text-warning">{disabledReason}</p>
-        ) : null}
+        {request.inputKind === "choice" && request.options.length === 0 ? (
+          <p className="mt-2 text-xs text-warning">暂时无法答复此请求。</p>
+        ) : request.inputKind === "choice" ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {request.options.map((option) => (
+              <Button
+                key={option.id}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!!disabledReason || busyAction !== null}
+                title={disabledReason ?? undefined}
+                onClick={() => onReply(request.id, option.id)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        ) : request.inputKind === "text" ? (
+          <UserInputReply
+            requestId={request.id}
+            disabled={!!disabledReason || busyAction !== null}
+            onReply={onReply}
+          />
+        ) : (
+          <p className="mt-2 text-xs text-warning">暂时无法答复此请求。</p>
+        )}
+        {disabledReason ? <p className="mt-2 text-xs text-warning">{disabledReason}</p> : null}
       </MessageContent>
     </Message>
   );
@@ -869,10 +861,13 @@ function EngineUserInputMessage({
         ) : null}
         {input.status === "rejected" || input.status === "failed" || input.status === "unknown" ? (
           <div className="mt-1 text-[11px] text-foreground-subtle">
-            输入 · {recordStatusLabel(input.status)} · {timeLabel(input.receivedAt)}
+            {input.status === "unknown"
+              ? "发送状态暂时无法确认。"
+              : input.status === "rejected"
+                ? "消息未被接收。"
+                : "消息发送失败。"}
           </div>
         ) : null}
-        {input.error ? <p className="mt-2 text-sm text-destructive">{input.error}</p> : null}
       </div>
     </Message>
   );
@@ -1000,7 +995,6 @@ export function EngineConversationTimeline({
   if (
     !projection.turns.length &&
     !projection.unassociatedExecutions.length &&
-    !projection.unassociatedEvents.length &&
     !projection.unassociatedApprovals.length &&
     !projection.unassociatedUserInputs.length &&
     !inheritedSources.length
@@ -1023,9 +1017,7 @@ export function EngineConversationTimeline({
             />
           </AssistantCodeCommentFeatureProvider>
         ) : null}
-        <p className="text-sm text-foreground-subtle">
-          此 Task 尚无输入。可以继续在下方开始一轮对话。
-        </p>
+        <p className="text-sm text-foreground-subtle">开始对话吧。</p>
       </div>
     );
   }
@@ -1052,9 +1044,7 @@ export function EngineConversationTimeline({
           key={source.sourceTaskId}
           data-testid={`engine-inherited-source-${source.sourceTaskId}`}
         >
-          <p className="mb-3 text-xs text-foreground-subtle">
-            继承自 Task {shortId(source.sourceTaskId)} · 只读
-          </p>
+          <p className="mb-3 text-xs text-foreground-subtle">来自原对话 · 只读</p>
           {source.projection ? (
             <EngineConversationTimeline
               projection={source.projection}
@@ -1391,7 +1381,7 @@ export function EngineConversationTimeline({
                   <p className="ml-4 text-xs text-destructive">执行失败；没有回答正文。</p>
                 ) : null}
                 {execution.error ? (
-                  <p className="ml-4 text-sm text-destructive">{execution.error}</p>
+                  <p className="ml-4 text-sm text-destructive">处理失败，请刷新状态后重试。</p>
                 ) : null}
                 {executionTurn.approvals
                   .filter((approval) => !placedApprovalIds.has(approval.id))
@@ -1418,25 +1408,28 @@ export function EngineConversationTimeline({
                   ))}
                 {!deltas.length && execution.result === null && execution.status === "unknown" ? (
                   <p className="ml-4 rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
-                    Engine 执行结果未知；当前没有可确认的回答正文。
+                    回复状态暂时无法确认。
                   </p>
                 ) : null}
               </div>
             );
           })}
-          {turn.events.map((event) => (
-            <p key={event.id} className="ml-4 text-xs text-foreground-subtle">
-              {event.type === "connection.disconnected" ? "连接断开" : event.type} ·{" "}
-              {timeLabel(event.observedAt)}
-            </p>
-          ))}
+          {turn.events
+            .filter((event) => event.type === "connection.disconnected")
+            .map((event) => (
+              <p key={event.id} className="ml-4 text-xs text-foreground-subtle">
+                连接已中断，回复状态暂时无法确认。
+              </p>
+            ))}
           {!turn.executions.length ? (
             <p className="ml-4 rounded-md border border-dashed border-input-border p-2 text-xs text-foreground-subtle">
               {turn.input.status === "rejected"
-                ? "此输入已被拒绝，未创建 Execution。"
+                ? "消息未被接收。"
                 : turn.input.status === "unknown"
-                  ? "输入接纳状态未知，尚未找到关联 Execution。"
-                  : `输入状态：${recordStatusLabel(turn.input.status)}；等待关联 Execution。`}
+                  ? "发送状态暂时无法确认。"
+                  : turn.input.status === "queued"
+                    ? "已加入队列。"
+                    : "正在等待回复…"}
             </p>
           ) : null}
         </EngineTurnFrame>
@@ -1446,14 +1439,11 @@ export function EngineConversationTimeline({
           key={execution.id}
           className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning"
         >
-          Execution {shortId(execution.id)} 未能关联到本 Task 的输入；其内容未并入对话。
+          部分回复暂时无法显示。
         </p>
       ))}
       {projection.unassociatedApprovals.map((approval) => (
-        <div key={approval.id} className="space-y-2">
-          <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
-            审批 {shortId(approval.id)} 没有可靠的 Execution 关联，单独显示以保留答复入口。
-          </p>
+        <div key={approval.id}>
           <ApprovalEntry
             approval={approval}
             workspacePath={workspacePath}
@@ -1464,10 +1454,7 @@ export function EngineConversationTimeline({
         </div>
       ))}
       {projection.unassociatedUserInputs.map((request) => (
-        <div key={request.id} className="space-y-2">
-          <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
-            用户输入请求 {shortId(request.id)} 没有可靠的 Execution 关联，单独显示以保留答复入口。
-          </p>
+        <div key={request.id}>
           <InlineUserInput
             request={request}
             disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
@@ -1476,12 +1463,6 @@ export function EngineConversationTimeline({
           />
         </div>
       ))}
-      {projection.unassociatedEvents.length ? (
-        <p className="rounded-md border border-warning/30 bg-warning/5 p-2 text-xs text-warning">
-          有 {projection.unassociatedEvents.length}{" "}
-          条事件无法可靠关联到此对话。原始内容仅在下方诊断信息中查看。
-        </p>
-      ) : null}
     </div>
   );
 }

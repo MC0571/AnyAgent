@@ -1758,8 +1758,8 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                                   type="button"
                                   variant="ghost"
                                   size="icon-md"
-                                  aria-label="刷新 Engine 状态"
-                                  title="刷新 Engine 状态"
+                                  aria-label="刷新对话状态"
+                                  title="刷新对话状态"
                                   onClick={notifyEngineRefresh}
                                 >
                                   <RefreshCw className="size-4" />
