@@ -16,15 +16,25 @@ import { createServiceDescriptor } from "../descriptors.js";
 /** Renderer-facing product surface. Native engine handles and grants stay in the Host. */
 export interface IAnyAgentService {
   readonly onDidChange: Event<RuntimeChange>;
-  getCreateTaskContext(): Promise<{
+  getCreateTaskContext(workspace?: {
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<{
     environment: RuntimeEnvironment;
     credentialSource: RuntimeCredentialSource;
   }>;
-  listEngines(): Promise<readonly RuntimeCurrentEngineProjection[]>;
+  listEngines(workspace?: {
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<readonly RuntimeCurrentEngineProjection[]>;
   listTasks(): Promise<readonly RuntimeTask[]>;
   getTask(taskId: string): Promise<RuntimeTask | null>;
   getHistory(taskId: string): Promise<TaskHistory | null>;
-  createTask(input: { engineId: string }): Promise<RuntimeTask>;
+  createTask(input: {
+    engineId: string;
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<RuntimeTask>;
   submitInput(input: SubmitInput): Promise<void>;
   replyToApproval(input: ReplyToApproval): Promise<void>;
   replyToUserInput(input: ReplyToUserInput): Promise<void>;

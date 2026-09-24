@@ -1,5 +1,5 @@
 /* oxlint-disable eslint(max-lines) -- 单个 Task 的刷新、资格投影、身份校验与正式消息界面共享同一选中状态。 */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { IAnyAgentService } from "@zcode/services";
 import type { EngineCapability } from "@anyagent/engine-contract";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
@@ -23,6 +23,8 @@ import { ZCODE_AGENT_PROVIDER } from "@zcode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getConversationContentWidthClassName } from "@/v4/conversationLayout.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import type { CodeViewerSource } from "@/lib/codeViewer.js";
+import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 
 type Notice = { kind: "error" | "info"; message: string };
 const contentWidthClassName = getConversationContentWidthClassName({
@@ -69,6 +71,8 @@ export function EngineConversation({
   selectedTaskId,
   onSelectTask,
   onTitleChange,
+  onOpenCodeViewer,
+  onOpenFileLink,
   refreshVersion = 0,
   inspectorOpen = false,
   onInspectorOpenChange = () => {},
@@ -77,6 +81,8 @@ export function EngineConversation({
   selectedTaskId: string | null;
   onSelectTask: (taskId: string | null) => void;
   onTitleChange?: (taskId: string, title: string) => void;
+  onOpenCodeViewer?: (source: CodeViewerSource) => void;
+  onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   refreshVersion?: number;
   inspectorOpen?: boolean;
   onInspectorOpenChange?: (open: boolean) => void;
@@ -94,6 +100,8 @@ export function EngineConversation({
   const requestVersionRef = useRef(0);
   const changeVersionRef = useRef(0);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
+  const conversationScrollRef = useRef<HTMLDivElement | null>(null);
+  const followConversationTailRef = useRef(true);
   const { intl } = useZCodeIntl();
   const { modelSelectionService } = useServices();
   const modelSelectionRead = useModelSelectionServiceView(modelSelectionService);
@@ -105,14 +113,12 @@ export function EngineConversation({
     setRefreshFailed(false);
     setEngines(null);
     try {
-      // listEngines probes current support/availability. Read Task snapshots only after it
-      // resolves so historical Task records receive the newly observed current projection.
-      const nextEngines = await service.listEngines();
       const nextTasks = await service.listTasks();
       const targetTaskId = selectedTaskId ?? nextTasks[0]?.id ?? null;
-      if (requestVersion !== requestVersionRef.current) return;
-      setEngines(nextEngines);
       if (!targetTaskId) {
+        const nextEngines = await service.listEngines();
+        if (requestVersion !== requestVersionRef.current) return;
+        setEngines(nextEngines);
         if (changeVersionRef.current === startedChangeVersion) {
           setTask(null);
           setHistory(null);
@@ -125,10 +131,26 @@ export function EngineConversation({
         service.getHistory(targetTaskId),
       ]);
       if (requestVersion !== requestVersionRef.current) return;
-      if (changeVersionRef.current !== startedChangeVersion) return;
-      if (selectedTaskId === null || selectedTaskId === targetTaskId) {
+      if (changeVersionRef.current === startedChangeVersion) {
         setTask(nextTask);
         setHistory(nextHistory);
+      }
+      // Historical conversation remains readable even if this workspace no longer exists.
+      const nextEngines = await service.listEngines(
+        nextTask?.environment.workDirectory
+          ? { workspacePath: nextTask.environment.workDirectory }
+          : undefined,
+      );
+      if (requestVersion !== requestVersionRef.current) return;
+      setEngines(nextEngines);
+      if (changeVersionRef.current === startedChangeVersion) {
+        const refreshedTask = await service.getTask(targetTaskId);
+        if (
+          requestVersion === requestVersionRef.current &&
+          changeVersionRef.current === startedChangeVersion
+        ) {
+          setTask(refreshedTask);
+        }
       }
     } catch (error) {
       if (requestVersion === requestVersionRef.current) {
@@ -169,6 +191,12 @@ export function EngineConversation({
     () => (task && task.id === selectedTaskId ? projectEngineConversation(task, history) : null),
     [task, history, selectedTaskId],
   );
+  useLayoutEffect(() => {
+    const element = conversationScrollRef.current;
+    if (element && followConversationTailRef.current) {
+      element.scrollTop = element.scrollHeight - element.clientHeight;
+    }
+  }, [projection]);
   const visibleTask = task?.id === selectedTaskId ? task : null;
   const visibleHistory = visibleTask ? history : null;
   const visibleTitle = visibleTask
@@ -344,7 +372,16 @@ export function EngineConversation({
           </button>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4">
+      <div
+        ref={conversationScrollRef}
+        className="min-h-0 flex-1 overflow-y-auto px-4"
+        data-testid="engine-conversation-scroll"
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          followConversationTailRef.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+        }}
+      >
         <div className={`mx-auto ${contentWidthClassName}`}>
           {visibleTask?.closeReason ? (
             <p className="pt-3 text-xs text-foreground-subtle">{visibleTask.closeReason}</p>
@@ -353,8 +390,9 @@ export function EngineConversation({
             <EngineConversationTimeline
               projection={projection}
               workspacePath={visibleTask.environment.workDirectory ?? ""}
+              onOpenCodeViewer={onOpenCodeViewer}
+              onOpenFileLink={onOpenFileLink}
               historyLoading={loading && !visibleHistory}
-              runBlockedReason={runBlockedReason}
               approvalBlockedReason={approvalBlockedReason}
               userInputBlockedReason={userInputBlockedReason}
               busyAction={busyAction}

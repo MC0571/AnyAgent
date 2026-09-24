@@ -4501,6 +4501,10 @@ const enUS: Record<string, string> = {
   "chat.toolbar.modelSwitch.lockedByRunningTask":
     "A task is running. Finish it before switching model providers.",
   "chat.toolbar.modelSwitch.lockedByRunningTask.short": "busy",
+  "chat.toolbar.harnessSwitch.lockedSession":
+    "This session cannot switch Harness. Start a new conversation to choose one.",
+  "chat.toolbar.harnessSwitch.unavailable":
+    "This Harness is unavailable. See the reason shown beside it.",
   "chat.goal.runningBlocked": "Set a goal after the current task finishes.",
   "chat.goal.planModeBlocked": "Goal is unavailable in Plan mode. Switch modes to continue.",
   "chat.plan.attachmentsBlocked":

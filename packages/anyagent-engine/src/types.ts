@@ -144,12 +144,16 @@ export type EngineEventPayload =
   | {
       readonly type: "tool.completed";
       readonly toolCallId: string;
+      readonly name?: string;
+      readonly input?: unknown;
       readonly result?: unknown;
       readonly sideEffects: SideEffectKnowledge;
     }
   | {
       readonly type: "tool.failed";
       readonly toolCallId: string;
+      readonly name?: string;
+      readonly input?: unknown;
       readonly failure: EngineFailure;
     }
   | {

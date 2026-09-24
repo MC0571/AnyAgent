@@ -595,12 +595,12 @@ export function SessionPane({
       })),
     );
     try {
-      const engines = await harnessService.listEngines();
+      const engines = await harnessService.listEngines({ workspacePath, workspaceIdentity });
       if (version === harnessProbeVersionRef.current) setCurrentHarnesses(engines);
     } catch {
       // The in-flight projection is already unknown; never restore stale availability.
     }
-  }, [harnessService]);
+  }, [harnessService, workspacePath, workspaceIdentity]);
   useEffect(() => {
     void refreshHarnesses();
     return () => {
@@ -3058,7 +3058,11 @@ export function SessionPane({
       const task =
         pendingHarnessTaskRef.current?.engine.engineId === selectedHarnessId
           ? pendingHarnessTaskRef.current
-          : await harnessService.createTask({ engineId: selectedHarnessId });
+          : await harnessService.createTask({
+              engineId: selectedHarnessId,
+              workspacePath,
+              workspaceIdentity,
+            });
       pendingHarnessTaskRef.current = task;
       await harnessService.submitInput({
         taskId: task.id,
@@ -3070,7 +3074,7 @@ export function SessionPane({
       harnessTaskToOpenRef.current = task.id;
       return "sent" as const;
     },
-    [harnessService, selectedHarnessId],
+    [harnessService, selectedHarnessId, workspacePath, workspaceIdentity],
   );
   const handleHarnessSendSuccess = useCallback(() => {
     const taskId = harnessTaskToOpenRef.current;

@@ -1901,10 +1901,13 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                             className="min-h-0 flex-1"
                           >
                             <EngineConversation
+                              key={engineSelectedTaskId ?? "engine-draft"}
                               service={engineService}
                               selectedTaskId={engineSelectedTaskId}
                               onSelectTask={onEngineSelectedTaskIdChange}
                               onTitleChange={handleEngineTitleChange}
+                              onOpenCodeViewer={handleOpenCodeViewer}
+                              onOpenFileLink={handleOpenMarkdownFileLink}
                               refreshVersion={engineRefreshVersion}
                               inspectorOpen={engineInspectorOpen}
                               onInspectorOpenChange={setEngineInspectorOpen}

@@ -145,6 +145,8 @@ async function waitFor(assertion: () => void, message: string) {
 test("EngineConversation sends through the product composer and renders ordered streamed turns", async () => {
   const dom = installDom();
   const copiedCode: string[] = [];
+  const openedFileLinks: string[] = [];
+  const engineProbePaths: Array<string | undefined> = [];
   Object.defineProperty(dom.window.navigator, "clipboard", {
     configurable: true,
     value: { writeText: async (text: string) => copiedCode.push(text) },
@@ -177,6 +179,7 @@ test("EngineConversation sends through the product composer and renders ordered 
   };
   let history = emptyHistory();
   let historyB = emptyHistory(taskBId);
+  let unavailableWorkspacePath: string | null = null;
   let nextRound = 0;
   let deliverySequence = 0;
   const changes = new Set<(change: { taskId: string; task: any; history: any }) => void>();
@@ -199,7 +202,12 @@ test("EngineConversation sends through the product composer and renders ordered 
       changes.add(listener);
       return { dispose: () => changes.delete(listener) };
     },
-    listEngines: async () => [engineProjection],
+    listEngines: async (workspace?: { workspacePath?: string }) => {
+      engineProbePaths.push(workspace?.workspacePath);
+      if (workspace?.workspacePath === unavailableWorkspacePath)
+        throw new Error("Project directory unavailable");
+      return [engineProjection];
+    },
     listTasks: async () => [taskRecord(taskId), taskRecord(taskBId)],
     getTask: async (id: string) => taskRecord(id),
     getHistory: async (id: string) => (id === taskBId ? historyB : history),
@@ -333,6 +341,9 @@ test("EngineConversation sends through the product composer and renders ordered 
                 onTitleChange: (_taskId: string, title: string) => {
                   reportedTitle = title;
                 },
+                onOpenFileLink: (target: { path: string; workspacePath?: string }) => {
+                  openedFileLinks.push(`${target.workspacePath}:${target.path}`);
+                },
                 refreshVersion: version,
                 inspectorOpen,
                 onInspectorOpenChange: (open: boolean) => {
@@ -373,6 +384,15 @@ test("EngineConversation sends through the product composer and renders ordered 
     assert.ok(composer?.querySelector(".chat-composer-input-surface"));
     assert.ok(modelTrigger?.closest("[data-composer-trailing-actions]"));
     assert.equal(modelTrigger.getAttribute("data-model-current-value"), `harness:${engineId}`);
+    assert.ok(engineProbePaths.includes("/tmp/anyagent-ui"));
+    const conversationScroll = container.querySelector<HTMLElement>(
+      '[data-testid="engine-conversation-scroll"]',
+    );
+    assert.ok(conversationScroll);
+    Object.defineProperties(conversationScroll, {
+      scrollHeight: { configurable: true, get: () => 600 },
+      clientHeight: { configurable: true, get: () => 100 },
+    });
 
     const send = async (text: string) => {
       const input = document.querySelector<HTMLElement>(
@@ -462,8 +482,14 @@ test("EngineConversation sends through the product composer and renders ordered 
     };
 
     const firstStream = "First **answer** and code:\n\n```ts\nconst round = 1;\n```";
-    const firstAnswer = `${firstStream}\n\nFinal line.`;
+    const firstAnswer = `${firstStream}\n\nFinal line. [README.md](README.md)`;
     await send("first request");
+    const conversationTimeline = container.querySelector(
+      '[data-testid="engine-conversation-timeline"]',
+    );
+    assert.ok(conversationTimeline);
+    assert.doesNotMatch(conversationTimeline.textContent ?? "", /Execution execution-/);
+    assert.doesNotMatch(conversationTimeline.textContent ?? "", /当前轮次尚未结束/);
     assert.equal(
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
         ?.disabled,
@@ -481,12 +507,22 @@ test("EngineConversation sends through the product composer and renders ordered 
       "native header title did not follow the first input",
     );
     await sendDelta(1, "First **answer** and code:\n\n```ts\n", true);
+    assert.equal(conversationScroll.scrollTop, 500, "streaming should follow the visible tail");
     assert.match(
       container.querySelector('[data-testid="engine-answer-execution-z-first"]')?.textContent ?? "",
       /First answer and code/,
       "delta should be readable while the execution is still running",
     );
+    await act(async () => {
+      conversationScroll.scrollTop = 100;
+      conversationScroll.dispatchEvent(new dom.window.Event("scroll", { bubbles: true }));
+    });
     await sendDelta(1, "const round = 1;\n```", true);
+    assert.equal(
+      conversationScroll.scrollTop,
+      100,
+      "reading older turns should keep scroll position",
+    );
     const first = submissions[0]!;
     await act(async () => {
       history = {
@@ -519,7 +555,18 @@ test("EngineConversation sends through the product composer and renders ordered 
         assert.deepEqual(replies, [{ approvalId: "approval-reject-first", optionId: "reject" }]),
       "approval reply was not sent",
     );
+    await act(async () => {
+      conversationScroll.scrollTop = 470;
+      conversationScroll.dispatchEvent(new dom.window.Event("scroll", { bubbles: true }));
+    });
     await finish(1, firstAnswer);
+    assert.equal(conversationScroll.scrollTop, 500, "returning near the tail resumes following");
+    const fileLink = container.querySelector<HTMLButtonElement>(
+      'button[title="/tmp/anyagent-ui/README.md"]',
+    );
+    assert.ok(fileLink, "Engine Markdown should reuse the native file link component");
+    await act(async () => fileLink.click());
+    assert.deepEqual(openedFileLinks, ["/tmp/anyagent-ui:/tmp/anyagent-ui/README.md"]);
     assert.equal(
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
         ?.disabled,
@@ -854,6 +901,34 @@ test("EngineConversation sends through the product composer and renders ordered 
       false,
     );
 
+    activeTaskB = {
+      ...activeTaskB,
+      environment: {
+        ...activeTaskB.environment,
+        id: "env-engine-b",
+        workDirectory: "/tmp/missing-project",
+      },
+      session: { ...activeTaskB.session, environmentId: "env-engine-b" },
+    };
+    historyB = {
+      ...historyB,
+      inputs: [
+        {
+          id: "input-project-history",
+          taskId: taskBId,
+          participantId: activeTaskB.participant.id,
+          sessionId: activeTaskB.session.id,
+          text: "Recovered prompt after project removal",
+          status: "completed",
+          receivedAt: 2_100,
+          acceptedAt: 2_100,
+          startedAt: 2_100,
+          terminalAt: 2_110,
+          error: null,
+        },
+      ],
+    };
+    unavailableWorkspacePath = "/tmp/missing-project";
     inspectorOpen = true;
     await act(async () => root.render(appFor(taskBId)));
     await waitFor(
@@ -865,6 +940,12 @@ test("EngineConversation sends through the product composer and renders ordered 
         ),
       "selecting Task B should load its own conversation",
     );
+    assert.match(container.textContent ?? "", /Recovered prompt after project removal/);
+    assert.match(
+      container.querySelector('[role="alert"]')?.textContent ?? "",
+      /Project directory unavailable/,
+    );
+    assert.equal(composerSubmit()?.disabled, true);
     await act(async () => {
       clock += 1;
       deliverySequence += 1;
@@ -980,10 +1061,21 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
       7,
     ),
     event(
+      "read-failed-without-start",
+      "tool.failed",
+      {
+        toolCallId: "tool-failed",
+        name: "Read",
+        input: { filePath: "README.md" },
+        failure: { kind: "execution-failed", message: "File does not exist" },
+      },
+      8,
+    ),
+    event(
       "delta-after-tool",
       "message.delta",
       { text: "after", messageId: "native-message", blockId: "block-b" },
-      8,
+      9,
     ),
   ];
   const approval = (id: string) => ({
@@ -1061,7 +1153,6 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
               projection: projectEngineConversation(task as never, history as never),
               workspacePath: "/tmp/anyagent-ui",
               historyLoading: false,
-              runBlockedReason: null,
               approvalBlockedReason: null,
               userInputBlockedReason: null,
               busyAction: null,
@@ -1094,6 +1185,13 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
       '[data-testid="chat-tool-call-block-tool-ordered"]',
     );
     assert.ok(first && tool && second);
+    const failedTool = execution.querySelector<HTMLElement>(
+      '[data-testid="chat-tool-call-block-tool-failed"]',
+    );
+    assert.ok(failedTool, "a native failure before start still renders a tool card");
+    assert.match(failedTool.textContent ?? "", /README\.md/);
+    assert.match(failedTool.textContent ?? "", /执行失败/);
+    assert.doesNotMatch(failedTool.textContent ?? "", /未知工具/);
     assert.ok(first.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING);
     assert.ok(tool.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
     assert.match(second.textContent ?? "", /after/);

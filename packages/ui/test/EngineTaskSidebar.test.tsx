@@ -192,6 +192,182 @@ test("timeline interleaves native and Engine sessions in one ordered list", asyn
   }
 });
 
+test("project TaskList renders native and Harness sessions in the same list", async () => {
+  const dom = installDom();
+  const [{ TaskList }, { ZCodeIntlProvider }, { TabStoreProvider }] = await Promise.all([
+    import("../src/TaskList.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/store/TabStoreProvider.js"),
+  ]);
+  const now = Date.now();
+  const selected: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const nativeTask = (id: string, updatedAt: number) => ({
+    taskId: id,
+    title: id,
+    workspacePath: "/tmp/m1-project",
+    status: "completed",
+    provider: "zcode",
+    createdAt: updatedAt,
+    updatedAt,
+  });
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TabStoreProvider,
+            null,
+            createElement(TaskList, {
+              workspacePath: "/tmp/m1-project",
+              tasks: [nativeTask("native-old", now - 20), nativeTask("native-new", now)] as never,
+              engineTasks: [
+                {
+                  id: "harness-project",
+                  createdAt: now - 10,
+                  updatedAt: now - 10,
+                  status: "active",
+                },
+              ] as never,
+              engineTitles: { "harness-project": "Harness project turn" },
+              activeTaskId: null,
+              engineSelectedTaskId: "harness-project",
+              onSelectTask: (id: string) => selected.push(id),
+              onSelectEngineTask: (id: string) => selected.push(id),
+              onRenameTask: async () => null,
+              onSetTaskPinned: async () => null,
+              onArchiveTask: async () => null,
+              onSetTaskUnread: async () => null,
+              showCreateButton: false,
+              showFooter: false,
+            }),
+          ),
+        ),
+      );
+    });
+    const rows = [...container.querySelectorAll<HTMLElement>("ul > [data-task-item-key]")];
+    assert.deepEqual(
+      rows.map((row) =>
+        row.textContent?.includes("Harness project turn")
+          ? "harness"
+          : row.textContent?.includes("native-new")
+            ? "native-new"
+            : "native-old",
+      ),
+      ["native-old", "native-new", "harness"],
+    );
+    assert.equal(container.querySelectorAll("ul").length, 1);
+    assert.equal(rows[2]?.getAttribute("aria-current"), "page");
+    await act(async () => rows[2]?.click());
+    assert.deepEqual(selected, ["harness-project"]);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
+test("project TaskList applies created and updated sorting with running tasks first", async () => {
+  const dom = installDom();
+  const [{ TaskList }, { ZCodeIntlProvider }, { TabStoreProvider }, { attachTaskListRowActivity }] =
+    await Promise.all([
+      import("../src/TaskList.js"),
+      import("../src/i18n/IntlProvider.js"),
+      import("../src/store/TabStoreProvider.js"),
+      import("../src/v4/taskListRowActivity.js"),
+    ]);
+  const nativeTask = (id: string, createdAt: number, updatedAt: number) => ({
+    taskId: id,
+    title: id,
+    workspacePath: "/tmp/m1-project",
+    status: "completed",
+    provider: "zcode",
+    createdAt,
+    updatedAt,
+  });
+  const nativeTasks = [
+    nativeTask("native-idle", 400, 200),
+    attachTaskListRowActivity(nativeTask("native-running", 100, 900) as never, {
+      phase: "running",
+      lastActivityAt: 900,
+      hasBackgroundWork: false,
+    }),
+  ];
+  const engineTasks = [
+    {
+      id: "engine-running-completed",
+      status: "completed",
+      createdAt: 200,
+      updatedAt: 100,
+    },
+    {
+      id: "engine-idle-active",
+      status: "active",
+      createdAt: 300,
+      updatedAt: 500,
+    },
+  ];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (sortBy: "created" | "updated") =>
+    createElement(
+      ZCodeIntlProvider,
+      { initialLocale: "zh-CN" },
+      createElement(
+        TabStoreProvider,
+        null,
+        createElement(TaskList, {
+          workspacePath: "/tmp/m1-project",
+          tasks: nativeTasks as never,
+          engineTasks: engineTasks as never,
+          engineRunningByTask: {
+            "engine-running-completed": true,
+            "engine-idle-active": false,
+          },
+          activeTaskId: null,
+          sortBy,
+          onSelectTask: () => {},
+          onRenameTask: async () => null,
+          onSetTaskPinned: async () => null,
+          onArchiveTask: async () => null,
+          onSetTaskUnread: async () => null,
+          showCreateButton: false,
+          showFooter: false,
+        }),
+      ),
+    );
+  const rowIds = () =>
+    [...container.querySelectorAll<HTMLElement>("ul [data-task-item-key]")].map((row) =>
+      row.getAttribute("data-task-item-key"),
+    );
+  try {
+    await act(async () => root.render(render("created")));
+    assert.deepEqual(rowIds(), [
+      "engine-running-completed",
+      "/tmp/m1-project:native-running",
+      "/tmp/m1-project:native-idle",
+      "engine-idle-active",
+    ]);
+    assert.equal(container.querySelectorAll("ul").length, 1);
+    assert.equal(container.querySelector("ul")?.className, "space-y-0.5");
+
+    await act(async () => root.render(render("updated")));
+    assert.deepEqual(rowIds(), [
+      "engine-running-completed",
+      "/tmp/m1-project:native-running",
+      "engine-idle-active",
+      "/tmp/m1-project:native-idle",
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
 test("grouped view mounts Engine rows among ungrouped native rows", async () => {
   const dom = installDom();
   const [

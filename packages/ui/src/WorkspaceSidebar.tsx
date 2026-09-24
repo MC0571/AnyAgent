@@ -116,6 +116,7 @@ import { WorkspaceSidebarFooter } from "@/WorkspaceSidebarFooter.js";
 import { WorkspacePinnedTasksSection } from "@/WorkspacePinnedTasksSection.js";
 import { WorkspaceTimelineTasksSection } from "@/WorkspaceTimelineTasksSection.js";
 import { WorkspaceGroupedTasksSection } from "@/WorkspaceGroupedTasksSection.js";
+import { useEngineTaskSidebarData, type EngineTask } from "@/EngineTaskSidebar.js";
 import { StickyGroupHeaderSlot } from "@/workspace-grouped-tasks/sticky-group-header-slot.js";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import {
@@ -171,6 +172,7 @@ interface SidebarFileTreeTarget {
 // 流式 task 事件会让 sidebar 父级频繁刷新；缺任务分组时如果传新的 []
 // 会让 memo 的 workspace 行误判 taskItems 变化，穿透到 TaskList/TaskListItem 重渲染。
 const EMPTY_WORKSPACE_TASK_ITEMS: ZCodeTaskMeta[] = [];
+const EMPTY_ENGINE_TASK_ITEMS: EngineTask[] = [];
 // WorkspaceSidebar 是 memo 组件，默认参数里的 {} 每次调用都会创建新引用；
 // 缺省远程重连日志时必须复用同一个对象，避免浅比较被默认值打穿。
 const EMPTY_RECONNECTING_REMOTE_WORKSPACE_LOGS_BY_WORKSPACE_KEY: Record<
@@ -584,6 +586,36 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     showArchivedTasks,
     taskOrganizeBy,
   });
+  const engineTaskData = useEngineTaskSidebarData({
+    service: taskViewMode === "workspace" && onSelectEngineTask ? (engineService ?? null) : null,
+    onRefresh: taskViewMode === "workspace" ? onRefreshEngineState : undefined,
+    onNativeSessionIdsChange:
+      taskViewMode === "workspace" ? handleNativeSessionIdsChange : undefined,
+  });
+  const projectEngineTasksByPath = useMemo(() => {
+    const grouped = new Map<string, EngineTask[]>();
+    for (const task of engineTaskData.tasks) {
+      const path = task.environment?.workDirectory;
+      if (
+        !path ||
+        !projectWorkspaceTabs.some((tab) => !tab.workspaceIdentity && tab.workspacePath === path)
+      )
+        continue;
+      const tasks = grouped.get(path) ?? [];
+      tasks.push(task);
+      grouped.set(path, tasks);
+    }
+    return grouped;
+  }, [engineTaskData.tasks, projectWorkspaceTabs]);
+  const conversationEngineTaskData = useMemo(
+    () => ({
+      ...engineTaskData,
+      tasks: engineTaskData.tasks.filter(
+        (task) => !projectEngineTasksByPath.has(task.environment?.workDirectory ?? ""),
+      ),
+    }),
+    [engineTaskData, projectEngineTasksByPath],
+  );
   const effectiveTaskViewMode = taskViewMode;
   const visibleWorkspaceTaskKeys = useMemo(
     () =>
@@ -662,6 +694,18 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
         ]),
       ),
     [workspaceTaskLists.groups],
+  );
+  const projectNativeTaskItemsByKey = useMemo(
+    () =>
+      new Map(
+        [...workspaceTaskGroupByKey].map(([key, group]) => [
+          key,
+          hiddenNativeTaskIds.size
+            ? group.items.filter((task) => !hiddenNativeTaskIds.has(task.taskId))
+            : group.items,
+        ]),
+      ),
+    [hiddenNativeTaskIds, workspaceTaskGroupByKey],
   );
   const handleShowMoreWorkspaceTasks = useCallback((workspaceKey: string) => {
     setWorkspaceTaskVisibleLimitByKey((current) =>
@@ -1551,6 +1595,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                                           <SortableWorkspaceSidebarItem
                                             key={tab.id}
                                             tab={tab}
+                                            taskSortBy={taskSortBy}
                                             isActiveWorkspace={tab.workspacePath === workspacePath}
                                             isExpanded={resolveWorkspaceDragExpanded({
                                               activeDragId: activeWorkspaceDragId,
@@ -1565,8 +1610,22 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                                             onSelectTask={onSelectTask}
                                             onStartDraftInWorkspace={onStartDraftInWorkspace}
                                             taskItems={
-                                              taskGroup?.items ?? EMPTY_WORKSPACE_TASK_ITEMS
+                                              projectNativeTaskItemsByKey.get(workspaceKey) ??
+                                              EMPTY_WORKSPACE_TASK_ITEMS
                                             }
+                                            engineTasks={
+                                              tab.workspaceIdentity
+                                                ? EMPTY_ENGINE_TASK_ITEMS
+                                                : (projectEngineTasksByPath.get(
+                                                    tab.workspacePath,
+                                                  ) ?? EMPTY_ENGINE_TASK_ITEMS)
+                                            }
+                                            engineRunningByTask={engineTaskData.runningByTask}
+                                            engineTitles={engineTaskData.titles}
+                                            engineSelectedTaskId={
+                                              engineActive ? engineSelectedTaskId : null
+                                            }
+                                            onSelectEngineTask={onSelectEngineTask}
                                             taskListLoading={taskLoading}
                                             taskListHasMore={taskGroup?.hasMore ?? false}
                                             taskListHasUnread={taskGroup?.hasUnread ?? false}
@@ -1663,6 +1722,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                                 hiddenTaskIds={hiddenNativeTaskIds}
                                 onSelectTask={handleTaskRowSelect}
                                 engineService={engineService}
+                                engineTaskData={conversationEngineTaskData}
                                 engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
                                 onSelectEngineTask={onSelectEngineTask}
                                 onRefreshEngineState={onRefreshEngineState}

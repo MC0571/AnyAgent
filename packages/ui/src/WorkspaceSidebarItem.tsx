@@ -52,6 +52,7 @@ import {
   formatRemoteWorkspaceDisplayLabel,
 } from "@/lib/remoteWorkspaceHistory.js";
 import { TaskList } from "@/TaskList.js";
+import type { EngineTask } from "@/EngineTaskSidebar.js";
 import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
@@ -130,6 +131,7 @@ function getSshWorkspaceTooltipDetails(tab: WorkspaceTabState): SshWorkspaceTool
 
 export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   tab,
+  taskSortBy,
   isActiveWorkspace,
   isExpanded,
   closeTab,
@@ -137,6 +139,11 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   onSelectTask,
   onStartDraftInWorkspace,
   taskItems,
+  engineTasks,
+  engineRunningByTask,
+  engineTitles,
+  engineSelectedTaskId,
+  onSelectEngineTask,
   taskListLoading,
   taskListHasMore,
   taskListHasUnread = false,
@@ -153,6 +160,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   isDragging = false,
 }: {
   tab: WorkspaceTabState;
+  taskSortBy: "created" | "updated";
   isActiveWorkspace: boolean;
   isExpanded: boolean;
   activateTab: (tabId: string) => void;
@@ -165,6 +173,11 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   ) => void;
   onStartDraftInWorkspace: (targetWorkspacePath: string, targetWorkspaceIdentity?: string) => void;
   taskItems: ZCodeTaskMeta[];
+  engineTasks?: readonly EngineTask[];
+  engineRunningByTask?: Readonly<Record<string, boolean>>;
+  engineTitles?: Readonly<Record<string, string>>;
+  engineSelectedTaskId?: string | null;
+  onSelectEngineTask?: (taskId: string) => void;
   taskListLoading: boolean;
   taskListHasMore: boolean;
   taskListHasUnread?: boolean;
@@ -1120,6 +1133,12 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
             remoteSessionId={tab.remoteSessionId}
             workspaceIdentity={tab.workspaceIdentity}
             tasks={taskItems}
+            sortBy={taskSortBy}
+            engineTasks={engineTasks}
+            engineRunningByTask={engineRunningByTask}
+            engineTitles={engineTitles}
+            engineSelectedTaskId={engineSelectedTaskId}
+            onSelectEngineTask={onSelectEngineTask}
             pinnedTasks={EMPTY_PINNED_TASKS}
             activeTaskId={isActiveWorkspace ? activeTaskId : null}
             onSelectTask={handleSelectTask}

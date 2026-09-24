@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -130,6 +130,81 @@ test("concurrent engine list refreshes share only the in-flight probe", async ()
 
     await host.service.listEngines();
     assert.equal(initializeCalls, 3);
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Harness tasks use their selected project workspace without changing another Task's routing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-project-workspace-"));
+  const project = join(directory, "project");
+  await mkdir(project);
+  setDataBaseDir(directory);
+  const nativeWorkspaces: string[] = [];
+  const host = createAnyAgentService({
+    initialize: async ({ workspacePath }: { workspacePath: string }) => ({
+      available: true,
+      workspaceKey: workspacePath,
+    }),
+    sendConversationCommandV4: async ({ workspacePath }: { workspacePath: string }) => {
+      nativeWorkspaces.push(workspacePath);
+      return {
+        status: "accepted",
+        result: { type: "createSession", sessionId: `native-${nativeWorkspaces.length}` },
+      };
+    },
+  } as unknown as IZCodeAgentService);
+  try {
+    const defaultTask = await host.service.createTask({ engineId: "fake" });
+    const projectTask = await host.service.createTask({
+      engineId: "zcode",
+      workspacePath: project,
+    });
+    assert.equal(projectTask.environment.workDirectory, project);
+    assert.equal(projectTask.session.nativeSessionId, "native-1");
+    assert.deepEqual(nativeWorkspaces, [project]);
+    assert.notEqual(defaultTask.session.id, projectTask.session.id);
+    assert.notEqual(defaultTask.participant.id, projectTask.participant.id);
+
+    const projectEngines = await host.service.listEngines({ workspacePath: project });
+    const defaultEngines = await host.service.listEngines();
+    assert.equal(
+      projectEngines.find((item) => item.engineId === "zcode")?.environment,
+      `local:${project}`,
+    );
+    assert.equal(
+      defaultEngines.find((item) => item.engineId === "zcode")?.environment,
+      `local:${join(directory, ".zcode", "workspace", "default")}`,
+    );
+    assert.equal(
+      (await host.service.getTask(projectTask.id))?.engine.environment,
+      `local:${project}`,
+    );
+    assert.equal((await host.service.getTask(projectTask.id))?.currentEngine.state, "current");
+
+    const anotherDefaultTask = await host.service.createTask({ engineId: "fake" });
+    const input = {
+      taskId: defaultTask.id,
+      participantId: defaultTask.participant.id,
+      sessionId: defaultTask.session.id,
+      authorizationId: defaultTask.authorizationId,
+    };
+    await host.service.submitInput({ ...input, text: "after project" });
+    await waitForCompleted(host.service, defaultTask.id, 1);
+    assert.equal(anotherDefaultTask.environment.id, defaultTask.environment.id);
+    assert.equal((await host.service.getTask(projectTask.id))?.environment.workDirectory, project);
+    await assert.rejects(
+      host.service.submitInput({ ...input, taskId: projectTask.id, text: "wrong Task" }),
+    );
+    await rm(project, { recursive: true });
+    await assert.rejects(
+      async () => host.service.createTask({ engineId: "zcode", workspacePath: project }),
+      /Harness 工作区必须是现有的本地绝对路径/,
+    );
+    assert.equal((await host.service.getTask(projectTask.id))?.environment.workDirectory, project);
+    assert.ok((await host.service.listTasks()).some((task) => task.id === projectTask.id));
   } finally {
     host.close();
     setDataBaseDir(null);

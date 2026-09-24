@@ -6,7 +6,13 @@ import type {
   EngineConversationProjection,
   EngineExecutionTurn,
 } from "@/engineConversationProjection.js";
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message.js";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+  type MessageFileLinkTarget,
+} from "@/components/ai-elements/message.js";
+import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { Button } from "@/components/ui/button.js";
@@ -82,16 +88,23 @@ function toolEvents(turn: EngineExecutionTurn): EngineToolEventData[] {
     const name = typeof event.payload.name === "string" ? event.payload.name : "未知工具";
     if (!callId) continue;
     const item = byId.get(callId) ?? { id: callId, name, status: "pending" };
+    if (name !== "未知工具") item.name = name;
+    if (event.payload.input !== undefined) item.input = event.payload.input;
     if (event.type === "tool.started") {
-      item.name = name;
-      item.input = event.payload.input;
       item.status = "in_progress";
     } else if (event.type === "tool.completed") {
       item.output = event.payload.result;
       item.sideEffects = event.payload.sideEffects;
       item.status = "completed";
     } else {
-      item.error = jsonLabel(event.payload.failure);
+      const failure = event.payload.failure;
+      item.error =
+        failure &&
+        typeof failure === "object" &&
+        "message" in failure &&
+        typeof failure.message === "string"
+          ? failure.message
+          : jsonLabel(failure);
       item.status = "failed";
     }
     byId.set(callId, item);
@@ -102,9 +115,13 @@ function toolEvents(turn: EngineExecutionTurn): EngineToolEventData[] {
 function EngineToolEvent({
   item,
   workspacePath,
+  onOpenCodeViewer,
+  onOpenFileLink,
 }: {
   item: ReturnType<typeof toolEvents>[number];
   workspacePath: string;
+  onOpenCodeViewer?: (source: CodeViewerSource) => void;
+  onOpenFileLink?: (target: MessageFileLinkTarget) => void;
 }) {
   const toolCallNode: TaskChatToolCallTreeNode = {
     toolCall: {
@@ -119,7 +136,14 @@ function EngineToolEvent({
     },
     childToolCalls: [],
   };
-  return <ToolCallBlock toolCallNode={toolCallNode} workspacePath={workspacePath} />;
+  return (
+    <ToolCallBlock
+      toolCallNode={toolCallNode}
+      workspacePath={workspacePath}
+      onOpenCodeViewer={onOpenCodeViewer}
+      onOpenFileLink={onOpenFileLink}
+    />
+  );
 }
 
 function InlineApproval({
@@ -285,8 +309,9 @@ function UserInputReply({
 export function EngineConversationTimeline({
   projection,
   workspacePath,
+  onOpenCodeViewer,
+  onOpenFileLink,
   historyLoading,
-  runBlockedReason,
   approvalBlockedReason,
   userInputBlockedReason,
   busyAction,
@@ -295,8 +320,9 @@ export function EngineConversationTimeline({
 }: {
   projection: EngineConversationProjection;
   workspacePath: string;
+  onOpenCodeViewer?: (source: CodeViewerSource) => void;
+  onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   historyLoading: boolean;
-  runBlockedReason: string | null;
   approvalBlockedReason: string | null;
   userInputBlockedReason: string | null;
   busyAction: string | null;
@@ -324,11 +350,6 @@ export function EngineConversationTimeline({
       className="mx-auto flex w-full max-w-4xl flex-col gap-5 py-4"
       data-testid="engine-conversation-timeline"
     >
-      {runBlockedReason ? (
-        <p className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
-          继续对话暂不可用：{runBlockedReason}
-        </p>
-      ) : null}
       {projection.turns.map((turn) => (
         <section
           key={turn.input.id}
@@ -337,7 +358,13 @@ export function EngineConversationTimeline({
         >
           <Message from="user" data-testid={`engine-input-${turn.input.id}`}>
             <MessageContent>
-              <MessageResponse>{turn.input.text}</MessageResponse>
+              <MessageResponse
+                workspacePath={workspacePath}
+                onOpenCodeViewer={onOpenCodeViewer}
+                onOpenFileLink={onOpenFileLink}
+              >
+                {turn.input.text}
+              </MessageResponse>
               {turn.input.status === "rejected" ||
               turn.input.status === "failed" ||
               turn.input.status === "unknown" ? (
@@ -394,7 +421,14 @@ export function EngineConversationTimeline({
                         }
                       >
                         <MessageContent>
-                          <MessageResponse streaming={streaming}>{text}</MessageResponse>
+                          <MessageResponse
+                            streaming={streaming}
+                            workspacePath={workspacePath}
+                            onOpenCodeViewer={onOpenCodeViewer}
+                            onOpenFileLink={onOpenFileLink}
+                          >
+                            {text}
+                          </MessageResponse>
                         </MessageContent>
                       </Message>
                     );
@@ -406,6 +440,8 @@ export function EngineConversationTimeline({
                         key={`tool:${item.toolCallId}`}
                         item={tool}
                         workspacePath={workspacePath}
+                        onOpenCodeViewer={onOpenCodeViewer}
+                        onOpenFileLink={onOpenFileLink}
                       />
                     ) : null;
                   }
@@ -418,15 +454,37 @@ export function EngineConversationTimeline({
                           最终结果与流式内容不同
                         </p>
                       ) : null}
-                      <MessageResponse>{execution.result}</MessageResponse>
+                      <MessageResponse
+                        workspacePath={workspacePath}
+                        onOpenCodeViewer={onOpenCodeViewer}
+                        onOpenFileLink={onOpenFileLink}
+                      >
+                        {execution.result}
+                      </MessageResponse>
                     </MessageContent>
                   </Message>
                 ) : null}
-                {!deltas.length && !execution.result ? (
-                  <p className="ml-4 text-xs text-foreground-subtle">
-                    Execution {shortId(execution.id)} · {recordStatusLabel(execution.status)}
-                    {execution.error ? ` · ${execution.error}` : " · 尚无可展示的回答内容"}
-                  </p>
+                {!deltas.length && !execution.result && !toolParts.size && streaming ? (
+                  <p className="ml-4 text-xs text-foreground-subtle">正在处理…</p>
+                ) : null}
+                {!deltas.length &&
+                !execution.result &&
+                !toolParts.size &&
+                execution.status === "completed" ? (
+                  <p className="ml-4 text-xs text-foreground-subtle">本轮没有回答正文。</p>
+                ) : null}
+                {!deltas.length &&
+                !execution.result &&
+                !toolParts.size &&
+                execution.status === "stopped" ? (
+                  <p className="ml-4 text-xs text-foreground-subtle">已确认停止；没有回答正文。</p>
+                ) : null}
+                {!deltas.length &&
+                !execution.result &&
+                !toolParts.size &&
+                execution.status === "failed" &&
+                !execution.error ? (
+                  <p className="ml-4 text-xs text-destructive">执行失败；没有回答正文。</p>
                 ) : null}
                 {execution.error ? (
                   <p className="ml-4 text-sm text-destructive">{execution.error}</p>

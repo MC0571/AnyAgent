@@ -39,6 +39,7 @@ interface PendingRun {
   readonly approvals: Map<string, readonly EngineApprovalOption[]>;
   readonly approvalAnswers: Map<string, string>;
   readonly userInputIds: Set<string>;
+  readonly toolDetails: Map<string, { name?: string; input?: unknown }>;
   turnId: string | null;
   nativeForegroundExecutionId: string | null;
   textBlockSequence: number;
@@ -146,6 +147,7 @@ export function createZCodeAdapter(options: {
   let availabilityReason = "运行条件尚未探测";
   let configurationVersion: string | null = null;
   let nativeWorkspaceId = options.workspaceIdentity ?? options.workspacePath;
+  let capabilityProbeRevision = 0;
 
   function capabilities(): EngineCapabilitySnapshot {
     const status = (support: "supported" | "unsupported" | "unknown", reason?: string) => ({
@@ -179,9 +181,12 @@ export function createZCodeAdapter(options: {
   }
 
   async function refreshCapabilities(): Promise<EngineCapabilitySnapshot> {
+    const revision = ++capabilityProbeRevision;
     try {
       const result = await options.agent.initialize(workspace);
-      configurationVersion = (await options.readConfigurationVersion?.()) ?? null;
+      const nextConfigurationVersion = (await options.readConfigurationVersion?.()) ?? null;
+      if (revision !== capabilityProbeRevision) return capabilities();
+      configurationVersion = nextConfigurationVersion;
       if (result.available) nativeWorkspaceId = result.workspaceKey;
       availability = result.available
         ? "available"
@@ -192,6 +197,7 @@ export function createZCodeAdapter(options: {
         ? ""
         : (result.reason ?? result.reasonCode ?? "ZCode Runtime 不可用");
     } catch (error) {
+      if (revision !== capabilityProbeRevision) return capabilities();
       configurationVersion = null;
       availability = "temporarily-unavailable";
       availabilityReason = error instanceof Error ? error.message : String(error);
@@ -373,16 +379,37 @@ export function createZCodeAdapter(options: {
       case "tool.updated": {
         const toolCallId = text(data.toolCallId);
         if (!toolCallId) break;
+        if (data.kind === "scheduled") {
+          run.toolDetails.set(toolCallId, {
+            name: text(data.toolName),
+            ...(data.input === undefined ? {} : { input: data.input }),
+          });
+          break;
+        }
+        const details = run.toolDetails.get(toolCallId);
+        const name = text(data.toolName) ?? details?.name;
         if (data.kind === "started")
           publish(
             run,
-            { type: "tool.started", toolCallId, name: text(data.toolName) ?? "tool" },
+            {
+              type: "tool.started",
+              toolCallId,
+              name: name ?? "tool",
+              ...(details?.input === undefined ? {} : { input: details.input }),
+            },
             event,
           );
         if (data.kind === "result")
           publish(
             run,
-            { type: "tool.completed", toolCallId, result: data.result, sideEffects: "possible" },
+            {
+              type: "tool.completed",
+              toolCallId,
+              ...(name ? { name } : {}),
+              ...(details?.input === undefined ? {} : { input: details.input }),
+              result: data.result,
+              sideEffects: "possible",
+            },
             event,
           );
         if (data.kind === "error")
@@ -391,6 +418,8 @@ export function createZCodeAdapter(options: {
             {
               type: "tool.failed",
               toolCallId,
+              ...(name ? { name } : {}),
+              ...(details?.input === undefined ? {} : { input: details.input }),
               failure: {
                 kind: "execution-failed",
                 operation: "execution.run",
@@ -582,6 +611,7 @@ export function createZCodeAdapter(options: {
         approvals: new Map(),
         approvalAnswers: new Map(),
         userInputIds: new Set(),
+        toolDetails: new Map(),
         turnId: null,
         nativeForegroundExecutionId: null,
         textBlockSequence: 0,

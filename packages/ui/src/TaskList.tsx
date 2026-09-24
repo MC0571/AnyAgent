@@ -13,16 +13,35 @@ import { useTabStore } from "@/store/TabStoreProvider.js";
 import { MemoTaskItem, TaskListItemContextMenuContent } from "@/TaskListItem.js";
 import { TaskListLoadingHint } from "@/TaskListLoadingHint.js";
 import { TaskRenameDialog } from "@/TaskRenameDialog.js";
-import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
-import { compareZCodeTaskListItems } from "@/lib/taskListOrdering.js";
+import {
+  compareTaskListItemsWithRunningFirst,
+  compareZCodeTaskListItems,
+} from "@/lib/taskListOrdering.js";
+import { isTaskListRowActive } from "@/v4/taskListRowActivity.js";
 import { logger } from "@/logger.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
+import {
+  EngineTaskContextMenuContent,
+  EngineTaskRow,
+  type EngineTask,
+} from "@/EngineTaskSidebar.js";
+import { shortId } from "@/EngineUiParts.js";
 
 export { deriveTaskLeadingIndicator } from "@/lib/taskListItemPresentation.js";
 
 // 默认参数里的 [] 会在每次 TaskList render 时创建新数组；
 // 任务流刷新期间这会放大 memo 子组件的等价数据判断成本。
 const EMPTY_PINNED_TASKS: ZCodeTaskMeta[] = [];
+const EMPTY_ENGINE_TASKS: readonly EngineTask[] = [];
+const EMPTY_ENGINE_TITLES: Readonly<Record<string, string>> = {};
+const EMPTY_ENGINE_RUNNING_BY_TASK: Readonly<Record<string, boolean>> = {};
+
+type TaskListDisplayItem = {
+  taskId: string;
+  createdAt: number;
+  updatedAt: number;
+  running: boolean;
+} & ({ kind: "native"; task: ZCodeTaskMeta } | { kind: "engine"; task: EngineTask });
 
 // 父级 App/Shell 可能因 stream 状态更新重渲，但列表 props 本身未变。
 // TaskList 先整体 memo，避免无关父 render 重新遍历任务并触发 MemoTaskItem props 计算。
@@ -31,6 +50,11 @@ export const TaskList = memo(function TaskList({
   remoteSessionId,
   workspaceIdentity,
   tasks,
+  engineTasks = EMPTY_ENGINE_TASKS,
+  engineTitles = EMPTY_ENGINE_TITLES,
+  engineRunningByTask = EMPTY_ENGINE_RUNNING_BY_TASK,
+  engineSelectedTaskId,
+  onSelectEngineTask,
   pinnedTasks = EMPTY_PINNED_TASKS,
   activeTaskId,
   sortBy = "manual",
@@ -52,6 +76,11 @@ export const TaskList = memo(function TaskList({
   remoteSessionId?: string;
   workspaceIdentity?: string;
   tasks: ZCodeTaskMeta[];
+  engineTasks?: readonly EngineTask[];
+  engineTitles?: Readonly<Record<string, string>>;
+  engineRunningByTask?: Readonly<Record<string, boolean>>;
+  engineSelectedTaskId?: string | null;
+  onSelectEngineTask?: (taskId: string) => void;
   pinnedTasks?: ZCodeTaskMeta[];
   activeTaskId: string | null;
   sortBy?: "manual" | "created" | "updated";
@@ -80,6 +109,7 @@ export const TaskList = memo(function TaskList({
   const [pendingArchiveTaskId, setPendingArchiveTaskId] = useState<string | null>(null);
   const [renamingTaskId, setRenamingTaskId] = useState<string | null>(null);
   const [contextMenuTaskId, setContextMenuTaskId] = useState<string | null>(null);
+  const [engineContextMenuTaskId, setEngineContextMenuTaskId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const pendingArchiveTaskIdRef = useRef<string | null>(pendingArchiveTaskId);
@@ -113,6 +143,11 @@ export const TaskList = memo(function TaskList({
       setPendingArchiveTaskId(null);
     }
     setContextMenuTaskId(taskId);
+    setEngineContextMenuTaskId(null);
+  }, []);
+  const handleOpenEngineContextMenu = useCallback((taskId: string) => {
+    setContextMenuTaskId(null);
+    setEngineContextMenuTaskId(taskId);
   }, []);
 
   const handleCreateTask = useCallback(() => {
@@ -311,6 +346,33 @@ export const TaskList = memo(function TaskList({
         : [...tasks].sort((left, right) => compareZCodeTaskListItems(left, right, sortBy));
     return orderedTasks;
   }, [sortBy, tasks]);
+  const visibleItems = useMemo(() => {
+    const nativeItems: TaskListDisplayItem[] = visibleSourceTasks.map((task) => ({
+      kind: "native",
+      task,
+      taskId: task.taskId,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      running: isTaskListRowActive(task),
+    }));
+    const engineItems: TaskListDisplayItem[] = engineTasks.map((task) => ({
+      kind: "engine",
+      task,
+      taskId: task.id,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      running: engineRunningByTask[task.id] ?? false,
+    }));
+    if (sortBy === "manual") {
+      return [
+        ...nativeItems,
+        ...engineItems.sort((left, right) => right.updatedAt - left.updatedAt),
+      ];
+    }
+    return [...nativeItems, ...engineItems].sort((left, right) =>
+      compareTaskListItemsWithRunningFirst(left, right, sortBy, (item) => item.running),
+    );
+  }, [engineRunningByTask, engineTasks, sortBy, visibleSourceTasks]);
   useEffect(() => {
     if (!pendingArchiveTaskId) {
       return;
@@ -343,6 +405,10 @@ export const TaskList = memo(function TaskList({
       setContextMenuTaskId(null);
     }
   }, [contextMenuTaskId, visibleSourceTasks]);
+  useEffect(() => {
+    if (engineContextMenuTaskId && !engineTasks.some((task) => task.id === engineContextMenuTaskId))
+      setEngineContextMenuTaskId(null);
+  }, [engineContextMenuTaskId, engineTasks]);
 
   const contextMenuTask = useMemo(
     () =>
@@ -427,9 +493,9 @@ export const TaskList = memo(function TaskList({
       {/* 任务列表 */}
       <div>
         <div className="space-y-1">
-          {Boolean(inputLoading) && visibleSourceTasks.length === 0 ? (
+          {Boolean(inputLoading) && visibleItems.length === 0 ? (
             <TaskListLoadingHint />
-          ) : visibleSourceTasks.length === 0 ? (
+          ) : visibleItems.length === 0 ? (
             showEmptyState ? (
               <div
                 data-testid={TID_TASK_EMPTY}
@@ -443,11 +509,27 @@ export const TaskList = memo(function TaskList({
               onOpenChange={(open) => {
                 if (!open) {
                   setContextMenuTaskId(null);
+                  setEngineContextMenuTaskId(null);
                 }
               }}
             >
               <ContextMenuTrigger asChild>
-                <ul className="space-y-0.5">{visibleSourceTasks.map(renderTaskItem)}</ul>
+                <ul className="space-y-0.5">
+                  {visibleItems.map((item) =>
+                    item.kind === "native" ? (
+                      renderTaskItem(item.task)
+                    ) : (
+                      <EngineTaskRow
+                        key={`engine:${item.taskId}`}
+                        task={item.task}
+                        title={engineTitles[item.taskId] ?? shortId(item.taskId)}
+                        active={item.taskId === engineSelectedTaskId}
+                        onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
+                        onOpenContextMenu={handleOpenEngineContextMenu}
+                      />
+                    ),
+                  )}
+                </ul>
               </ContextMenuTrigger>
               {contextMenuTask ? (
                 <TaskListItemContextMenuContent
@@ -463,6 +545,8 @@ export const TaskList = memo(function TaskList({
                   disableTaskActions={Boolean(readOnlyReason)}
                   disabledReason={readOnlyReason}
                 />
+              ) : engineContextMenuTaskId ? (
+                <EngineTaskContextMenuContent taskId={engineContextMenuTaskId} />
               ) : null}
             </ContextMenu>
           )}

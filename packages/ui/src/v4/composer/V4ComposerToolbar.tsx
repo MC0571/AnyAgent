@@ -1117,7 +1117,10 @@ function V4ComposerModelControlsImpl({
           manageModelsLabel={manageModelsLabel}
           onManageModels={handleOpenModelProviderSettings}
           lockReasonMessage={intl.formatMessage({
-            id: "chat.toolbar.modelSwitch.lockedByRunningTask",
+            id:
+              sessionId !== null
+                ? "chat.toolbar.harnessSwitch.lockedSession"
+                : "chat.toolbar.harnessSwitch.unavailable",
           })}
           isItemLocked={isModelOptionLocked}
           onValueChange={handleModelValueChange}

@@ -45,6 +45,10 @@ export * from "./types.js";
 
 type EngineMap = ReadonlyMap<string, EngineAdapter>;
 
+function engineStateKey(snapshot: EngineCapabilitySnapshot): string {
+  return `${snapshot.engineId}\u0000${snapshot.environment ?? ""}`;
+}
+
 interface CurrentEngineRecord {
   readonly revision: number;
   /** Null until the current Adapter snapshot has been verified by this Host. */
@@ -57,6 +61,10 @@ interface CurrentEngineRecord {
 export interface CreateTaskRuntimeOptions {
   readonly databasePath: string;
   readonly engines: EngineMap;
+  readonly engineForEnvironment?: (
+    engineId: string,
+    environment: RuntimeEnvironment,
+  ) => EngineAdapter | undefined;
   readonly now?: () => number;
   readonly idFactory?: (kind: RuntimeIdKind) => string;
 }
@@ -127,6 +135,7 @@ export class RuntimeEligibilityError extends Error {
 export class TaskRuntime {
   readonly #store: RuntimeStore;
   readonly #engines: EngineMap;
+  readonly #engineForEnvironment: CreateTaskRuntimeOptions["engineForEnvironment"];
   readonly #now: () => number;
   readonly #idFactory: (kind: RuntimeIdKind) => string;
   readonly #listeners = new Set<(change: RuntimeChange) => void>();
@@ -142,26 +151,39 @@ export class TaskRuntime {
   constructor(options: CreateTaskRuntimeOptions) {
     this.#store = new RuntimeStore(options.databasePath);
     this.#engines = options.engines;
+    this.#engineForEnvironment = options.engineForEnvironment;
     this.#now = options.now ?? Date.now;
     this.#idFactory = options.idFactory ?? ((kind) => `${kind}_${randomUUID()}`);
     this.#markRecoveredStateUnknown();
   }
 
-  listEngines(): RuntimeCurrentEngineProjection[] {
+  listEngines(environment?: RuntimeEnvironment): RuntimeCurrentEngineProjection[] {
     this.#assertOpen();
-    return [...this.#engines.values()].map((engine) =>
-      this.#clone(this.#currentEngineProjection(engine)),
+    return [...this.#engines].map(([engineId, defaultEngine]) =>
+      this.#clone(
+        this.#currentEngineProjection(
+          environment
+            ? (this.#engineForEnvironment?.(engineId, environment) ?? defaultEngine)
+            : defaultEngine,
+        ),
+      ),
     );
   }
 
-  async refreshEngines(): Promise<RuntimeCurrentEngineProjection[]> {
+  async refreshEngines(
+    environment?: RuntimeEnvironment,
+  ): Promise<RuntimeCurrentEngineProjection[]> {
     this.#assertOpen();
     await Promise.all(
-      [...this.#engines.values()].map((engine) =>
-        this.#capabilities(engine).catch(() => undefined),
+      [...this.#engines].map(([engineId, defaultEngine]) =>
+        this.#capabilities(
+          environment
+            ? (this.#engineForEnvironment?.(engineId, environment) ?? defaultEngine)
+            : defaultEngine,
+        ).catch(() => undefined),
       ),
     );
-    return this.listEngines();
+    return this.listEngines(environment);
   }
 
   listTasks(): RuntimeTask[] {
@@ -183,7 +205,9 @@ export class TaskRuntime {
 
   async createTask(input: CreateTaskInput): Promise<RuntimeTask> {
     this.#assertOpen();
-    const engine = this.#engines.get(input.engineId);
+    const engine =
+      this.#engineForEnvironment?.(input.engineId, input.environment) ??
+      this.#engines.get(input.engineId);
     if (!engine) throw new RuntimeEligibilityError(`Engine ${input.engineId} is not registered.`);
     this.#validateEnvironmentAndAuthorization(
       input.environment,
@@ -1738,9 +1762,10 @@ export class TaskRuntime {
   async #capabilities(engine: EngineAdapter): Promise<EngineCapabilitySnapshot> {
     const baseline = this.#clone(engine.getCapabilities());
     const engineId = baseline.engineId;
-    const revision = (this.#capabilityRevisions.get(engineId) ?? 0) + 1;
-    this.#capabilityRevisions.set(engineId, revision);
-    this.#currentEngines.set(engineId, {
+    const key = engineStateKey(baseline);
+    const revision = (this.#capabilityRevisions.get(key) ?? 0) + 1;
+    this.#capabilityRevisions.set(key, revision);
+    this.#currentEngines.set(key, {
       revision,
       snapshot: null,
       observedSnapshot: baseline,
@@ -1753,8 +1778,8 @@ export class TaskRuntime {
     });
 
     if (!engine.refreshCapabilities) {
-      if (this.#capabilityRevisions.get(engineId) === revision) {
-        this.#currentEngines.set(engineId, {
+      if (this.#capabilityRevisions.get(key) === revision) {
+        this.#currentEngines.set(key, {
           revision,
           snapshot: null,
           observedSnapshot: baseline,
@@ -1776,8 +1801,8 @@ export class TaskRuntime {
     try {
       snapshot = this.#clone(await engine.refreshCapabilities());
     } catch {
-      if (this.#capabilityRevisions.get(engineId) === revision) {
-        this.#currentEngines.set(engineId, {
+      if (this.#capabilityRevisions.get(key) === revision) {
+        this.#currentEngines.set(key, {
           revision,
           snapshot: null,
           observedSnapshot: baseline,
@@ -1789,9 +1814,9 @@ export class TaskRuntime {
           ),
         });
       }
-      const latest = this.#currentEngines.get(engineId);
+      const latest = this.#currentEngines.get(key);
       if (latest?.snapshot && this.#currentEngineProjection(engine).state === "current") {
-        const confirmed = this.#currentEngines.get(engineId);
+        const confirmed = this.#currentEngines.get(key);
         if (confirmed?.snapshot) return confirmed.snapshot;
       }
       throw new RuntimeEligibilityError(
@@ -1800,10 +1825,10 @@ export class TaskRuntime {
       );
     }
 
-    if (this.#capabilityRevisions.get(engineId) !== revision) {
-      const latest = this.#currentEngines.get(engineId);
+    if (this.#capabilityRevisions.get(key) !== revision) {
+      const latest = this.#currentEngines.get(key);
       if (latest?.snapshot && this.#currentEngineProjection(engine).state === "current") {
-        const confirmed = this.#currentEngines.get(engineId);
+        const confirmed = this.#currentEngines.get(key);
         if (confirmed?.snapshot) return confirmed.snapshot;
       }
       throw new RuntimeEligibilityError(
@@ -1814,7 +1839,7 @@ export class TaskRuntime {
 
     const observedSnapshot = this.#clone(engine.getCapabilities());
     if (!sameCapabilitySnapshot(snapshot, observedSnapshot)) {
-      this.#currentEngines.set(engineId, {
+      this.#currentEngines.set(key, {
         revision,
         snapshot: null,
         observedSnapshot,
@@ -1831,7 +1856,7 @@ export class TaskRuntime {
       );
     }
 
-    this.#currentEngines.set(engineId, {
+    this.#currentEngines.set(key, {
       revision,
       snapshot,
       observedSnapshot,
@@ -1891,7 +1916,9 @@ export class TaskRuntime {
   }
 
   #engineFor(task: TaskData): EngineAdapter {
-    const engine = this.#engines.get(task.engineId);
+    const engine =
+      this.#engineForEnvironment?.(task.engineId, task.environment) ??
+      this.#engines.get(task.engineId);
     if (!engine)
       throw new RuntimeEligibilityError(`Engine ${task.engineId} is not registered in this Host.`);
     return engine;
@@ -1989,7 +2016,7 @@ export class TaskRuntime {
       closeReason: record.data.closeReason,
       engine: record.data.engine,
       currentEngine: this.#engines.has(record.data.engineId)
-        ? this.#currentEngineProjection(this.#engines.get(record.data.engineId)!)
+        ? this.#currentEngineProjection(this.#engineFor(record.data))
         : this.#unknownEngineProjection(
             record.data.engineId,
             Object.keys(record.data.engine.capabilities) as EngineCapability[],
@@ -2113,7 +2140,8 @@ export class TaskRuntime {
 
   #currentEngineProjection(engine: EngineAdapter): RuntimeCurrentEngineProjection {
     const current = this.#clone(engine.getCapabilities());
-    const record = this.#currentEngines.get(current.engineId);
+    const key = engineStateKey(current);
+    const record = this.#currentEngines.get(key);
     if (!record) {
       return this.#unknownEngineProjection(
         current.engineId,
@@ -2124,15 +2152,15 @@ export class TaskRuntime {
     }
 
     if (!sameCapabilitySnapshot(current, record.snapshot ?? record.observedSnapshot)) {
-      const revision = (this.#capabilityRevisions.get(current.engineId) ?? record.revision) + 1;
-      this.#capabilityRevisions.set(current.engineId, revision);
+      const revision = (this.#capabilityRevisions.get(key) ?? record.revision) + 1;
+      this.#capabilityRevisions.set(key, revision);
       const projection = this.#unknownEngineProjection(
         current.engineId,
         Object.keys(current.capabilities) as EngineCapability[],
         "Adapter state changed since its last probe; a new probe is required.",
         this.#now(),
       );
-      this.#currentEngines.set(current.engineId, {
+      this.#currentEngines.set(key, {
         revision,
         snapshot: null,
         observedSnapshot: current,

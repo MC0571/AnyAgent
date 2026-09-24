@@ -4228,6 +4228,8 @@ const zhCN: Record<string, string> = {
   "chat.toolbar.modelSwitch.stage.persistingWorkspace": "正在写入工作区默认模型...",
   "chat.toolbar.modelSwitch.lockedByRunningTask": "当前有任务运行中，完成后可切换模型供应商。",
   "chat.toolbar.modelSwitch.lockedByRunningTask.short": "任务运行中",
+  "chat.toolbar.harnessSwitch.lockedSession": "当前会话不支持切换 Harness，请新建对话后选择。",
+  "chat.toolbar.harnessSwitch.unavailable": "当前 Harness 不可用，请查看选项中的原因。",
   "chat.goal.runningBlocked": "请结束任务后设定目标。",
   "chat.goal.planModeBlocked": "Goal 无法在 Plan 模式下使用，请切换模式。",
   "chat.plan.attachmentsBlocked": "首版 /plan 仅支持纯文本，请移除附件或上下文后重试。",

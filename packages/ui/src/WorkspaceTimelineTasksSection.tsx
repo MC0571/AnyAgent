@@ -81,6 +81,7 @@ export function WorkspaceTimelineTasksSection({
   hiddenTaskIds,
   onSelectTask,
   engineService,
+  engineTaskData,
   engineSelectedTaskId,
   onSelectEngineTask,
   onRefreshEngineState,
@@ -97,6 +98,7 @@ export function WorkspaceTimelineTasksSection({
   hideEmptyMessage?: boolean;
   hiddenTaskIds?: ReadonlySet<string>;
   engineService?: IAnyAgentService | null;
+  engineTaskData?: ReturnType<typeof useEngineTaskSidebarData>;
   engineSelectedTaskId?: string | null;
   onSelectEngineTask?: (taskId: string) => void;
   onRefreshEngineState?: () => void;
@@ -109,16 +111,17 @@ export function WorkspaceTimelineTasksSection({
   ) => void;
 }) {
   const { intl, locale } = useZCodeIntl();
+  const fetchedEngineTaskData = useEngineTaskSidebarData({
+    service: engineTaskData ? null : engineService && onSelectEngineTask ? engineService : null,
+    onRefresh: engineTaskData ? undefined : onRefreshEngineState,
+    onNativeSessionIdsChange: engineTaskData ? undefined : onNativeSessionIdsChange,
+  });
   const {
     tasks: engineTasks,
     titles: engineTitles,
     runningByTask,
     error: engineError,
-  } = useEngineTaskSidebarData({
-    service: engineService && onSelectEngineTask ? engineService : null,
-    onRefresh: onRefreshEngineState,
-    onNativeSessionIdsChange,
-  });
+  } = engineTaskData ?? fetchedEngineTaskData;
   const baseServices = useBaseWorkspaceServices();
   const scopedWorkspaceTabs = useLocalWorkspaceScopes({
     workspaceTabs,

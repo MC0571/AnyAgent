@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EngineContractError } from "@anyagent/engine-contract";
+import { zcodeSessionEventSchema } from "@zcode/shared";
 import { createZCodeAdapter } from "../src/anyagent/zcodeAdapter.js";
 
 type AgentPort = Parameters<typeof createZCodeAdapter>[0]["agent"];
@@ -117,6 +118,139 @@ test("ZCode capability refresh reads the existing provider configuration revisio
   assert.equal(first.configurationVersion, "provider-config-1");
   assert.equal(second.configurationVersion, "provider-config-2");
   adapter.dispose();
+});
+
+test("a late ZCode capability probe cannot replace newer provider state", async () => {
+  let releaseOlder!: (revision: string) => void;
+  let reads = 0;
+  const agent = {
+    initialize: async () => ({ available: true, workspaceKey: "/tmp/workspace" }),
+    onDynamicSessionEvent: () => () => ({ dispose() {} }),
+    onAgentRuntimeLifecycle: () => ({ dispose() {} }),
+    sendConversationCommandV4: async () => ({ status: "accepted" }),
+  } as unknown as AgentPort;
+  const adapter = createZCodeAdapter({
+    agent,
+    workspacePath: "/tmp/workspace",
+    readConfigurationVersion: () =>
+      ++reads === 1
+        ? new Promise<string>((resolve) => {
+            releaseOlder = resolve;
+          })
+        : Promise.resolve("provider-config-2"),
+  });
+  const older = adapter.refreshCapabilities();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const newer = await adapter.refreshCapabilities();
+  assert.equal(newer.configurationVersion, "provider-config-2");
+  releaseOlder("provider-config-1");
+  await older;
+  assert.equal(adapter.getCapabilities().configurationVersion, "provider-config-2");
+  adapter.dispose();
+});
+
+test("the native protocol accepts scheduled display and started capability evidence", () => {
+  const event = (eventId: string, payload: Record<string, unknown>) => ({
+    eventId,
+    sessionId: "native-session",
+    turnId: "native-turn",
+    seq: 1,
+    timestamp: 1,
+    type: "tool.updated",
+    payload,
+  });
+  assert.equal(
+    zcodeSessionEventSchema.safeParse(
+      event("scheduled", {
+        kind: "scheduled",
+        toolCallId: "tool-read",
+        toolName: "Read",
+        input: { filePath: "README.md" },
+        display: { kind: "file_read" },
+      }),
+    ).success,
+    true,
+  );
+  assert.equal(
+    zcodeSessionEventSchema.safeParse(
+      event("started", {
+        kind: "started",
+        toolCallId: "tool-bash",
+        toolName: "Bash",
+        startedAt: 1,
+        readOnly: true,
+        sideEffectScope: "none",
+      }),
+    ).success,
+    true,
+  );
+});
+
+test("ZCode tool cards retain native name and input without inventing a start", async () => {
+  const fixture = harness();
+  const session = await fixture.adapter.createSession();
+  const run = await fixture.adapter.run({ session, input: "work" });
+  const events = [];
+  const reading = (async () => {
+    for await (const event of run.events) events.push(event);
+  })();
+  const emit = (eventId: string, seq: number, type: string, payload: unknown) =>
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId,
+        seq,
+        sessionId: "native-session",
+        turnId: "native-turn",
+        timestamp: seq,
+        type,
+        payload,
+      },
+    });
+  emit("turn", 1, "turn.started", { inputId: "native-input" });
+  emit("read-scheduled", 2, "tool.updated", {
+    kind: "scheduled",
+    toolCallId: "read-call",
+    toolName: "Read",
+    input: { filePath: "README.md" },
+  });
+  emit("read-error", 3, "tool.updated", {
+    kind: "error",
+    toolCallId: "read-call",
+    error: { message: "File does not exist" },
+  });
+  emit("bash-scheduled", 4, "tool.updated", {
+    kind: "scheduled",
+    toolCallId: "bash-call",
+    toolName: "Bash",
+    input: { command: "pwd" },
+  });
+  emit("bash-started", 5, "tool.updated", {
+    kind: "started",
+    toolCallId: "bash-call",
+    startedAt: 5,
+    readOnly: true,
+    sideEffectScope: "none",
+  });
+  emit("bash-result", 6, "tool.updated", {
+    kind: "result",
+    toolCallId: "bash-call",
+    result: { success: true, content: "/tmp/workspace" },
+  });
+  fixture.adapter.dispose();
+  await reading;
+  assert.deepEqual(
+    events.filter((event) => event.type.startsWith("tool.")).map((event) => event.type),
+    ["tool.failed", "tool.started", "tool.completed"],
+  );
+  const failed = events.find((event) => event.type === "tool.failed");
+  const started = events.find((event) => event.type === "tool.started");
+  const completed = events.find((event) => event.type === "tool.completed");
+  assert.equal(failed?.type === "tool.failed" && failed.name, "Read");
+  assert.deepEqual(failed?.type === "tool.failed" && failed.input, { filePath: "README.md" });
+  assert.equal(started?.type === "tool.started" && started.name, "Bash");
+  assert.deepEqual(started?.type === "tool.started" && started.input, { command: "pwd" });
+  assert.equal(completed?.type === "tool.completed" && completed.name, "Bash");
 });
 
 test("late native event stays with its completed run until CLI loss", async () => {
