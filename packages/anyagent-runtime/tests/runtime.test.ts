@@ -1156,6 +1156,49 @@ async function until(predicate: () => boolean): Promise<void> {
   assert.fail("Timed out waiting for Runtime state to update.");
 }
 
+test("Runtime adopts a Host-authorized native Session once under a new product Task", async () => {
+  const engine = new ManualEngine();
+  const nativeSessionId = "share-import-session" as EngineSessionRef;
+  engine.sessions.push(nativeSessionId);
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  const imported = {
+    engineId: "manual",
+    environment,
+    authorization,
+    nativeSessionId,
+    sharedContext: {
+      contextId: "shared-context-1",
+      title: "Imported conversation",
+      shareUrl: "https://example.test/share/abc",
+    },
+  };
+  try {
+    await assert.rejects(
+      runtime.adoptImportedSession({
+        ...imported,
+        authorization: { ...authorization, scopes: ["execution.run"] },
+      }),
+      /Host authorization must include session\.create/,
+    );
+    assert.equal(engine.resumeCalls.length, 0);
+
+    const task = await runtime.adoptImportedSession(imported);
+    assert.equal(task.session.nativeSessionId, nativeSessionId);
+    assert.deepEqual(task.sharedContext, imported.sharedContext);
+    assert.equal(engine.createSessionCalls, 0);
+    assert.equal(engine.resumeCalls.length, 1);
+
+    await assert.rejects(runtime.adoptImportedSession(imported), /already belongs to a Task/);
+    assert.equal(runtime.listTasks().length, 1);
+    assert.equal(engine.resumeCalls.length, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
 test("Session compaction requires Task ownership and scope, records native terminal outcomes only", async () => {
   const engine = new ManualEngine();
   const runtime = createTaskRuntime({

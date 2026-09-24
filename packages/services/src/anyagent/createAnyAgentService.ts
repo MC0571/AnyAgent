@@ -12,8 +12,10 @@ import type { ModelSelection } from "@zcode/shared/zcode-protocol-v4";
 import { Emitter } from "@zcode/rpc";
 import { getConversationWorkspaceDir, getDataBaseDir } from "../paths.js";
 import type { IPromptAttachmentTransferService } from "../prompt-attachment-transfer/promptAttachmentTransfer.js";
+import type { IConversationShareService } from "../conversation-share/conversationShare.js";
 import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
 import { createZCodeAgentConnectionScope } from "../zcode-agent/zcodeAgentConnectionScope.js";
+import { createSharedContextImporter } from "./sharedContextImporter.js";
 import { createZCodeAdapter } from "./zcodeAdapter.js";
 import type { IAnyAgentService } from "./anyAgentService.js";
 
@@ -23,6 +25,7 @@ export function createAnyAgentService(
   readZCodeConfigurationVersion?: () => Promise<string>,
   validateModelSelection?: (selection: ModelSelection) => Promise<string | undefined>,
   attachmentTransferService?: IPromptAttachmentTransferService,
+  conversationShareService?: IConversationShareService,
 ): {
   service: IAnyAgentService;
   close(): void;
@@ -168,6 +171,17 @@ export function createAnyAgentService(
     engineRefreshInFlight.set(target.id, shared);
     return shared;
   }
+  const importSharedContext = createSharedContextImporter({
+    conversationShareService,
+    environmentFor,
+    listEngines,
+    hostAuthorization,
+    runtime,
+    agent: agentScope.service,
+    registerPendingSharedContext(target, sessionId, contextId) {
+      enginesFor(target).zcode.registerPendingSharedContext(sessionId, contextId);
+    },
+  });
   const service: IAnyAgentService = {
     onDidChange: changes.event,
     async getCreateTaskContext(workspace) {
@@ -227,6 +241,7 @@ export function createAnyAgentService(
             : { kind: "engine", label: "ZCode provider configuration in AnyAgent home" },
       });
     },
+    importSharedContext,
     async forkTask(input) {
       const source = runtime.getTask(input.taskId);
       if (!source) throw new RuntimeEligibilityError("Fork source Task does not exist.");
@@ -239,6 +254,18 @@ export function createAnyAgentService(
       return runtime.stageAttachment(input);
     },
     async submitInput(input) {
+      const task = runtime.getTask(input.taskId);
+      if (task?.engine.engineId === "zcode" && task.sharedContext && task.session.nativeSessionId) {
+        const history = runtime.getHistory(task.id);
+        if (
+          history &&
+          !history.inputs.some((entry) => entry.acceptedAt !== null || entry.status === "unknown")
+        )
+          enginesFor(task.environment).zcode.registerPendingSharedContext(
+            task.session.nativeSessionId,
+            task.sharedContext.contextId,
+          );
+      }
       await runtime.submitInput(input);
     },
     async cancelQueuedInput(input) {

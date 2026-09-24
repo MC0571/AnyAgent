@@ -82,6 +82,10 @@ import { usePaneLayoutStore } from "@/v4/paneLayoutStore.js";
 import { useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import { startMemoryDiagnosticsLogger } from "@/lib/memoryDiagnostics.js";
+import {
+  consumeImportedEngineTaskNavigationRequest,
+  subscribeImportedEngineTaskNavigation,
+} from "@/lib/importedEngineTaskNavigation.js";
 
 const EMPTY_RECONNECTING_REMOTE_WORKSPACE_LOGS_BY_WORKSPACE_KEY: NonNullable<
   AppProps["reconnectingRemoteWorkspaceLogsByWorkspaceKey"]
@@ -826,6 +830,17 @@ export function App({
   useTestActions(testActions);
   const [workspaceMainView, setWorkspaceMainView] = useState<WorkspaceMainView>("chat");
   const [engineSelectedTaskId, setEngineSelectedTaskId] = useState<string | null>(null);
+  useEffect(() => {
+    const selectImportedTask = () => {
+      const request = consumeImportedEngineTaskNavigationRequest(workspaceAbsPath);
+      if (!request) return;
+      setEngineSelectedTaskId(request.taskId);
+      setWorkspaceMainView("engine");
+    };
+    const unsubscribe = subscribeImportedEngineTaskNavigation(selectImportedTask);
+    selectImportedTask();
+    return unsubscribe;
+  }, [workspaceAbsPath]);
   const handleCreateTaskFromCurrentView = useCallback(
     (request?: Parameters<typeof onCreateTask>[0]) => {
       if (workspaceReadOnlyReason) return;

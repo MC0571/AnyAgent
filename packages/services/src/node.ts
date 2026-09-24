@@ -2436,6 +2436,7 @@ export function createLocalServices(options: {
             return validation.ok ? undefined : `所选模型配置无效：${validation.code}`;
           },
           promptAttachmentTransferService,
+          conversationShareService,
         )
       : null;
   if (anyAgentService) sqliteReposToClose.push(anyAgentService);

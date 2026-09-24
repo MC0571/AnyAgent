@@ -4249,7 +4249,7 @@ const zhCN: Record<string, string> = {
     "压缩完成后，当前会话已使用的上下文仍大于目标模型预留最大输出后的可用上下文，模型切换已取消。",
   "chat.toolbar.mode.label": "切换模式",
   "engine.composer.unavailableValue": "接入未映射",
-  "engine.composer.textOnly": "AnyAgent 当前 Harness 接入尚未映射工作区、网页和共享上下文快捷操作。",
+  "engine.composer.textOnly": "当前 Harness 接入尚不支持工作区文件和共享上下文快捷操作。",
   "engine.composer.attachmentLocalPathRequired":
     "Harness 附件必须是可由 Host 核验的本地文件，请通过文件选择器重新添加。",
   "engine.composer.modeUnavailable":

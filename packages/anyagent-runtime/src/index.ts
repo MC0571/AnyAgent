@@ -23,6 +23,7 @@ import type {
   CompactSession,
   ApplyFileRewind,
   CreateTaskInput,
+  AdoptImportedSessionInput,
   ExecutionFileTarget,
   ForkTaskInput,
   ReplyToApproval,
@@ -102,6 +103,7 @@ interface TaskData {
   readonly participantId: string;
   readonly sessionId: string;
   readonly forkedFrom?: RuntimeTask["forkedFrom"];
+  readonly sharedContext?: RuntimeTask["sharedContext"];
   readonly nativeForkCommandId?: string;
   status: RuntimeTaskStatus;
   createdAt: number;
@@ -785,6 +787,48 @@ export class TaskRuntime {
     return this.#createTask(input);
   }
 
+  /** Attach a Host-verified import to a fresh product Task without creating another native Session. */
+  async adoptImportedSession(input: AdoptImportedSessionInput): Promise<RuntimeTask> {
+    this.#assertOpen();
+    if (!input.nativeSessionId.trim())
+      throw new RuntimeEligibilityError(
+        "An imported native Session identity is required.",
+        "ownership",
+      );
+    return this.#withCommandLock(`session.adopt:${input.nativeSessionId}`, async () => {
+      if (this.listTasks().some((task) => task.session.nativeSessionId === input.nativeSessionId))
+        throw new RuntimeEligibilityError(
+          "The imported native Session already belongs to a Task.",
+          "ownership",
+        );
+      return this.#createTask(input, {
+        capability: "session.resume",
+        sharedContext: input.sharedContext,
+        createNativeSession: async (engine) => {
+          if (!engine.resumeSession)
+            throw new RuntimeEligibilityError(
+              "This Engine cannot attach the imported Session.",
+              "unsupported",
+            );
+          const nativeSession = await engine.resumeSession({
+            session: input.nativeSessionId as EngineSessionRef,
+          });
+          if (nativeSession !== input.nativeSessionId)
+            throw new RuntimeEligibilityError(
+              "Import recovery changed the native Session identity.",
+              "ownership",
+            );
+          if (this.listTasks().some((task) => task.session.nativeSessionId === nativeSession))
+            throw new RuntimeEligibilityError(
+              "The imported native Session was claimed by another Task.",
+              "ownership",
+            );
+          return nativeSession;
+        },
+      });
+    });
+  }
+
   async forkTask(input: ForkTaskInput): Promise<RuntimeTask> {
     this.#assertOpen();
     const { task, session } = this.#qualify(
@@ -889,10 +933,11 @@ export class TaskRuntime {
 
   async #createTask(
     input: CreateTaskInput,
-    fork?: {
-      readonly capability: "session.fork";
-      readonly forkedFrom: NonNullable<RuntimeTask["forkedFrom"]>;
-      readonly nativeForkCommandId: string;
+    creation?: {
+      readonly capability: "session.fork" | "session.resume";
+      readonly forkedFrom?: NonNullable<RuntimeTask["forkedFrom"]>;
+      readonly nativeForkCommandId?: string;
+      readonly sharedContext?: RuntimeTask["sharedContext"];
       readonly createNativeSession: (engine: EngineAdapter) => Promise<EngineSessionRef>;
     },
   ): Promise<RuntimeTask> {
@@ -911,7 +956,7 @@ export class TaskRuntime {
       snapshot,
       input.engineId,
       input.environment.id,
-      fork?.capability ?? "session.create",
+      creation?.capability ?? "session.create",
     );
 
     const createdAt = this.#now();
@@ -930,9 +975,11 @@ export class TaskRuntime {
       authorization,
       participantId,
       sessionId,
-      ...(fork
-        ? { forkedFrom: fork.forkedFrom, nativeForkCommandId: fork.nativeForkCommandId }
+      ...(creation?.forkedFrom ? { forkedFrom: creation.forkedFrom } : {}),
+      ...(creation?.nativeForkCommandId
+        ? { nativeForkCommandId: creation.nativeForkCommandId }
         : {}),
+      ...(creation?.sharedContext ? { sharedContext: this.#clone(creation.sharedContext) } : {}),
       status: "active",
       createdAt,
       updatedAt: createdAt,
@@ -988,11 +1035,12 @@ export class TaskRuntime {
         latest,
         input.engineId,
         environment.id,
-        fork?.capability ?? "session.create",
+        creation?.capability ?? "session.create",
         snapshot.configurationVersion,
         snapshot.adapterVersion,
       );
-      const nativeSessionId = await (fork?.createNativeSession(engine) ?? engine.createSession());
+      const nativeSessionId = await (creation?.createNativeSession(engine) ??
+        engine.createSession());
       this.#liveSessions.set(sessionId, nativeSessionId);
       const activeSession: RuntimeSession = {
         ...session,
@@ -4347,6 +4395,7 @@ export class TaskRuntime {
       closedAt: record.data.closedAt,
       closeReason: record.data.closeReason,
       ...(record.data.forkedFrom ? { forkedFrom: record.data.forkedFrom } : {}),
+      ...(record.data.sharedContext ? { sharedContext: record.data.sharedContext } : {}),
       engine: record.data.engine,
       currentEngine: this.#engines.has(record.data.engineId)
         ? this.#currentEngineProjection(this.#engineFor(record.data))

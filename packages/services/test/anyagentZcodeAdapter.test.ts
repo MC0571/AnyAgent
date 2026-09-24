@@ -872,6 +872,34 @@ test("ZCode maps Host-resolved Engine attachments to native sendText references"
   }
 });
 
+test("ZCode attaches an imported shared-context ref to one accepted Input only", async () => {
+  const fixture = harness();
+  try {
+    const session = await fixture.adapter.createSession();
+    fixture.adapter.registerPendingSharedContext(session, "shared-context-once");
+    fixture.adapter.registerPendingSharedContext(session, "shared-context-once");
+
+    await fixture.adapter.run({ session, input: "continue from the imported context" });
+    const first = fixture.commands.find((entry) => entry.type === "sendText");
+    assert.ok(first);
+    assert.deepEqual((first.payload as { context_refs?: unknown }).context_refs, [
+      { kind: "shared_context_import", context_id: "shared-context-once" },
+    ]);
+
+    completeNativeSource(fixture);
+    await fixture.adapter.run({ session, input: "continue the discussion" });
+    const sends = fixture.commands.filter((entry) => entry.type === "sendText");
+    assert.equal(sends.length, 2);
+    assert.equal((sends[1]!.payload as { context_refs?: unknown }).context_refs, undefined);
+    assert.throws(
+      () => fixture.adapter.registerPendingSharedContext(session, "shared-context-once"),
+      (error: unknown) => (error as EngineContractError).kind === "protocol-error",
+    );
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
 test("ZCode rejects an unsupported adapter-specific mode before native dispatch", async () => {
   const fixture = harness();
   const runtime = createTaskRuntime({
@@ -1989,14 +2017,24 @@ test("ZCode requires explicit model selection before pinning a Session Provider"
 test("CLI loss before sendText ACK leaves the command outcome unknown", async () => {
   const fixture = harness({ delayedAck: true });
   const session = await fixture.adapter.createSession();
+  fixture.adapter.registerPendingSharedContext(session, "shared-context-uncertain");
   const pending = fixture.adapter.run({ session, input: "work" });
   await new Promise<void>((resolve) => setImmediate(resolve));
+  const dispatched = fixture.commands.find((entry) => entry.type === "sendText");
+  assert.ok(dispatched);
+  assert.deepEqual((dispatched.payload as { context_refs?: unknown }).context_refs, [
+    { kind: "shared_context_import", context_id: "shared-context-uncertain" },
+  ]);
   fixture.disconnect();
   fixture.releaseSendText();
   await assert.rejects(pending, (error: unknown) => {
     assert.equal((error as EngineContractError).kind, "result-unknown");
     return true;
   });
+  assert.throws(
+    () => fixture.adapter.registerPendingSharedContext(session, "shared-context-uncertain"),
+    (error: unknown) => (error as EngineContractError).kind === "protocol-error",
+  );
   fixture.adapter.dispose();
 });
 
@@ -3006,6 +3044,49 @@ test("single-choice user input maps to a constrained native AskUserQuestion answ
       content: { answers: { "Which file should I update?": "src/two.ts" } },
     },
   });
+
+  // The mounted ElicitationDialog sends a structured response, including its
+  // compatibility fields, rather than the legacy string used above.
+  assert.equal(
+    (
+      await fixture.adapter.replyToUserInput({
+        session,
+        requestId: "native-choice" as never,
+        response: {
+          action: "accept",
+          content: { answers: { "Which file should I update?": "not-an-option" } },
+        },
+      })
+    ).status,
+    "unsupported",
+  );
+  assert.equal(
+    (
+      await fixture.adapter.replyToUserInput({
+        session,
+        requestId: "native-choice" as never,
+        response: {
+          action: "accept",
+          content: {
+            answers: { "Which file should I update?": "src/one.ts" },
+            answer_0: "src/one.ts",
+            answer: "src/one.ts",
+          },
+        },
+      })
+    ).status,
+    "forwarded",
+  );
+  assert.deepEqual(
+    fixture.commands.filter((item) => item.type === "resolveInteraction").at(-1)?.payload,
+    {
+      interactionId: "native-choice",
+      answer: {
+        action: "accept",
+        content: { answers: { "Which file should I update?": "src/one.ts" } },
+      },
+    },
+  );
 
   fixture.adapter.dispose();
   await reading;

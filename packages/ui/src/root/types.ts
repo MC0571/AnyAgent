@@ -18,6 +18,8 @@ export interface RootProps {
   initialTaskId?: string;
   /** Electron renderer 传 true，用于启用自绘标题栏 */
   isDesktop?: boolean;
+  /** Desktop Host exposes the Engine Task bridge only for the M1 workbench entry point. */
+  anyAgentServiceEnabled?: boolean;
   /** macOS 桌面端需要给红绿灯按钮预留安全区 */
   isMacDesktop?: boolean;
   /** Windows 桌面端需要展示更准确的资源管理器文案 */

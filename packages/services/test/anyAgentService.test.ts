@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createAnyAgentService } from "../src/anyagent/createAnyAgentService.js";
 import { setDataBaseDir } from "../src/paths.js";
+import type { IConversationShareService } from "../src/conversation-share/conversationShare.js";
 import type { IPromptAttachmentTransferService } from "../src/prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 import { readTrustedZCodeAgentV4Connection } from "../src/zcode-agent/zcodeAgentConnectionScope.js";
@@ -431,6 +432,261 @@ test("Host-owned Harness reads native assistant rows through a trusted ZCode con
       values: { "native-feedback-message": "like" },
     });
     assert.equal(rowReads, 1);
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Host adopts a persisted share import and sends its context ref on the first Task Input", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-share-adoption-"));
+  const project = join(directory, "project");
+  await mkdir(project);
+  setDataBaseDir(directory);
+  const nativeSessionId = "share-import-persisted-session";
+  const contextId = "shared-context-persisted";
+  const shareUrl = "https://example.test/share/abc123";
+  let importCalls = 0;
+  let resumeCalls = 0;
+  let inputNumber = 0;
+  const nativeCommands: Array<{ type: string; commandId: string; payload?: unknown }> = [];
+  const conversationShareService = {
+    importShare: async (input: { targetWorkspacePath?: string }, operationId: string) => {
+      importCalls++;
+      assert.equal(
+        operationId,
+        importCalls === 1 ? "share-request-before-restart" : "share-request-after-restart",
+      );
+      return {
+        workspacePath: input.targetWorkspacePath,
+        sessionId: nativeSessionId,
+        contextId,
+        shareUrl,
+        title: "Shared source conversation",
+        reused: importCalls > 1,
+      };
+    },
+  } as unknown as IConversationShareService;
+  const createHost = () =>
+    createAnyAgentService(
+      {
+        initialize: async ({ workspacePath }: { workspacePath: string }) => ({
+          available: true,
+          workspaceKey: workspacePath,
+        }),
+        onDynamicSessionEvent: () => (listener: (event: unknown) => void) => ({
+          dispose() {
+            void listener;
+          },
+        }),
+        onAgentRuntimeLifecycle: () => ({ dispose() {} }),
+        readSession: async ({ sessionId }: { sessionId: string }) => ({
+          session: { sessionId },
+          projection: { turnCount: 0 },
+          messages: [
+            {
+              info: {
+                role: "user",
+                source: "shared_context",
+                visibility: "model-only",
+                metadata: { contextId },
+              },
+              parts: [],
+            },
+          ],
+        }),
+        resumeSession: async ({ sessionId }: { sessionId: string }) => {
+          resumeCalls++;
+          return {
+            session: { sessionId },
+            settings: { model: { current: { providerId: "provider-a" } } },
+          };
+        },
+        sendConversationCommandV4: async ({
+          envelope,
+        }: {
+          envelope: { type: string; commandId: string; payload?: unknown };
+        }) => {
+          nativeCommands.push(envelope);
+          if (envelope.type === "sendText") {
+            inputNumber++;
+            return {
+              status: "accepted",
+              commandId: envelope.commandId,
+              result: {
+                type: "inputAccepted",
+                inputId: `native-input-${inputNumber}`,
+                delivery: "startNow",
+              },
+            };
+          }
+          return {
+            status: "accepted",
+            commandId: envelope.commandId,
+            result: { type: "createSession", sessionId: "unexpected-new-session" },
+          };
+        },
+      } as unknown as IZCodeAgentService,
+      undefined,
+      async () => undefined,
+      undefined,
+      conversationShareService,
+    );
+
+  let host = createHost();
+  try {
+    const firstImport = await host.service.importSharedContext({
+      shareCode: "abc123",
+      clientRequestId: "share-request-before-restart",
+      workspacePath: project,
+    });
+    assert.equal(firstImport.session.nativeSessionId, nativeSessionId);
+    assert.equal(firstImport.sharedContext?.contextId, contextId);
+    assert.equal(firstImport.environment.workDirectory, project);
+    assert.equal(resumeCalls, 1);
+    assert.equal((await host.service.getHistory(firstImport.id))?.inputs.length, 0);
+    host.close();
+
+    host = createHost();
+    const restoredImport = await host.service.importSharedContext({
+      shareCode: "abc123",
+      clientRequestId: "share-request-after-restart",
+      workspacePath: project,
+    });
+    assert.equal(restoredImport.id, firstImport.id);
+    assert.equal(restoredImport.session.nativeSessionId, nativeSessionId);
+    assert.equal((await host.service.listTasks()).length, 1);
+    assert.equal((await host.service.getHistory(restoredImport.id))?.inputs.length, 0);
+
+    const identity = {
+      taskId: restoredImport.id,
+      participantId: restoredImport.participant.id,
+      sessionId: restoredImport.session.id,
+      authorizationId: restoredImport.authorizationId,
+    };
+    const restored = await host.service.restoreTaskSession(identity);
+    assert.equal(restored.session.nativeSessionId, nativeSessionId);
+    assert.equal((await host.service.getHistory(restored.id))?.inputs.length, 0);
+    await host.service.submitInput({
+      ...identity,
+      text: "Continue from this shared context",
+      submissionConfig: { modelSelection: { providerId: "provider-a", modelId: "model-a" } },
+    });
+    const send = nativeCommands.find((command) => command.type === "sendText");
+    assert.ok(send);
+    assert.deepEqual((send.payload as { context_refs?: unknown }).context_refs, [
+      { kind: "shared_context_import", context_id: contextId },
+    ]);
+    assert.equal(nativeCommands.filter((command) => command.type === "createSession").length, 0);
+    assert.equal((await host.service.getHistory(restored.id))?.inputs.length, 1);
+    assert.equal(importCalls, 2);
+    assert.equal(resumeCalls, 2);
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Host coalesces only the same import request and adopts a shared native Session once", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-share-concurrent-"));
+  const project = join(directory, "project");
+  await mkdir(project);
+  setDataBaseDir(directory);
+  const nativeSessionId = "share-import-concurrent-session";
+  const contextId = "shared-context-concurrent";
+  let importCalls = 0;
+  let resumeCalls = 0;
+  let releaseImport!: () => void;
+  const importGate = new Promise<void>((resolve) => {
+    releaseImport = resolve;
+  });
+  const conversationShareService = {
+    importShare: async (
+      input: { targetWorkspacePath?: string; clientRequestId: string },
+      operationId: string,
+    ) => {
+      importCalls++;
+      assert.equal(operationId, input.clientRequestId);
+      await importGate;
+      return {
+        workspacePath: input.targetWorkspacePath,
+        sessionId: nativeSessionId,
+        contextId,
+        shareUrl: "https://example.test/share/concurrent",
+        title: "Concurrent shared source",
+        reused: importCalls > 1,
+      };
+    },
+  } as unknown as IConversationShareService;
+  const host = createAnyAgentService(
+    {
+      initialize: async ({ workspacePath }: { workspacePath: string }) => ({
+        available: true,
+        workspaceKey: workspacePath,
+      }),
+      onDynamicSessionEvent: () => (listener: (event: unknown) => void) => ({
+        dispose() {
+          void listener;
+        },
+      }),
+      onAgentRuntimeLifecycle: () => ({ dispose() {} }),
+      readSession: async ({ sessionId }: { sessionId: string }) => ({
+        session: { sessionId },
+        projection: { turnCount: 0 },
+        messages: [
+          {
+            info: {
+              role: "user",
+              source: "shared_context",
+              visibility: "model-only",
+              metadata: { contextId },
+            },
+            parts: [],
+          },
+        ],
+      }),
+      resumeSession: async ({ sessionId }: { sessionId: string }) => {
+        resumeCalls++;
+        return {
+          session: { sessionId },
+          settings: { model: { current: { providerId: "provider-a" } } },
+        };
+      },
+      sendConversationCommandV4: async () => ({ status: "accepted" }),
+    } as unknown as IZCodeAgentService,
+    undefined,
+    async () => undefined,
+    undefined,
+    conversationShareService,
+  );
+  try {
+    const request = (clientRequestId: string) => ({
+      shareCode: "concurrent",
+      clientRequestId,
+      workspacePath: project,
+    });
+    const first = host.service.importSharedContext(request("request-one"));
+    const second = host.service.importSharedContext(request("request-two"));
+    for (let attempt = 0; importCalls < 2 && attempt < 100; attempt++)
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(importCalls, 2);
+    releaseImport();
+    const [firstTask, secondTask] = await Promise.all([first, second]);
+    assert.equal(firstTask.id, secondTask.id);
+    assert.equal((await host.service.listTasks()).length, 1);
+    assert.equal(resumeCalls, 1);
+
+    const sameRequest = request("request-three");
+    const duplicateOne = host.service.importSharedContext(sameRequest);
+    const duplicateTwo = host.service.importSharedContext(sameRequest);
+    const [duplicateTaskOne, duplicateTaskTwo] = await Promise.all([duplicateOne, duplicateTwo]);
+    assert.equal(duplicateTaskOne.id, firstTask.id);
+    assert.equal(duplicateTaskTwo.id, firstTask.id);
+    assert.equal(importCalls, 3);
+    assert.equal((await host.service.listTasks()).length, 1);
+    assert.equal(resumeCalls, 1);
   } finally {
     host.close();
     setDataBaseDir(null);

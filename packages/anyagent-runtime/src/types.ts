@@ -156,6 +156,8 @@ export interface RuntimeEngineProjection {
   readonly capabilities: Readonly<Record<EngineCapability, CapabilityStatus>>;
 }
 
+export type RuntimeSharedContext = Readonly<Record<"contextId" | "title" | "shareUrl", string>>;
+
 /** Latest in-memory observation; never persisted over a Task's historical snapshot. */
 export interface RuntimeCurrentEngineProjection {
   readonly engineId: string;
@@ -195,11 +197,9 @@ export interface RuntimeTask {
   readonly closedAt: number | null;
   readonly closeReason: string | null;
   /** Read-only source link; inherited rows keep their original Task ownership. */
-  readonly forkedFrom?: {
-    readonly taskId: string;
-    readonly inputId: string;
-    readonly executionId: string;
-  };
+  readonly forkedFrom?: Readonly<Record<"taskId" | "inputId" | "executionId", string>>;
+  /** Imported material provenance belongs to this Task; native context stays Engine-owned. */
+  readonly sharedContext?: RuntimeSharedContext;
   /** Immutable Engine/configuration/capability evidence captured when this Task was created. */
   readonly engine: RuntimeEngineProjection;
   /** Latest Host probe for this Engine; unknown until the current Host has checked it. */
@@ -395,6 +395,10 @@ export interface CreateTaskInput {
   readonly authorization: RuntimeAuthorization;
   readonly credentialSource?: RuntimeCredentialSource;
 }
+
+/** Host-verified imported Session identity; the Renderer cannot supply its native handle. */
+export type AdoptImportedSessionInput = CreateTaskInput &
+  Required<Pick<RuntimeTask, "sharedContext">> & { readonly nativeSessionId: string };
 
 export interface ForkTaskInput {
   readonly taskId: string;

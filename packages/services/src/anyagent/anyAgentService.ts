@@ -1,4 +1,5 @@
 import type { Event } from "@zcode/rpc";
+import type { Locale } from "@zcode/shared";
 import type {
   ReplyToApproval,
   ReplyToUserInput,
@@ -59,6 +60,13 @@ export interface IAnyAgentService {
     engineId: string;
     workspacePath?: string;
     workspaceIdentity?: string;
+  }): Promise<RuntimeTask>;
+  /** Host imports and verifies a native shared-context Session before product ownership is created. */
+  importSharedContext(input: {
+    shareCode: string;
+    clientRequestId: string;
+    workspacePath?: string;
+    locale?: Locale;
   }): Promise<RuntimeTask>;
   forkTask(input: Omit<ForkTaskInput, "authorization">): Promise<RuntimeTask>;
   stageAttachment(input: StageRuntimeAttachmentInput): Promise<RuntimeAttachmentReference>;

@@ -5,6 +5,7 @@ import type { IPlatformService } from "@zcode/shared";
 import { isWorkspaceTab, type TabStoreState, type WindowTabState } from "@/store/tabStore.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { logger } from "@/logger.js";
+import { requestImportedEngineTaskNavigation } from "@/lib/importedEngineTaskNavigation.js";
 import { seedImportedSessionDraft } from "@/v4/composer/newTaskDraft.js";
 import { dismissToast, toast, updateToast } from "@/components/ui/toast.js";
 import { matchesPrimaryShortcut } from "@/lib/keyboardShortcuts.js";
@@ -15,6 +16,7 @@ import { shouldPublishCompleteWorkspaceSnapshot } from "@/root/rootPlatformWorks
 import {
   createShareImportIntent,
   isShareImportIntentSame,
+  resolveShareImportRoute,
   resolveShareImportFailurePresentation,
   type ShareImportIntent,
 } from "@/root/shareImportIntent.js";
@@ -36,6 +38,7 @@ export function useRootPlatformEffects({
   setWorkspaceActionError,
   allowOpenWorkspace = true,
   isDesktop,
+  anyAgentServiceEnabled = false,
   locale,
   tabs,
   activeWorkspacePath,
@@ -69,6 +72,7 @@ export function useRootPlatformEffects({
   setWorkspaceActionError: (message: string | null) => void;
   allowOpenWorkspace?: boolean;
   isDesktop?: boolean;
+  anyAgentServiceEnabled?: boolean;
   locale: ReturnType<typeof import("@/i18n/IntlProvider.js").useZCodeIntl>["locale"];
   tabs: WindowTabState[];
   activeWorkspacePath?: string | null;
@@ -301,7 +305,14 @@ export function useRootPlatformEffects({
       dismissToast(importToastIdRef.current);
       importToastIdRef.current = null;
     }
-    const operationId = `share-import-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
+    const importRoute = resolveShareImportRoute(
+      anyAgentServiceEnabled,
+      Boolean(baseServices.anyAgentService),
+    );
+    const operationId =
+      importRoute === "native-session"
+        ? `share-import-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`
+        : pending.clientRequestId;
     importOperationRef.current = operationId;
     lastImportProgressToastRef.current = null;
     const progressEvent =
@@ -346,67 +357,106 @@ export function useRootPlatformEffects({
       }
     });
 
-    void baseServices.conversationShareService
-      .importShare(
-        {
-          shareCode: pending.shareCode,
-          clientRequestId: pending.clientRequestId,
-          ...(pending.targetWorkspacePath
-            ? { targetWorkspacePath: pending.targetWorkspacePath }
-            : {}),
-          ...(pending.targetWorkspaceIdentity
-            ? { targetWorkspaceIdentity: pending.targetWorkspaceIdentity }
-            : {}),
-          ...(pending.targetWorkspaceKind
-            ? { targetWorkspaceKind: pending.targetWorkspaceKind }
-            : {}),
-          locale,
-        },
-        operationId,
-      )
-      .then((result) => {
+    const isRemoteTarget =
+      pending.targetWorkspaceKind === "remote" || Boolean(pending.targetWorkspaceIdentity);
+    const importResult =
+      importRoute === "engine-task"
+        ? baseServices
+            .anyAgentService!.importSharedContext({
+              shareCode: pending.shareCode,
+              clientRequestId: pending.clientRequestId,
+              ...(!isRemoteTarget && pending.targetWorkspacePath
+                ? { workspacePath: pending.targetWorkspacePath }
+                : {}),
+              locale,
+            })
+            .then((task) => ({ kind: "engine-task" as const, task }))
+        : importRoute === "native-session"
+          ? baseServices.conversationShareService
+              .importShare(
+                {
+                  shareCode: pending.shareCode,
+                  clientRequestId: pending.clientRequestId,
+                  ...(pending.targetWorkspacePath
+                    ? { targetWorkspacePath: pending.targetWorkspacePath }
+                    : {}),
+                  ...(pending.targetWorkspaceIdentity
+                    ? { targetWorkspaceIdentity: pending.targetWorkspaceIdentity }
+                    : {}),
+                  ...(pending.targetWorkspaceKind
+                    ? { targetWorkspaceKind: pending.targetWorkspaceKind }
+                    : {}),
+                  locale,
+                },
+                operationId,
+              )
+              .then((result) => ({ kind: "native-session" as const, result }))
+          : Promise.reject(new Error("The Engine Task share-import service is unavailable."));
+    void importResult
+      .then((completion) => {
         pending.status = "complete";
-        // 先准备实际落地工作区的独立草稿，再激活；复用导入不覆盖会话选择。
-        seedImportedSessionDraft(result);
+        let workspacePath: string;
+        let workspaceIdentity: string | undefined;
+        let sessionId: string;
+        let title: string;
+        let fallbackReason: "remote_workspace" | "default_workspace" | undefined;
+        if (completion.kind === "engine-task") {
+          const task = completion.task;
+          const selectedPath = task.environment.workDirectory;
+          if (!selectedPath || !task.session.nativeSessionId || !task.sharedContext)
+            throw new Error("Harness shared-context import returned incomplete Task ownership.");
+          workspacePath = selectedPath;
+          sessionId = task.session.nativeSessionId;
+          title = task.sharedContext.title;
+          fallbackReason = isRemoteTarget
+            ? "remote_workspace"
+            : pending.targetWorkspacePath
+              ? undefined
+              : "default_workspace";
+          requestImportedEngineTaskNavigation({ workspacePath, taskId: task.id });
+        } else {
+          const result = completion.result;
+          // 先准备实际落地工作区的独立草稿，再激活；复用导入不覆盖会话选择。
+          seedImportedSessionDraft(result);
+          workspacePath = result.workspacePath;
+          workspaceIdentity = result.workspaceIdentity;
+          sessionId = result.sessionId;
+          title = result.title;
+          fallbackReason = result.fallbackReason;
+        }
         const activated = activateTabByPath(
-          result.workspacePath,
-          result.workspaceIdentity ? { workspaceIdentity: result.workspaceIdentity } : undefined,
+          workspacePath,
+          workspaceIdentity ? { workspaceIdentity } : undefined,
         );
         if (!activated) {
-          addTab(result.workspacePath, {
-            ...(result.workspaceIdentity ? { workspaceIdentity: result.workspaceIdentity } : {}),
+          addTab(workspacePath, {
+            ...(workspaceIdentity ? { workspaceIdentity } : {}),
             workspacePurpose: "conversation",
           });
         }
-        const sessionStore = useZCodeSessionStore.getState();
-        sessionStore.setActiveTaskId(
-          result.workspacePath,
-          result.sessionId,
-          result.workspaceIdentity,
-        );
-        // 导入可能复用当前已打开的 session；仅 setActiveTaskId 不会产生可观察的切换。
-        // 每次成功都显式发出一次定位请求，目标 pane 准备好分享内容后再消费。
-        sessionStore.requestTimelineBottom(
-          result.workspacePath,
-          result.sessionId,
-          result.workspaceIdentity,
-        );
+        if (completion.kind === "native-session") {
+          const sessionStore = useZCodeSessionStore.getState();
+          sessionStore.setActiveTaskId(workspacePath, sessionId, workspaceIdentity);
+          // 原生导入可能复用当前已打开的 Session；仅 setActiveTaskId 不会产生可观察的切换。
+          // 每次成功都显式发出一次定位请求，目标 pane 准备好分享内容后再消费。
+          sessionStore.requestTimelineBottom(workspacePath, sessionId, workspaceIdentity);
+        }
         // 回退过的导入会落在与用户当前所看不同的 workspace，必须讲清落在哪、为何回退，
         // 否则用户只会看到会话“跑到别处去了”。
-        const resultMessage = result.fallbackReason
+        const resultMessage = fallbackReason
           ? intl.formatMessage(
               {
                 id:
-                  result.fallbackReason === "remote_workspace"
+                  fallbackReason === "remote_workspace"
                     ? "conversationShare.import.fallbackRemoteWorkspace"
                     : "conversationShare.import.fallbackDefaultWorkspace",
               },
-              { title: result.title, workspacePath: result.workspacePath },
+              { title, workspacePath },
             )
-          : intl.formatMessage({ id: "conversationShare.import.source" }, { title: result.title });
+          : intl.formatMessage({ id: "conversationShare.import.source" }, { title });
         const resultToastOptions = {
-          durationMs: result.fallbackReason ? 7000 : 3000,
-          variant: result.fallbackReason ? ("info" as const) : ("default" as const),
+          durationMs: fallbackReason ? 7000 : 3000,
+          variant: fallbackReason ? ("info" as const) : ("default" as const),
           actionLabel: undefined,
           onAction: undefined,
           dismissible: false,

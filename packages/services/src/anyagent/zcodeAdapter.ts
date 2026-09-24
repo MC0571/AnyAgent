@@ -349,12 +349,16 @@ export function createZCodeAdapter(options: {
     | { state: "current"; values: Record<string, "like" | "dislike" | null> }
     | { state: "unknown"; reason: string }
   >;
+  /** ZCode-private first-turn reference; the Runtime and Engine contract stay protocol-neutral. */
+  registerPendingSharedContext(session: string, contextId: string): void;
 } {
   const workspace = {
     workspacePath: options.workspacePath,
     ...(options.workspaceIdentity ? { workspaceIdentity: options.workspaceIdentity } : {}),
   };
   const sessions = new Set<string>();
+  const pendingSharedContextBySession = new Map<string, string>();
+  const consumedSharedContextSessions = new Set<string>();
   // A native Session stays within its first explicitly selected provider.
   // There is no trustworthy way to recover this pin if the Adapter is recreated.
   const providerIdBySession = new Map<string, string>();
@@ -1068,6 +1072,31 @@ export function createZCodeAdapter(options: {
   }
 
   return {
+    registerPendingSharedContext(session, contextId) {
+      if (!sessions.has(session) || !contextId.trim())
+        throw operationError(
+          "execution.run",
+          "The imported context does not belong to an attached Session.",
+          "protocol-error",
+          "none",
+        );
+      if (consumedSharedContextSessions.has(session))
+        throw operationError(
+          "execution.run",
+          "The imported context was already attached to this Session.",
+          "protocol-error",
+          "none",
+        );
+      const pendingContextId = pendingSharedContextBySession.get(session);
+      if (pendingContextId && pendingContextId !== contextId)
+        throw operationError(
+          "execution.run",
+          "A different imported context is already pending for this Session.",
+          "protocol-error",
+          "none",
+        );
+      pendingSharedContextBySession.set(session, contextId);
+    },
     dispose() {
       lifecycle?.dispose();
       for (const markUnknown of compactOperations.values())
@@ -1527,6 +1556,16 @@ export function createZCodeAdapter(options: {
               ...command("sendText", session, {
                 text: input,
                 requestedDelivery: "startNow",
+                ...(pendingSharedContextBySession.has(session)
+                  ? {
+                      context_refs: [
+                        {
+                          kind: "shared_context_import" as const,
+                          context_id: pendingSharedContextBySession.get(session)!,
+                        },
+                      ],
+                    }
+                  : {}),
                 ...(mode ? { mode } : {}),
                 ...(planEnabled !== undefined ? { planEnabled } : {}),
                 ...(modelSelection ? { modelSelection } : {}),
@@ -1588,6 +1627,10 @@ export function createZCodeAdapter(options: {
         ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
       } catch (error) {
         if (!revision) {
+          if (pendingSharedContextBySession.has(session)) {
+            pendingSharedContextBySession.delete(session);
+            consumedSharedContextSessions.add(session);
+          }
           runs.delete(session);
           run.dispose();
           allRuns.delete(run);
@@ -1613,6 +1656,10 @@ export function createZCodeAdapter(options: {
         }
       }
       if (run.finished) {
+        if (!revision && pendingSharedContextBySession.has(session)) {
+          pendingSharedContextBySession.delete(session);
+          consumedSharedContextSessions.add(session);
+        }
         run.dispose();
         throw operationError(operation, "ZCode Runtime 在输入回执到达前断开", "result-unknown");
       }
@@ -1624,6 +1671,14 @@ export function createZCodeAdapter(options: {
         (revision?.kind === "edit" &&
           (ack.result?.type !== "editUserQuery" || ack.result.disposition !== "rewind"))
       ) {
+        if (
+          !revision &&
+          pendingSharedContextBySession.has(session) &&
+          (!ack || (ack.status !== "rejected" && ack.status !== "stale"))
+        ) {
+          pendingSharedContextBySession.delete(session);
+          consumedSharedContextSessions.add(session);
+        }
         if (ack?.status === "rejected" && !providerWasPinned) providerIdBySession.delete(session);
         runs.delete(session);
         run.dispose();
@@ -1643,6 +1698,10 @@ export function createZCodeAdapter(options: {
       }
       run.inputId =
         !revision && ack.result?.type === "inputAccepted" ? ack.result.inputId : envelope.commandId;
+      if (!revision && pendingSharedContextBySession.has(session)) {
+        pendingSharedContextBySession.delete(session);
+        consumedSharedContextSessions.add(session);
+      }
       run.acknowledged = true;
       for (const event of run.pendingEvents.splice(0)) receive(run, event);
       run.queue.unshift({
@@ -1920,16 +1979,36 @@ export function createZCodeAdapter(options: {
         content?: Record<string, unknown>;
       };
       if (request.inputKind === "choice") {
-        if (
-          typeof response !== "string" ||
-          !request.options.some((option) => option.id === response)
-        ) {
-          return { status: "unsupported" };
+        if (typeof response === "string") {
+          if (!request.options.some((option) => option.id === response))
+            return { status: "unsupported" };
+          answer = { action: "accept", content: { answers: { [request.prompt]: response } } };
+        } else {
+          const action = text(response.action);
+          if ((action === "decline" || action === "cancel") && response.content === undefined) {
+            answer = { action };
+          } else if (action === "accept") {
+            const content = response.content;
+            if (!content || typeof content !== "object" || Array.isArray(content))
+              return { status: "unsupported" };
+            const fields = content as Record<string, unknown>;
+            const answers = fields.answers;
+            if (!answers || typeof answers !== "object" || Array.isArray(answers))
+              return { status: "unsupported" };
+            const selected = (answers as Record<string, unknown>)[request.prompt];
+            if (
+              typeof selected !== "string" ||
+              !request.options.some((option) => option.id === selected) ||
+              (fields.answer !== undefined && fields.answer !== selected) ||
+              (fields.answer_0 !== undefined && fields.answer_0 !== selected)
+            ) {
+              return { status: "unsupported" };
+            }
+            answer = { action: "accept", content: { answers: { [request.prompt]: selected } } };
+          } else {
+            return { status: "unsupported" };
+          }
         }
-        answer = {
-          action: "accept",
-          content: { answers: { [request.prompt]: response } },
-        };
       } else if (request.inputKind === "text" && typeof response === "string") {
         answer = { freeText: response };
       } else if (request.inputKind === "form" && request.presentation?.questions.length) {

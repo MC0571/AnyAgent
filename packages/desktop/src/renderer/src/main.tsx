@@ -341,6 +341,7 @@ function initializeBusinessRoot(port: MessagePort): void {
           isWindowsDesktop={isWindowsDesktop}
           restoreSession={restoreSession}
           supportsSettings={supportsSettings}
+          anyAgentServiceEnabled={anyAgentServiceEnabled}
           initialWorkspaceAbsPath={initialWorkspaceAbsPath}
           initialWorkspacePurpose={
             initialWorkspacePurpose === "conversation" ? "conversation" : "project"
