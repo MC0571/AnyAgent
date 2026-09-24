@@ -69,10 +69,11 @@ function getV4ComposerDraftStorageKey(workspacePath: string, workspaceIdentity?:
   return `${STORAGE_KEY_PREFIX}${encodeURIComponent(workspaceKey)}`;
 }
 
-function readDraftFile(key: string): V4DraftFile {
+function readDraftFile(key: string): V4DraftFile | null {
   const storage = getStorage();
+  if (!storage) return null;
   try {
-    const raw = storage?.getItem(key);
+    const raw = storage.getItem(key);
     if (!raw) return { version: 1, scopes: {} };
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.scopes)) {
@@ -87,7 +88,7 @@ function readDraftFile(key: string): V4DraftFile {
     return { version: 1, scopes };
   } catch (error) {
     warnStorageFailure(key, error);
-    return { version: 1, scopes: {} };
+    return null;
   }
 }
 
@@ -183,12 +184,24 @@ export function readV4ComposerDraft(
   workspaceIdentity: string | undefined,
   scopeId: string,
 ): V4ComposerDraft | null {
+  return readV4ComposerDraftResult(workspacePath, workspaceIdentity, scopeId).draft;
+}
+
+export function readV4ComposerDraftResult(
+  workspacePath: string,
+  workspaceIdentity: string | undefined,
+  scopeId: string,
+):
+  | { readonly ok: true; readonly draft: V4ComposerDraft | null }
+  | { readonly ok: false; readonly draft: null } {
   const key = getV4ComposerDraftStorageKey(workspacePath, workspaceIdentity);
-  const draft = readDraftFile(key).scopes[scopeId];
+  const file = readDraftFile(key);
+  if (!file) return { ok: false, draft: null };
+  const draft = file.scopes[scopeId];
   if (!draft || typeof draft.text !== "string") {
-    return null;
+    return { ok: true, draft: null };
   }
-  return draft;
+  return { ok: true, draft };
 }
 
 export function persistV4ComposerDraft(
@@ -199,6 +212,7 @@ export function persistV4ComposerDraft(
 ) {
   const key = getV4ComposerDraftStorageKey(workspacePath, workspaceIdentity);
   const file = readDraftFile(key);
+  if (!file) return false;
   if (
     !draft.text.trim() &&
     !draft.editorStateJson &&
@@ -224,6 +238,7 @@ export function clearV4ComposerDraft(
 ) {
   const key = getV4ComposerDraftStorageKey(workspacePath, workspaceIdentity);
   const file = readDraftFile(key);
+  if (!file) return false;
   if (!(scopeId in file.scopes)) {
     return true;
   }

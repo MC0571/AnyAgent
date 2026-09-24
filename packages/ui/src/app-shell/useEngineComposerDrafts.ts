@@ -1,13 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { EngineTaskComposerDraft } from "@/EngineConversation.js";
 import {
   clearV4ComposerDraft,
   persistV4ComposerDraft,
   readV4ComposerDraft,
+  readV4ComposerDraftResult,
   type V4ComposerDraft,
 } from "@/v4/composer/composerDraftStore.js";
 import { submissionModeSchema } from "@zcode/shared/zcode-protocol-v4";
+import {
+  markQueueDraftForSubmission,
+  prepareQueueEditDraft,
+  reconcilePreparedQueueEdits,
+  restoreReviewedQueueDraft,
+  updateQueueDraftIssue,
+  type QueueEditInputState,
+} from "@/app-shell/engineQueueDraftStorage.js";
 
 const scopeForTask = (taskId: string) => `anyagent-queue-edit:${taskId}`;
 const scopeForPreparedInput = (taskId: string, inputId: string) =>
@@ -23,17 +32,16 @@ export function useEngineComposerDrafts(
 ) {
   const [drafts, setDrafts] = useState<Record<string, EngineTaskComposerDraft>>({});
   const [issues, setIssues] = useState<Record<string, EngineQueueDraftIssue>>({});
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+  const issuesRef = useRef(issues);
+  issuesRef.current = issues;
   const setIssue = useCallback((taskId: string, issue: EngineQueueDraftIssue | null) => {
-    setIssues((current) => {
-      if (current[taskId] === issue || (!issue && !current[taskId])) return current;
-      const next = { ...current };
-      if (issue) next[taskId] = issue;
-      else delete next[taskId];
-      return next;
-    });
+    setIssues((current) => updateQueueDraftIssue(current, taskId, issue));
   }, []);
-  const read = useCallback(
-    (taskId: string) => readV4ComposerDraft(workspacePath, workspaceIdentity, scopeForTask(taskId)),
+  const readResult = useCallback(
+    (taskId: string) =>
+      readV4ComposerDraftResult(workspacePath, workspaceIdentity, scopeForTask(taskId)),
     [workspacePath, workspaceIdentity],
   );
   const persist = useCallback(
@@ -43,7 +51,9 @@ export function useEngineComposerDrafts(
   );
   useEffect(() => {
     if (!selectedTaskId) return;
-    const stored = read(selectedTaskId);
+    const result = readResult(selectedTaskId);
+    if (!result.ok) return;
+    const stored = result.draft;
     if (!stored) return;
     if (stored.queueEditRequiresReview) {
       setIssue(selectedTaskId, "review-required");
@@ -65,28 +75,19 @@ export function useEngineComposerDrafts(
         },
       };
     });
-  }, [read, selectedTaskId, setIssue]);
+  }, [readResult, selectedTaskId, setIssue]);
   const onQueueEditPrepare = useCallback(
     (
       taskId: string,
       inputId: string,
       recovered: Pick<EngineTaskComposerDraft, "text" | "config">,
-    ) => {
-      const mode = submissionModeSchema.safeParse(recovered.config?.mode);
-      return persistV4ComposerDraft(
+    ) =>
+      prepareQueueEditDraft(
         workspacePath,
         workspaceIdentity,
         scopeForPreparedInput(taskId, inputId),
-        {
-          text: recovered.text,
-          ...(mode.success ? { mode: mode.data } : {}),
-          ...(mode.success ? { queueEditOriginalMode: mode.data } : {}),
-          ...(recovered.config?.modelSelection
-            ? { modelSelection: recovered.config.modelSelection }
-            : {}),
-        },
-      );
-    },
+        recovered,
+      ),
     [workspaceIdentity, workspacePath],
   );
   const onQueueRecovered = useCallback(
@@ -97,7 +98,9 @@ export function useEngineComposerDrafts(
         scopeForPreparedInput(taskId, inputId),
       );
       if (!prepared) return false;
-      const previous = read(taskId);
+      const previousResult = readResult(taskId);
+      if (!previousResult.ok) return false;
+      const previous = previousResult.draft;
       if (previous?.queueEditRecoveredInputIds?.includes(inputId)) {
         clearV4ComposerDraft(
           workspacePath,
@@ -139,43 +142,29 @@ export function useEngineComposerDrafts(
       setIssue(taskId, null);
       return true;
     },
-    [persist, read, setIssue, workspaceIdentity, workspacePath],
+    [persist, readResult, setIssue, workspaceIdentity, workspacePath],
   );
   const onQueueRecoveryReconcile = useCallback(
-    (
-      taskId: string,
-      inputs: readonly {
-        readonly id: string;
-        readonly status: string;
-        readonly receivedAt?: number | null;
-        readonly queuePosition?: number | null;
-      }[],
-    ) => {
-      for (const input of [...inputs].sort(
-        (left, right) =>
-          (left.queuePosition ?? left.receivedAt ?? 0) -
-            (right.queuePosition ?? right.receivedAt ?? 0) || left.id.localeCompare(right.id),
-      )) {
-        const prepared = readV4ComposerDraft(
-          workspacePath,
-          workspaceIdentity,
-          scopeForPreparedInput(taskId, input.id),
-        );
-        if (!prepared) continue;
-        if (input.status === "cancelled") onQueueRecovered(taskId, input.id);
-        else if (["completed", "rejected", "stopped", "failed"].includes(input.status))
-          clearV4ComposerDraft(
-            workspacePath,
-            workspaceIdentity,
-            scopeForPreparedInput(taskId, input.id),
-          );
-      }
-    },
+    (taskId: string, inputs: readonly QueueEditInputState[]) =>
+      reconcilePreparedQueueEdits(workspacePath, workspaceIdentity, taskId, inputs, (inputId) =>
+        onQueueRecovered(taskId, inputId),
+      ),
     [onQueueRecovered, workspaceIdentity, workspacePath],
   );
   const onRecoveredDraftChange = useCallback(
     (taskId: string, text: string, editorStateJson?: string) => {
-      const previous = read(taskId);
+      const result = readResult(taskId);
+      if (!result.ok) {
+        if (!draftsRef.current[taskId]?.text) return;
+        setIssue(taskId, "storage-failed");
+        if (!text.trim()) return draftsRef.current[taskId]?.text;
+        setDrafts((current) => {
+          const draft = current[taskId];
+          return draft ? { ...current, [taskId]: { ...draft, text, editorStateJson } } : current;
+        });
+        return;
+      }
+      const previous = result.draft;
       if (!previous?.text) return;
       if (previous.queueEditRequiresReview) return;
       if (!text.trim()) {
@@ -227,11 +216,21 @@ export function useEngineComposerDrafts(
         return draft ? { ...current, [taskId]: { ...draft, text, editorStateJson } } : current;
       });
     },
-    [persist, read, setIssue, workspaceIdentity, workspacePath],
+    [persist, readResult, setIssue, workspaceIdentity, workspacePath],
   );
   const onRecoveredConfigChange = useCallback(
     (taskId: string, config: NonNullable<EngineTaskComposerDraft["config"]>) => {
-      const previous = read(taskId);
+      const result = readResult(taskId);
+      if (!result.ok) {
+        if (!draftsRef.current[taskId]?.text) return;
+        setIssue(taskId, "storage-failed");
+        setDrafts((current) => {
+          const draft = current[taskId];
+          return draft ? { ...current, [taskId]: { ...draft, config } } : current;
+        });
+        return;
+      }
+      const previous = result.draft;
       if (!previous?.text) return;
       if (previous.queueEditRequiresReview) return;
       const mode = submissionModeSchema.safeParse(config.mode);
@@ -255,37 +254,58 @@ export function useEngineComposerDrafts(
         return draft ? { ...current, [taskId]: { ...draft, config } } : current;
       });
     },
-    [persist, read, setIssue],
+    [persist, readResult, setIssue],
   );
   const onSubmitPrepare = useCallback(
-    (taskId: string, text: string) => {
-      const previous = read(taskId);
-      if (!previous?.text) return true;
-      if (previous.queueEditRequiresReview) {
+    (
+      taskId: string,
+      text: string,
+      submissionConfig?: NonNullable<EngineTaskComposerDraft["config"]>,
+      hasCancelledQueueInput = false,
+    ) => {
+      const result = readResult(taskId);
+      if (!result.ok) {
+        if (
+          draftsRef.current[taskId]?.text ||
+          issuesRef.current[taskId] ||
+          hasCancelledQueueInput
+        ) {
+          setIssue(taskId, "storage-failed");
+          return false;
+        }
+        return true;
+      }
+      const previous = result.draft;
+      if (previous?.queueEditRequiresReview) {
         setIssue(taskId, "review-required");
         return false;
       }
-      const written = persist(taskId, {
-        text,
-        queueEditRequiresReview: true,
-        ...(previous.editorStateJson ? { editorStateJson: previous.editorStateJson } : {}),
-        ...(previous.mode ? { mode: previous.mode } : {}),
-        ...(previous.queueEditOriginalMode
-          ? { queueEditOriginalMode: previous.queueEditOriginalMode }
-          : {}),
-        ...(previous.modelSelection ? { modelSelection: previous.modelSelection } : {}),
-        ...(previous.queueEditRecoveredInputIds
-          ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
-          : {}),
-      });
-      if (!written) setIssue(taskId, "storage-failed");
+      if (!previous?.text) {
+        if (draftsRef.current[taskId]?.text) {
+          setIssue(taskId, "storage-failed");
+          return false;
+        }
+        setIssue(taskId, null);
+        return true;
+      }
+      const written = persist(
+        taskId,
+        markQueueDraftForSubmission(previous, text, submissionConfig),
+      );
+      setIssue(taskId, written ? null : "storage-failed");
       return written;
     },
-    [persist, read, setIssue],
+    [persist, readResult, setIssue],
   );
   const onSubmitted = useCallback(
     (taskId: string, submittedText: string) => {
-      const previous = read(taskId);
+      const result = readResult(taskId);
+      if (!result.ok) {
+        if (!draftsRef.current[taskId]?.text && !issuesRef.current[taskId]) return true;
+        setIssue(taskId, "review-required");
+        return false;
+      }
+      const previous = result.draft;
       if (!previous?.text) return true;
       if (previous.text.trim() !== submittedText) {
         setIssue(taskId, "review-required");
@@ -313,33 +333,32 @@ export function useEngineComposerDrafts(
       });
       return cleared;
     },
-    [persist, read, setIssue, workspaceIdentity, workspacePath],
+    [persist, readResult, setIssue, workspaceIdentity, workspacePath],
   );
   const onSubmitUncertain = useCallback(
     (taskId: string) => {
-      if (read(taskId)?.queueEditRequiresReview) setIssue(taskId, "review-required");
+      const result = readResult(taskId);
+      if (
+        (!result.ok && (draftsRef.current[taskId]?.text || issuesRef.current[taskId])) ||
+        result.draft?.queueEditRequiresReview
+      )
+        setIssue(taskId, "review-required");
     },
-    [read, setIssue],
+    [readResult, setIssue],
   );
   const onResolveReview = useCallback(
     (taskId: string, action: "restore" | "discard") => {
-      const previous = read(taskId);
+      const result = readResult(taskId);
+      if (!result.ok) {
+        setIssue(taskId, "storage-failed");
+        return false;
+      }
+      const previous = result.draft;
       if (!previous?.queueEditRequiresReview) return false;
       const changed =
         action === "discard"
           ? clearV4ComposerDraft(workspacePath, workspaceIdentity, scopeForTask(taskId))
-          : persist(taskId, {
-              text: previous.text,
-              ...(previous.editorStateJson ? { editorStateJson: previous.editorStateJson } : {}),
-              ...(previous.mode ? { mode: previous.mode } : {}),
-              ...(previous.queueEditOriginalMode
-                ? { queueEditOriginalMode: previous.queueEditOriginalMode }
-                : {}),
-              ...(previous.modelSelection ? { modelSelection: previous.modelSelection } : {}),
-              ...(previous.queueEditRecoveredInputIds
-                ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
-                : {}),
-            });
+          : persist(taskId, restoreReviewedQueueDraft(previous));
       if (!changed) {
         setIssue(taskId, "review-required");
         return false;
@@ -366,7 +385,7 @@ export function useEngineComposerDrafts(
       });
       return true;
     },
-    [persist, read, setIssue, workspaceIdentity, workspacePath],
+    [persist, readResult, setIssue, workspaceIdentity, workspacePath],
   );
   return {
     drafts,

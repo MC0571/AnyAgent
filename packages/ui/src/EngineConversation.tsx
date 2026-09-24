@@ -412,7 +412,12 @@ export function EngineConversation({
     config: NonNullable<EngineTaskComposerDraft["config"]>,
   ) => void;
   draftStorageIssue?: "storage-failed" | "review-required";
-  onRecoveredSubmitPrepare?: (taskId: string, submittedText: string) => boolean;
+  onRecoveredSubmitPrepare?: (
+    taskId: string,
+    submittedText: string,
+    submissionConfig?: NonNullable<EngineTaskComposerDraft["config"]>,
+    hasCancelledQueueInput?: boolean,
+  ) => boolean;
   onComposerDraftSubmitted?: (taskId: string, submittedText: string) => boolean;
   onRecoveredSubmitUncertain?: (taskId: string) => void;
   onResolveRecoveredReview?: (taskId: string, action: "restore" | "discard") => boolean;
@@ -1699,7 +1704,17 @@ export function EngineConversation({
     if (selectedWebContexts.length > 0) {
       submittedText = buildPromptWithWebElementContexts(submittedText, selectedWebContexts);
     }
-    if (onRecoveredSubmitPrepare && !onRecoveredSubmitPrepare(visibleTask.id, cleanText)) {
+    if (
+      onRecoveredSubmitPrepare &&
+      !onRecoveredSubmitPrepare(
+        visibleTask.id,
+        cleanText,
+        submission
+          ? { mode: submission.mode, modelSelection: submission.modelSelection }
+          : undefined,
+        visibleHistory?.inputs.some((input) => input.status === "cancelled") ?? false,
+      )
+    ) {
       setNotice({
         kind: "error",
         message: "恢复草稿未能安全保存或提交状态待核对；输入仍在，请勿重复发送。",

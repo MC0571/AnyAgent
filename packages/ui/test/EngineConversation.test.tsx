@@ -1503,7 +1503,8 @@ test("EngineConversation sends through the product composer and renders ordered 
     });
     queueCancelGate = null;
 
-    const { readV4ComposerDraft } = await import("../src/v4/composer/composerDraftStore.js");
+    const { readV4ComposerDraft, persistV4ComposerDraft, clearV4ComposerDraft } =
+      await import("../src/v4/composer/composerDraftStore.js");
     assert.equal(
       readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)?.text,
       "Recovered after navigation",
@@ -1631,13 +1632,77 @@ test("EngineConversation sends through the product composer and renders ordered 
     await waitFor(() =>
       assert.equal(recoveredA.__zcodeLexicalInputE2E.getText(), "Recovered after navigation"),
     );
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, "another-session", {
+        text: "Other session draft remains",
+      }),
+      true,
+    );
+    const originalGetItem = Object.getOwnPropertyDescriptor(storagePrototype, "getItem")!;
+    const originalSetItemFunctionForReadFault = originalSetItem.value as Storage["setItem"];
+    let writesDuringReadFault = 0;
+    Object.defineProperty(storagePrototype, "getItem", {
+      configurable: true,
+      value: () => {
+        throw new Error("draft read unavailable");
+      },
+    });
+    Object.defineProperty(storagePrototype, "setItem", {
+      configurable: true,
+      value(this: Storage, key: string, value: string) {
+        writesDuringReadFault += 1;
+        return originalSetItemFunctionForReadFault.call(this, key, value);
+      },
+    });
+    const submittedBeforeFailure = submissions.length;
+    try {
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+          ?.click(),
+      );
+      assert.equal(submissions.length, submittedBeforeFailure, "read failure must block Host send");
+      assert.equal(
+        queueControls!.onQueueEditPrepare(taskBId, "read-fault-probe", {
+          text: "Must stay queued",
+        }),
+        false,
+      );
+      assert.equal(
+        clearV4ComposerDraft("/tmp/anyagent-ui", undefined, "another-session"),
+        false,
+        "a failed read must not turn clear into an empty-file write",
+      );
+      assert.equal(
+        queueControls!.onSubmitPrepare(taskBId, "ordinary draft", undefined, false),
+        true,
+        "an ordinary Composer without queue recovery keeps its path",
+      );
+      assert.equal(
+        queueControls!.onSubmitPrepare(taskBId, "possible old queue draft", undefined, true),
+        false,
+        "a cold Task with cancelled queue history remains blocked while drafts cannot be read",
+      );
+      assert.equal(writesDuringReadFault, 0, "a failed read must never overwrite other scopes");
+      assert.match(
+        container.querySelector('[data-testid="engine-queue-draft-storage-warning"]')
+          ?.textContent ?? "",
+        /未能写入本地存储/,
+      );
+    } finally {
+      Object.defineProperty(storagePrototype, "getItem", originalGetItem);
+      Object.defineProperty(storagePrototype, "setItem", originalSetItem);
+    }
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, "another-session")?.text,
+      "Other session draft remains",
+    );
     Object.defineProperty(storagePrototype, "setItem", {
       configurable: true,
       value: () => {
         throw new Error("draft write unavailable");
       },
     });
-    const submittedBeforeFailure = submissions.length;
     try {
       await act(async () => recoveredA.__zcodeLexicalInputE2E.setText("Edited recovered draft"));
       await waitFor(() =>
@@ -1769,6 +1834,62 @@ test("EngineConversation sends through the product composer and renders ordered 
         null,
       ),
     );
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`, {
+        text: "Config draft",
+        mode: "build",
+        queueEditOriginalMode: "build",
+      }),
+      true,
+    );
+    Object.defineProperty(storagePrototype, "setItem", {
+      configurable: true,
+      value: () => {
+        throw new Error("config write unavailable");
+      },
+    });
+    try {
+      await act(async () =>
+        queueControls!.onRecoveredConfigChange(taskId, {
+          mode: "plan",
+          modelSelection: { providerId: "opencode-go", modelId: "glm-test" },
+        }),
+      );
+    } finally {
+      Object.defineProperty(storagePrototype, "setItem", originalSetItem);
+    }
+    assert.equal(
+      queueControls!.onSubmitPrepare(taskId, "Config draft", {
+        mode: "plan",
+        modelSelection: { providerId: "opencode-go", modelId: "glm-test" },
+      }),
+      true,
+    );
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)
+        ?.queueEditOriginalMode,
+      "plan",
+    );
+    assert.deepEqual(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)
+        ?.modelSelection,
+      { providerId: "opencode-go", modelId: "glm-test" },
+    );
+    assert.equal(queueControls!.onResolveReview(taskId, "discard"), true);
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`, {
+        text: "",
+        queueEditRequiresReview: true,
+        queueEditRecoveredInputIds: ["uncleared-queue-input"],
+      }),
+      true,
+    );
+    assert.equal(
+      queueControls!.onSubmitPrepare(taskId, "fresh ordinary text"),
+      false,
+      "an empty review marker must block another submission until it is resolved",
+    );
+    assert.equal(queueControls!.onResolveReview(taskId, "discard"), true);
   } finally {
     await act(async () => root.unmount());
     container.remove();
