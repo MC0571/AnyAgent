@@ -70,6 +70,7 @@ type Notice = { kind: "error" | "info"; message: string };
 type InheritedSource = {
   sourceTaskId: string;
   projection: EngineConversationProjection | null;
+  submissionConfig?: NonNullable<EngineHistory["inputs"][number]["submissionConfig"]>;
 };
 type EngineComposerAttachment = {
   localPath: string;
@@ -163,6 +164,7 @@ async function loadInheritedSources(
     }
     sources.push({
       sourceTaskId: taskId,
+      ...(turn.input.submissionConfig ? { submissionConfig: turn.input.submissionConfig } : {}),
       projection: {
         turns: [
           ...full.turns.slice(0, turnIndex),
@@ -477,6 +479,14 @@ export function EngineConversation({
     : "请选择或创建一个 Engine Task。";
   const submitBlockedReason =
     runBlockedReason ??
+    (visibleTask?.forkedFrom &&
+    visibleHistory?.inputs.length === 0 &&
+    (inheritedSources?.childTaskId !== visibleTask.id ||
+      !modelSelectionSchema.safeParse(
+        inheritedSources.sources.at(-1)?.submissionConfig?.modelSelection,
+      ).success)
+      ? "无法核实分叉 Session 继承的模型配置。"
+      : null) ??
     (shouldQueue && currentAttachments.length > 0
       ? "当前轮次未结束，附件不能安全排队；请等待后发送。"
       : null);
@@ -538,21 +548,38 @@ export function EngineConversation({
     (input) =>
       input.status !== "rejected" && input.status !== "cancelled" && input.submissionConfig,
   )?.submissionConfig;
+  const inheritedConfig =
+    visibleTask?.forkedFrom && inheritedSources?.childTaskId === visibleTask.id
+      ? inheritedSources.sources.at(-1)?.submissionConfig
+      : undefined;
   const savedMode = typeof savedConfig?.mode === "string" ? savedConfig.mode : undefined;
+  const inheritedMode =
+    typeof inheritedConfig?.mode === "string" ? inheritedConfig.mode : undefined;
   const savedModelResult = modelSelectionSchema.safeParse(savedConfig?.modelSelection);
+  const inheritedModelResult = modelSelectionSchema.safeParse(inheritedConfig?.modelSelection);
   const initialModelResult = modelSelectionSchema.safeParse(
     visibleHistory?.inputs.find(
       (input) => input.status !== "rejected" && input.submissionConfig?.modelSelection,
     )?.submissionConfig?.modelSelection,
   );
-  const sessionProviderId = initialModelResult.success ? initialModelResult.data.providerId : null;
+  const sessionProviderId = initialModelResult.success
+    ? initialModelResult.data.providerId
+    : inheritedModelResult.success
+      ? inheritedModelResult.data.providerId
+      : null;
   const activeConfig = visibleTask ? configByTask[visibleTask.id] : undefined;
   const selectedMode =
-    activeConfig?.mode ?? (savedConfig?.planEnabled === true ? "plan" : (savedMode ?? "build"));
+    activeConfig?.mode ??
+    (savedConfig?.planEnabled === true || inheritedConfig?.planEnabled === true
+      ? "plan"
+      : (savedMode ?? inheritedMode ?? "build"));
   const selectedModel =
     activeConfig?.modelSelection ??
     (savedModelResult.success ? savedModelResult.data : null) ??
-    (visibleHistory?.inputs.length === 0 ? modelView?.preferredSelection : null) ??
+    (inheritedModelResult.success ? inheritedModelResult.data : null) ??
+    (visibleHistory?.inputs.length === 0 && !visibleTask?.forkedFrom
+      ? modelView?.preferredSelection
+      : null) ??
     null;
   const zcodeSubmission =
     isZCodeHarness && modelView
@@ -1353,7 +1380,8 @@ export function EngineConversation({
                             !isZCodeHarness ||
                             !modelView ||
                             !decoded ||
-                            (visibleHistory?.inputs.length !== 0 && !sessionProviderId) ||
+                            ((visibleHistory?.inputs.length !== 0 || !!visibleTask.forkedFrom) &&
+                              !sessionProviderId) ||
                             (sessionProviderId !== null &&
                               decoded.providerId !== sessionProviderId) ||
                             !!currentTaskBlock(visibleTask, "execution.run", engines, refreshFailed)
@@ -1368,7 +1396,8 @@ export function EngineConversation({
                             !isZCodeHarness ||
                             !modelView ||
                             !decoded?.modelName ||
-                            (visibleHistory?.inputs.length !== 0 && !sessionProviderId) ||
+                            ((visibleHistory?.inputs.length !== 0 || !!visibleTask.forkedFrom) &&
+                              !sessionProviderId) ||
                             (sessionProviderId !== null && decoded.providerId !== sessionProviderId)
                           )
                             return;

@@ -2030,7 +2030,7 @@ test("an active ZCode Harness task switches models within its Session and submit
   const zcodeEngine = {
     ...currentEngine,
     engineId: "zcode",
-    capabilities: { ...capabilities, "session.compact": available },
+    capabilities: { ...capabilities, "session.compact": available, "session.fork": available },
   };
   const zcodeTask = {
     ...task,
@@ -2043,6 +2043,21 @@ test("an active ZCode Harness task switches models within its Session and submit
     id: "task-zcode-feedback-b",
     participant: { ...zcodeTask.participant, id: "participant-zcode-feedback-b" },
     session: { ...zcodeTask.session, id: "session-zcode-feedback-b", nativeSessionId: "native-b" },
+  };
+  const forkTask = {
+    ...zcodeTask,
+    id: "task-zcode-fork-model",
+    participant: { ...zcodeTask.participant, id: "participant-zcode-fork-model" },
+    session: {
+      ...zcodeTask.session,
+      id: "session-zcode-fork-model",
+      nativeSessionId: "native-fork",
+    },
+    forkedFrom: {
+      taskId,
+      inputId: "input-initial",
+      executionId: "execution-native-feedback",
+    },
   };
   const workspacePath = "/tmp/anyagent-ui";
   const zcodeSlashCommands = [
@@ -2088,8 +2103,8 @@ test("an active ZCode Harness task switches models within its Session and submit
       },
     ],
     preferredSelection: {
-      providerId: "opencode-go",
-      modelId: "go-alpha",
+      providerId: "other-provider",
+      modelId: "other-model",
       options: { reasoningLevel: "high" },
     },
   };
@@ -2097,10 +2112,12 @@ test("an active ZCode Harness task switches models within its Session and submit
   const compactRequests: Array<Record<string, unknown>> = [];
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
   const feedbackRequests: Array<Record<string, unknown>> = [];
+  const forkRequests: Array<Record<string, unknown>> = [];
   let nativeFeedback: "like" | "dislike" | null = null;
   const changes = new Set<(change: Record<string, unknown>) => void>();
   let history = emptyHistory();
   const historyB = emptyHistory(zcodeTaskB.id);
+  const forkHistory = emptyHistory(forkTask.id);
   history.inputs.push({
     id: "input-initial",
     taskId,
@@ -2124,9 +2141,11 @@ test("an active ZCode Harness task switches models within its Session and submit
     error: null,
   });
   const service = {
-    listTasks: async () => [zcodeTask, zcodeTaskB],
-    getTask: async (id: string) => (id === zcodeTaskB.id ? zcodeTaskB : zcodeTask),
-    getHistory: async (id: string) => (id === zcodeTaskB.id ? historyB : history),
+    listTasks: async () => [zcodeTask, zcodeTaskB, forkTask],
+    getTask: async (id: string) =>
+      id === forkTask.id ? forkTask : id === zcodeTaskB.id ? zcodeTaskB : zcodeTask,
+    getHistory: async (id: string) =>
+      id === forkTask.id ? forkHistory : id === zcodeTaskB.id ? historyB : history,
     getAssistantFeedback: async (id: string) => ({
       state: "current",
       values: id === zcodeTaskB.id ? {} : { "native-feedback-message": nativeFeedback },
@@ -2147,6 +2166,10 @@ test("an active ZCode Harness task switches models within its Session and submit
       feedbackRequests.push(input);
       nativeFeedback = input.feedback as "like" | "dislike" | null;
       return { status: "updated" };
+    },
+    forkTask: async (input: Record<string, unknown>) => {
+      forkRequests.push(input);
+      return forkTask;
     },
   };
   const services = {
@@ -2464,6 +2487,33 @@ test("an active ZCode Harness task switches models within its Session and submit
       feedbackRequests.map((entry) => entry.feedback),
       ["like", null],
     );
+    const fork = container.querySelector<HTMLButtonElement>('button[aria-label="分叉"]');
+    assert.ok(fork && !fork.disabled);
+    await act(async () => fork.click());
+    await waitFor(() => assert.equal(forkRequests.length, 1));
+    await act(async () => root.render(appFor(forkTask.id)));
+    await waitFor(
+      () => assert.match(modelTrigger()?.textContent ?? "", /go-alpha/),
+      "forked Session should inherit the source model instead of the current Provider default",
+    );
+    const forkInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as (HTMLElement & { __zcodeLexicalInputE2E?: { setText: (value: string) => void } }) | null;
+    assert.ok(forkInput?.__zcodeLexicalInputE2E);
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("Continue the fork"));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
+    );
+    await waitFor(() => assert.equal(submissions.length, 4));
+    assert.deepEqual(
+      (submissions[3]?.submissionConfig as Record<string, unknown>)?.modelSelection,
+      {
+        providerId: "opencode-go",
+        modelId: "go-alpha",
+        options: { reasoningLevel: "high" },
+      },
+    );
+    assert.equal(submissions[3]?.taskId, forkTask.id);
     await act(async () => {
       input.blur();
       await new Promise((resolve) => setTimeout(resolve, 0));
