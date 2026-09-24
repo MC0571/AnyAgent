@@ -693,3 +693,94 @@ test("Host coalesces only the same import request and adopts a shared native Ses
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("Host Skill catalog reads require the matching active Task Session", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-host-skill-catalog-"));
+  const project = join(directory, "project");
+  await mkdir(project);
+  setDataBaseDir(directory);
+  const nativeCatalogReads: Array<Record<string, unknown>> = [];
+  let nativeSessionSequence = 0;
+  let catalogAuthority: "session" | "workspace" = "session";
+  const host = createAnyAgentService({
+    initialize: async ({ workspacePath }: { workspacePath: string }) => ({
+      available: true,
+      workspaceKey: workspacePath,
+    }),
+    onDynamicSessionEvent: () => (listener: (event: unknown) => void) => ({
+      dispose() {
+        void listener;
+      },
+    }),
+    onAgentRuntimeLifecycle: () => ({ dispose() {} }),
+    getSkillReferenceCatalog: async (params: { workspacePath: string; sessionId?: string }) => {
+      nativeCatalogReads.push(params);
+      return {
+        authority: catalogAuthority,
+        skills: [
+          {
+            id: "review",
+            name: "review",
+            description: "Review code changes",
+            path: `${project}/.agents/skills/review/SKILL.md`,
+            scope: "workspace" as const,
+            enabled: true as const,
+          },
+        ],
+      };
+    },
+    sendConversationCommandV4: async ({
+      envelope,
+    }: {
+      envelope: { type: string; commandId: string };
+    }) => {
+      nativeSessionSequence++;
+      return {
+        status: "accepted" as const,
+        commandId: envelope.commandId,
+        result: { type: "createSession" as const, sessionId: `native-skill-${nativeSessionSequence}` },
+      };
+    },
+  } as unknown as IZCodeAgentService);
+  try {
+    const first = await host.service.createTask({ engineId: "zcode", workspacePath: project });
+    const second = await host.service.createTask({ engineId: "zcode", workspacePath: project });
+    const identity = {
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+      authorizationId: first.authorizationId,
+    };
+
+    await assert.rejects(
+      host.service.getTaskSkillReferenceCatalog({ ...identity, sessionId: second.session.id }),
+      /ownership do not match/i,
+    );
+    assert.equal(nativeCatalogReads.length, 0, "cross-Task product Sessions must not reach ZCode");
+
+    const catalog = await host.service.getTaskSkillReferenceCatalog(identity);
+    assert.deepEqual(catalog, {
+      skills: [
+        {
+          name: "review",
+          description: "Review code changes",
+          scope: "workspace",
+        },
+      ],
+    });
+    assert.deepEqual(nativeCatalogReads[0], {
+      workspacePath: project,
+      sessionId: first.session.nativeSessionId,
+    });
+
+    catalogAuthority = "workspace";
+    await assert.rejects(
+      host.service.getTaskSkillReferenceCatalog(identity),
+      /did not verify this Skill catalog/i,
+    );
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -1,7 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- 单个 Task 的刷新、资格投影、身份校验与正式消息界面共享同一选中状态。 */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrainIcon } from "lucide-react";
-import type { IAnyAgentService } from "@zcode/services";
+import type { IAnyAgentService, TaskSkillReference } from "@zcode/services";
 import type {
   EngineCapability,
   EngineFileRewindPreview,
@@ -53,7 +53,6 @@ import {
   modelSelectionSchema,
   ZCODE_AGENT_PROVIDER,
   type ModelSelection,
-  type ZCodeSkillReferenceCatalogEntry,
   type ZCodeSlashCommand,
   type ZCodeConfigOption,
 } from "@zcode/shared";
@@ -152,13 +151,12 @@ function buildManualSkillPrompt(skillName: string, task: string): string {
   ].join("\n");
 }
 
-function formatSessionSkillCatalog(skills: readonly ZCodeSkillReferenceCatalogEntry[]): string {
+function formatSessionSkillCatalog(skills: readonly TaskSkillReference[]): string {
   if (skills.length === 0) return "No skills found.";
   const lines = [`Available skills (${skills.length})`];
   for (const skill of skills) {
     lines.push(`- ${skill.name} (${skill.scope}${skill.pluginName ? `/${skill.pluginName}` : ""})`);
     lines.push(`  ${skill.description}`);
-    lines.push(`  ${skill.path}`);
   }
   lines.push("", "Use /skill <name> [task] to load one.");
   return lines.join("\n");
@@ -187,7 +185,7 @@ function formatEngineSlashHelp(args: string, commands: readonly ZCodeSlashComman
         `${entry.usage} — ${entry.summary}`,
         ...entry.details,
         ...(entry.name === "compact"
-          ? ["M1 Engine 当前只支持无参数压缩；CLI 的可选 instructions 尚无 Host 字段。"]
+          ? ["M1 Engine 通过 Host 支持可选 instructions。"]
           : []),
         ...(isMapped ? [] : ["此原生命令当前没有对应的 Harness 操作。"]),
       ].join("\n");
@@ -396,7 +394,7 @@ export function EngineConversation({
     currentValue: "engine-unavailable",
     options: [{ value: "engine-unavailable", name: unavailableControlValue }],
   };
-  const { modelSelectionService, zcodeAgentService } = useServices();
+  const { modelSelectionService } = useServices();
   const modelSelectionRead = useModelSelectionServiceView(modelSelectionService);
 
   const refresh = useCallback(async () => {
@@ -1389,17 +1387,13 @@ export function EngineConversation({
         return true;
       } else if (slashCommand.name === "skill") {
         const target = visibleTask;
-        const workspacePath = target.environment.workDirectory;
-        const skillSessionId = target.session.nativeSessionId;
         if (
-          !workspacePath ||
-          !skillSessionId ||
           target.session.status !== "active" ||
           target.status !== "active"
         ) {
           setNotice({
             kind: "info",
-            message: "/skill 需要当前 Task 已连接的原生 Session；输入已保留。",
+            message: "/skill 需要当前 Task 有可用的 Session；输入已保留。",
           });
           return false;
         }
@@ -1409,25 +1403,16 @@ export function EngineConversation({
         }
         const editor = inputApiRef.current;
         const readSessionCatalog = async () => {
-          const catalog = await zcodeAgentService.getSkillReferenceCatalog({
-            workspacePath,
-            sessionId: skillSessionId,
-          });
-          if (catalog.authority !== "session")
-            throw new Error("无法核实当前原生 Session 的 Skill 快照；输入已保留。");
-          const currentTask = await service.getTask(target.id);
-          if (
-            selectedTaskIdRef.current !== target.id ||
-            !currentTask ||
-            currentTask.id !== target.id ||
-            currentTask.participant.id !== target.participant.id ||
-            currentTask.session.id !== target.session.id ||
-            currentTask.session.nativeSessionId !== skillSessionId ||
-            currentTask.authorizationId !== target.authorizationId ||
-            currentTask.status !== "active" ||
-            currentTask.session.status !== "active"
-          )
+          if (selectedTaskIdRef.current !== target.id)
             throw new Error("Skill 请求的 Task 或原生 Session 已变化；输入已保留。");
+          const catalog = await service.getTaskSkillReferenceCatalog({
+            taskId: target.id,
+            participantId: target.participant.id,
+            sessionId: target.session.id,
+            authorizationId: target.authorizationId,
+          });
+          if (selectedTaskIdRef.current !== target.id)
+            throw new Error("Skill 请求的 Task 已切换；输入已保留。");
           return catalog;
         };
 
@@ -2158,6 +2143,16 @@ export function EngineConversation({
                   className="p-0"
                   workspacePath={composerWorkspacePath}
                   taskId={activeNativeSessionId}
+                  taskSkillCatalogRequest={
+                    isZCodeHarness
+                      ? {
+                          taskId: visibleTask.id,
+                          participantId: visibleTask.participant.id,
+                          sessionId: visibleTask.session.id,
+                          authorizationId: visibleTask.authorizationId,
+                        }
+                      : undefined
+                  }
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
                   onImportSharedContext={isZCodeHarness ? importSharedContext : undefined}

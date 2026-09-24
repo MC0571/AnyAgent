@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import type { Locale, SkillScope, ZCodeProvider } from "@zcode/shared";
 import type { MentionCategoryResult, MentionItem } from "@/mentions/mentionTypes.js";
 import { filterMentionItemsWithOptions } from "@/mentions/mentionSearch.js";
@@ -18,6 +19,7 @@ export function mapSkillsToMentionItemsForTest(
     pluginName?: string;
   }>,
   locale?: Locale,
+  useTaskSkillCommand = false,
 ): MentionItem[] {
   const uniqueSkillsByName = new Map<string, (typeof skills)[number]>();
   const scopePriority: Record<SkillScope, number> = {
@@ -46,7 +48,9 @@ export function mapSkillsToMentionItemsForTest(
       label: skill.name,
       description: description ? `${sourceLabel} · ${description}` : sourceLabel,
       value: skill.name,
-      markdown: buildSkillMentionMarkdown(skill.name, skill.path),
+      markdown: useTaskSkillCommand
+        ? `/skill ${skill.name}`
+        : buildSkillMentionMarkdown(skill.name, skill.path),
       keywords: [...new Set([skill.name, skill.description, description, skill.scope])],
       data: {
         path: skill.path,
@@ -66,22 +70,27 @@ export function useSkillsMentionProvider(
   requireQuery: boolean,
   emptyText: string,
   title: string,
+  taskCatalogRequest?: TaskSkillReferenceCatalogRequest,
 ): MentionCategoryResult {
   const { locale } = useZCodeIntl();
-  const { skills, loading, error } = useSkills({
+  const { skills, hostTaskScoped, loading, error } = useSkills({
     workspacePath,
     workspaceIdentity,
     sessionId,
     enabled,
+    taskCatalogRequest,
   });
 
   const allItems = useMemo(
     () =>
       mapSkillsToMentionItemsForTest(
-        filterSkillsForProvider(skills, provider).filter((skill) => skill.enabled),
+        (hostTaskScoped ? skills : filterSkillsForProvider(skills, provider)).filter(
+          (skill) => skill.enabled,
+        ),
         locale,
+        hostTaskScoped,
       ),
-    [locale, provider, skills],
+    [hostTaskScoped, locale, provider, skills],
   );
 
   const items = useMemo(

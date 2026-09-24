@@ -2167,6 +2167,7 @@ test("an active ZCode Harness task switches models within its Session and submit
   const selectedTaskIds: string[] = [];
   let createTaskError: Error | null = null;
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
+  const nativeSkillCatalogLookups: Array<Record<string, unknown>> = [];
   let delayNextSkillCatalogRead = false;
   let releaseSkillCatalogRead: (() => void) | null = null;
   const feedbackRequests: Array<Record<string, unknown>> = [];
@@ -2244,6 +2245,24 @@ test("an active ZCode Harness task switches models within its Session and submit
       sharedContextImportRequests.push(input);
       return importedContextTask;
     },
+    getTaskSkillReferenceCatalog: async (input: Record<string, unknown>) => {
+      skillCatalogLookups.push(input);
+      if (delayNextSkillCatalogRead) {
+        delayNextSkillCatalogRead = false;
+        await new Promise<void>((resolve) => {
+          releaseSkillCatalogRead = resolve;
+        });
+      }
+      return {
+        skills: [
+          {
+            name: "review",
+            description: "Review code changes",
+            scope: "workspace" as const,
+          },
+        ],
+      };
+    },
     setAssistantFeedback: async (input: Record<string, unknown>) => {
       feedbackRequests.push(input);
       nativeFeedback = input.feedback as "like" | "dislike" | null;
@@ -2258,6 +2277,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     },
   };
   const services = {
+    anyAgentService: service,
     clientConfigService: { getSnapshot: async () => ({ pluginStoreOrder: null }) },
     fileService: {
       searchWorkspaceFiles: async (params: Record<string, unknown>) => {
@@ -2282,13 +2302,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     },
     zcodeAgentService: {
       getSkillReferenceCatalog: async (params: Record<string, unknown>) => {
-        skillCatalogLookups.push(params);
-        if (delayNextSkillCatalogRead) {
-          delayNextSkillCatalogRead = false;
-          await new Promise<void>((resolve) => {
-            releaseSkillCatalogRead = resolve;
-          });
-        }
+        nativeSkillCatalogLookups.push(params);
         return {
           skills: [
             {
@@ -2612,6 +2626,13 @@ test("an active ZCode Harness task switches models within its Session and submit
       "/help skill should show the fixed CLI command usage now mapped through Host",
     );
     assert.equal(submissions.length, 0);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help compact"));
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.ok(document.body.textContent?.includes("M1 Engine 通过 Host 支持可选 instructions。")),
+      "/help compact should describe the Host instructions field accurately",
+    );
+    assert.equal(submissions.length, 0);
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/help"));
     await submitCurrentDraft();
     await waitFor(
@@ -2759,6 +2780,10 @@ test("an active ZCode Harness task switches models within its Session and submit
       () => assert.ok(container.querySelector('[data-option-id="slash:skill"]')),
       "fixed M1 protocol slash catalog should expose /skill in the composer picker",
     );
+    await waitFor(
+      () => assert.ok(skillCatalogLookups.length > 0),
+      "M1 Skill suggestions should read through the current Task's Host catalog",
+    );
     await act(async () =>
       container
         .querySelector<HTMLButtonElement>('[data-option-id="slash:skill"]')!
@@ -2769,14 +2794,19 @@ test("an active ZCode Harness task switches models within its Session and submit
       "selecting the /skill picker item should fill the executable M0 command",
     );
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/skill"));
-    await waitFor(
-      () =>
-        assert.ok(
-          skillCatalogLookups.some((lookup) => lookup.sessionId === "native-zcode-session-ui"),
-        ),
-      "native Skill catalog did not receive the verified native Session ID",
-    );
+    const catalogReadsBeforeCommand = skillCatalogLookups.length;
     await submitCurrentDraft();
+    await waitFor(
+      () => assert.equal(skillCatalogLookups.length, catalogReadsBeforeCommand + 1),
+      "Host Skill catalog service did not receive the current Task identity",
+    );
+    assert.deepEqual(skillCatalogLookups.at(-1), {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+    });
+    assert.equal(nativeSkillCatalogLookups.length, 0, "Renderer must not read the native catalog");
     await waitFor(() => {
       assert.equal(input.__zcodeLexicalInputE2E!.getText(), "");
       assert.ok(document.body.textContent?.includes("Available skills (1)"));
@@ -2825,6 +2855,61 @@ test("an active ZCode Harness task switches models within its Session and submit
     );
     assert.equal(submissions.length, 2, "an unknown Skill must not be dispatched as an Input");
     assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/skill not-installed task");
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/review"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="task-skill:review"]')),
+      "Host Task Skill suggestions should route through the executable /skill command",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="task-skill:review"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    assert.equal(
+      input.__zcodeLexicalInputE2E!.getText().trimEnd(),
+      "/skill review",
+      "selecting an M1 Task Skill must serialize to the Host-gated /skill path",
+    );
+    const catalogReadsBeforeSuggestionSubmit = skillCatalogLookups.length;
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.equal(submissions.length, 3),
+      "selected Task Skill should submit its expanded M0 skill prompt through Host/Runtime",
+    );
+    assert.equal(skillCatalogLookups.length, catalogReadsBeforeSuggestionSubmit + 1);
+    assert.equal(submissions[2]?.text, buildM0ManualSkillPrompt("review", ""));
+    assert.equal(submissions[2]?.taskId, taskId);
+    assert.equal(submissions[2]?.participantId, participantId);
+    assert.equal(submissions[2]?.sessionId, sessionId);
+    assert.equal(submissions[2]?.authorizationId, "authorization-engine-ui");
+    assert.equal(nativeSkillCatalogLookups.length, 0, "M1 suggestions must not read native catalog");
+
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("$rev"));
+    const taskSkillMentionId = `skill:task-skill:${taskId}:review`;
+    await waitFor(
+      () => assert.ok(container.querySelector(`[data-option-id="${taskSkillMentionId}"]`)),
+      "M1 Skill mentions should use the Host Task catalog",
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(`[data-option-id="${taskSkillMentionId}"]`)!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    assert.equal(
+      input.__zcodeLexicalInputE2E!.getText().trimEnd(),
+      "/skill review",
+      "M1 Skill mention should serialize to the Host-gated /skill command instead of an empty path",
+    );
+    const catalogReadsBeforeMentionSubmit = skillCatalogLookups.length;
+    await submitCurrentDraft();
+    await waitFor(
+      () => assert.equal(submissions.length, 4),
+      "selected Skill mention should be expanded through the Task's /skill preflight",
+    );
+    assert.equal(skillCatalogLookups.length, catalogReadsBeforeMentionSubmit + 1);
+    assert.equal(submissions[3]?.text, buildM0ManualSkillPrompt("review", ""));
+    assert.equal(nativeSkillCatalogLookups.length, 0, "M1 mention must not read native catalog");
 
     const submissionsBeforeShareImport = submissions.length;
     const selectionsBeforeShareImport = selectedTaskIds.length;
@@ -2897,6 +2982,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     );
     assert.equal(document.querySelector('[data-testid="conversation-share-import-dialog"]'), null);
 
+    const submissionsBeforePlan = submissions.length;
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/plan"));
     await waitFor(
       () => assert.ok(container.querySelector('[data-option-id="app-slash:plan"]')),
@@ -2915,10 +3001,14 @@ test("an active ZCode Harness task switches models within its Session and submit
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
-    await waitFor(() => assert.equal(submissions.length, 3), "/plan task was not submitted");
-    assert.equal(submissions[2]?.text, "explain the change");
+    await waitFor(
+      () => assert.equal(submissions.length, submissionsBeforePlan + 1),
+      "/plan task was not submitted",
+    );
+    assert.equal(submissions[submissionsBeforePlan]?.text, "explain the change");
     assert.equal(
-      (submissions[2]?.submissionConfig as Record<string, unknown>)?.planEnabled,
+      (submissions[submissionsBeforePlan]?.submissionConfig as Record<string, unknown>)
+        ?.planEnabled,
       true,
       "/plan task should route through the product submission config in plan mode",
     );
@@ -2932,11 +3022,11 @@ test("an active ZCode Harness task switches models within its Session and submit
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
     await waitFor(
-      () => assert.equal(submissions.length, 4),
+      () => assert.equal(submissions.length, submissionsBeforePlan + 2),
       "structured mention prompt was not sent",
     );
     assert.equal(
-      submissions[3]?.text,
+      submissions[submissionsBeforePlan + 1]?.text,
       structuredMentionPrompt,
       "structured @ Plugin mention markdown should survive Harness submission",
     );
@@ -3044,16 +3134,17 @@ test("an active ZCode Harness task switches models within its Session and submit
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
-    await waitFor(() => assert.equal(submissions.length, 5));
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforePlan + 3));
     assert.deepEqual(
-      (submissions[4]?.submissionConfig as Record<string, unknown>)?.modelSelection,
+      (submissions[submissionsBeforePlan + 2]?.submissionConfig as Record<string, unknown>)
+        ?.modelSelection,
       {
         providerId: "opencode-go",
         modelId: "go-alpha",
         options: { reasoningLevel: "high" },
       },
     );
-    assert.equal(submissions[4]?.taskId, forkTask.id);
+    assert.equal(submissions[submissionsBeforePlan + 2]?.taskId, forkTask.id);
     const webContext = {
       workspacePath,
       pageUrl: "https://example.test/review",
@@ -3075,10 +3166,10 @@ test("an active ZCode Harness task switches models within its Session and submit
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
-    await waitFor(() => assert.equal(submissions.length, 6));
-    assert.match(String(submissions[5]?.text), /Review this element/);
-    assert.match(String(submissions[5]?.text), /https:\/\/example\.test\/review/);
-    assert.match(String(submissions[5]?.text), /Approve/);
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforePlan + 4));
+    assert.match(String(submissions[submissionsBeforePlan + 3]?.text), /Review this element/);
+    assert.match(String(submissions[submissionsBeforePlan + 3]?.text), /https:\/\/example\.test\/review/);
+    assert.match(String(submissions[submissionsBeforePlan + 3]?.text), /Approve/);
     await waitFor(
       () => assert.doesNotMatch(container.textContent ?? "", /网页元素|web page element/i),
       "accepted browser context should clear from the composer",
@@ -3092,17 +3183,17 @@ test("an active ZCode Harness task switches models within its Session and submit
       send.click();
       send.click();
     });
-    await waitFor(() => assert.equal(submissions.length, 7));
-    assert.equal(submissions[6]?.text, "Send only once");
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforePlan + 5));
+    assert.equal(submissions[submissionsBeforePlan + 4]?.text, "Send only once");
     await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("/init keep workspace notes"));
     await submitCurrentDraft();
-    await waitFor(() => assert.equal(submissions.length, 8));
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforePlan + 6));
     assert.equal(
-      submissions[7]?.text,
+      submissions[submissionsBeforePlan + 5]?.text,
       "/init keep workspace notes",
       "/init should submit through the product Runtime input path",
     );
-    assert.equal(submissions[7]?.taskId, forkTask.id);
+    assert.equal(submissions[submissionsBeforePlan + 5]?.taskId, forkTask.id);
     await act(async () => {
       input.blur();
       await new Promise((resolve) => setTimeout(resolve, 0));

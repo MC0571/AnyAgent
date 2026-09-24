@@ -3515,3 +3515,62 @@ test("native denial before command receipt is not overwritten by forwarded ACK",
     runtime.close();
   }
 });
+
+test("Session-scoped reads reject expired or cross-Task authority and recheck after native reads", async () => {
+  let now = 10;
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+  });
+  let nativeReads = 0;
+  try {
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: { ...authorization, id: "expiring-session-read", expiresAt: 20 },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const readCatalog = (request: typeof identity) =>
+      runtime.readQualifiedTaskSession(request, async (target) => {
+        nativeReads++;
+        assert.equal(target.taskId, request.taskId);
+        assert.equal(target.participantId, request.participantId);
+        assert.equal(target.sessionId, request.sessionId);
+        return target.nativeSessionId;
+      });
+
+    assert.equal(await readCatalog(identity), task.session.nativeSessionId);
+    assert.equal(nativeReads, 1);
+
+    const other = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await assert.rejects(
+      readCatalog({ ...identity, sessionId: other.session.id }),
+      /ownership do not match/i,
+    );
+    assert.equal(nativeReads, 1, "cross-Task Session identity must fail before native reads");
+
+    now = 21;
+    await assert.rejects(readCatalog(identity), /Authorization has expired/i);
+    assert.equal(nativeReads, 1, "expired authorization must fail before native reads");
+
+    now = 10;
+    await assert.rejects(
+      runtime.readQualifiedTaskSession(identity, async () => {
+        nativeReads++;
+        now = 21;
+        return "catalog";
+      }),
+      /Authorization has expired/i,
+    );
+    assert.equal(nativeReads, 2, "a read that loses authorization must not return its result");
+  } finally {
+    runtime.close();
+  }
+});

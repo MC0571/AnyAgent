@@ -3,6 +3,7 @@
  */
 import { $getRoot, $getSelection, $isRangeSelection, $isTextNode } from "lexical";
 import type { AgentSummary, Locale, SkillSummary, ZCodeSlashCommand } from "@zcode/shared";
+import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import type { MentionItem } from "@/mentions/mentionTypes.js";
 import { mapSubagentsToMentionItemsForTest } from "@/mentions/providers/subagentsMentionProvider.js";
 import { mapSkillsToMentionItemsForTest } from "@/mentions/providers/skillsMentionProvider.js";
@@ -14,6 +15,8 @@ export interface SlashCommandPluginProps {
   workspaceIdentity?: string;
   /** 已有 Session 的 id；null/undefined 表示新建草稿，决定 Skill catalog authority。 */
   sessionId?: string | null;
+  /** M1 product Task 的目录必须经 Host 授权读取；省略时保留 M0 native 路径。 */
+  taskCatalogRequest?: TaskSkillReferenceCatalogRequest;
   disabled?: boolean;
   excludedCommandNames?: readonly string[];
   /**

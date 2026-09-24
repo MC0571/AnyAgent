@@ -7,6 +7,7 @@ import type {
   MutableRefObject,
   ReactNode,
 } from "react";
+import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TID_CHAT_SEND_BUTTON } from "@zcode/shared";
 import { ArrowUpIcon, Hand, XIcon } from "lucide-react";
@@ -47,6 +48,7 @@ export function ChatPromptEditor({
   workspaceIdentity,
   taskId,
   skillCatalogSessionId,
+  taskSkillCatalogRequest,
   initialValue,
   syncInitialValueOnMount = true,
   placeholder,
@@ -103,6 +105,7 @@ export function ChatPromptEditor({
   taskId: string | null;
   /** 仅供 Composer Skill catalog；可为草稿的 prewarm Session。 */
   skillCatalogSessionId?: string | null;
+  taskSkillCatalogRequest?: TaskSkillReferenceCatalogRequest;
   initialValue?: string;
   syncInitialValueOnMount?: boolean;
   placeholder?: string;
@@ -392,6 +395,7 @@ export function ChatPromptEditor({
           workspaceIdentity={workspaceIdentity}
           taskId={taskId}
           skillCatalogSessionId={skillCatalogSessionId}
+          taskSkillCatalogRequest={taskSkillCatalogRequest}
           inputTestId={inputTestId}
           editorApiRef={resolvedInputApiRef}
           promptHistory={promptHistory}

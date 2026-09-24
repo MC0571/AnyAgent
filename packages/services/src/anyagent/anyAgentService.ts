@@ -47,6 +47,9 @@ export interface IAnyAgentService {
   listTasks(): Promise<readonly RuntimeTask[]>;
   getTask(taskId: string): Promise<RuntimeTask | null>;
   getHistory(taskId: string): Promise<TaskHistory | null>;
+  getTaskSkillReferenceCatalog(
+    input: TaskSkillReferenceCatalogRequest,
+  ): Promise<TaskSkillReferenceCatalog>;
   restoreTaskSession(input: TaskLifecycleRequest): Promise<RuntimeTask>;
   reconcileExecution(input: ReconcileExecution): Promise<RuntimeExecution>;
   /** Read-only feedback projection from the native Session, not a second product authority. */
@@ -87,6 +90,22 @@ export interface IAnyAgentService {
   replyToApproval(input: ReplyToApproval): Promise<void>;
   replyToUserInput(input: ReplyToUserInput): Promise<void>;
   requestStop(input: RequestStop): Promise<void>;
+}
+
+export interface TaskSkillReferenceCatalog {
+  readonly skills: readonly TaskSkillReference[];
+}
+
+export type TaskSkillReferenceCatalogRequest = Pick<
+  TaskLifecycleRequest,
+  "taskId" | "participantId" | "sessionId" | "authorizationId"
+>;
+
+export interface TaskSkillReference {
+  readonly name: string;
+  readonly description: string;
+  readonly scope: "workspace" | "user" | "plugin";
+  readonly pluginName?: string;
 }
 
 export const IAnyAgentService = createServiceDescriptor<IAnyAgentService>("anyagent-runtime");

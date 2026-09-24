@@ -1,5 +1,6 @@
 /* eslint-disable max-lines */
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import type { ZCodeProvider } from "@zcode/shared";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { createPortal } from "react-dom";
@@ -63,6 +64,7 @@ interface MentionPluginProps {
   workspaceIdentity?: string;
   /** 已有 Session 的 id；null/undefined = 新建草稿。决定 Plugins 分组的 catalog authority。 */
   sessionId?: string | null;
+  taskCatalogRequest?: TaskSkillReferenceCatalogRequest;
   disabled?: boolean;
   onWhiteboardMentionSelected?: (boardId: string) => void | Promise<void>;
 }
@@ -133,6 +135,7 @@ export function MentionPlugin({
   workspacePath,
   workspaceIdentity,
   sessionId,
+  taskCatalogRequest,
   provider,
   container,
   disabled = false,
@@ -176,6 +179,7 @@ export function MentionPlugin({
     false,
     intl.formatMessage({ id: "chat.mention.skills.empty" }),
     intl.formatMessage({ id: "chat.mention.skills.title" }),
+    taskCatalogRequest,
   );
   const fileDefaultPreviewLimit = !hasActiveQuery
     ? MENTION_FILES_ONLY_DEFAULT_PREVIEW_LIMIT

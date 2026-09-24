@@ -155,6 +155,15 @@ interface RunTarget {
   readonly nativeExecutionId: EngineExecutionRef;
 }
 
+interface QualifiedTaskSessionReadTarget {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly engineId: string;
+  readonly environment: RuntimeEnvironment;
+  readonly nativeSessionId: EngineSessionRef;
+}
+
 const ACTIVE_INPUT_STATUSES = new Set([
   "queued",
   "received",
@@ -430,6 +439,30 @@ export class TaskRuntime {
     this.#assertOpen();
     const record = this.#store.get<TaskData>("task", taskId);
     return record ? this.#taskProjection(record) : null;
+  }
+
+  /** Run a Host-owned read against the current native Session only while its Task grant is valid. */
+  async readQualifiedTaskSession<T>(
+    input: TaskLifecycleRequest,
+    read: (target: QualifiedTaskSessionReadTarget) => Promise<T>,
+  ): Promise<T> {
+    const initial = await this.#qualifiedTaskSessionReadTarget(input);
+    const result = await read(initial);
+    const latest = await this.#qualifiedTaskSessionReadTarget(input);
+    if (
+      initial.taskId !== latest.taskId ||
+      initial.participantId !== latest.participantId ||
+      initial.sessionId !== latest.sessionId ||
+      initial.engineId !== latest.engineId ||
+      initial.environment.id !== latest.environment.id ||
+      initial.environment.workDirectory !== latest.environment.workDirectory ||
+      initial.nativeSessionId !== latest.nativeSessionId
+    )
+      throw new RuntimeEligibilityError(
+        "The Task or native Session changed while reading Session-scoped data.",
+        "ownership",
+      );
+    return result;
   }
 
   getHistory(taskId: string): TaskHistory | null {
@@ -3812,6 +3845,54 @@ export class TaskRuntime {
       );
     }
     return claims.map(({ reference, locator }) => ({ ...reference, locator }));
+  }
+
+  async #qualifiedTaskSessionReadTarget(
+    input: TaskLifecycleRequest,
+  ): Promise<QualifiedTaskSessionReadTarget> {
+    this.#assertOpen();
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "execution.run",
+    );
+    this.#requireActiveTask(task);
+    if (session.data.projection.status !== "active")
+      throw new RuntimeEligibilityError(`Session ${session.id} is not active.`, "terminal");
+    const nativeSessionId = session.data.nativeSessionId;
+    if (!nativeSessionId || this.#liveSessions.get(session.id) !== nativeSessionId)
+      throw new RuntimeEligibilityError("The Task has no verified native Session identity.", "ownership");
+    const qualifiedNativeSessionId = nativeSessionId as EngineSessionRef;
+
+    const engine = this.#engineFor(task.data);
+    const snapshot = await this.#capabilities(engine);
+    this.#assertCapability(
+      snapshot,
+      task.data.engineId,
+      task.data.environment.id,
+      "execution.run",
+      task.data.engine.configurationVersion,
+      task.data.engine.adapterVersion,
+    );
+    this.#dispatchGuard({
+      taskId: input.taskId,
+      participantId: input.participantId,
+      sessionId: input.sessionId,
+      authorizationId: input.authorizationId,
+      capability: "execution.run",
+      engine,
+      nativeSessionId: qualifiedNativeSessionId,
+    })();
+    return {
+      taskId: task.id,
+      participantId: task.data.participantId,
+      sessionId: session.id,
+      engineId: task.data.engineId,
+      environment: this.#clone(task.data.environment),
+      nativeSessionId: qualifiedNativeSessionId,
+    };
   }
 
   #qualify(

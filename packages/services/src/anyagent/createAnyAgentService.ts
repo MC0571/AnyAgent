@@ -200,6 +200,38 @@ export function createAnyAgentService(
     async getHistory(taskId) {
       return runtime.getHistory(taskId);
     },
+    async getTaskSkillReferenceCatalog(input) {
+      const catalog = await runtime.readQualifiedTaskSession(input, async (target) => {
+        if (target.engineId !== "zcode")
+          throw new RuntimeEligibilityError(
+            "Session Skill catalogs are available only for ZCode Tasks.",
+            "unsupported",
+          );
+        const workspacePath = target.environment.workDirectory;
+        if (target.environment.kind !== "workspace" || !workspacePath)
+          throw new RuntimeEligibilityError(
+            "The Task does not have a readable workspace for its Session Skill catalog.",
+            "unsupported",
+          );
+        return agentScope.service.getSkillReferenceCatalog({
+          workspacePath,
+          sessionId: target.nativeSessionId,
+        });
+      });
+      if (catalog.authority !== "session")
+        throw new RuntimeEligibilityError(
+          "The native Engine did not verify this Skill catalog against the Task Session.",
+          "ownership",
+        );
+      return {
+        skills: catalog.skills.map(({ name, description, scope, pluginName }) => ({
+          name,
+          description,
+          scope,
+          ...(pluginName ? { pluginName } : {}),
+        })),
+      };
+    },
     async restoreTaskSession(input) {
       return runtime.restoreTaskSession(input);
     },
