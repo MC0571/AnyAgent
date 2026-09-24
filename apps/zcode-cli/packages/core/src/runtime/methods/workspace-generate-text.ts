@@ -22,7 +22,8 @@ import { normalizeStreamError } from "../helpers/index.js";
 import { auxiliaryModelOptions } from "../../model/auxiliary-model-options.js";
 
 const WORKSPACE_GENERATE_TEXT_TIMEOUT_MS = 60_000;
-const CONNECTIVITY_PROBE_MAX_OUTPUT_TOKENS = 1;
+// OpenCode Go 的部分 Responses 模型拒绝 1 Token（最少 16）；探测必须使用可接纳的请求。
+const CONNECTIVITY_PROBE_MAX_OUTPUT_TOKENS = 16;
 // 探测请求使用固定最小 prompt，避免多余推理开销；不可改写角色、文本或混入会话历史。
 const CONNECTIVITY_PROBE_SYSTEM = "You are ZCode connectivity probe.";
 const CONNECTIVITY_PROBE_USER = "hi";
@@ -56,7 +57,7 @@ export async function testModelConnectivity(
 ): Promise<void> {
   const baseModel = createRuntimeModel(this, { selection: input.selection });
   // 连接探测不需要生成正文；复用辅助生成的 5,000 预算会等待多余推理和输出。
-  // 独立限制为 1 Token，仍使用最低公开档位，不改变其他辅助调用的预算。
+  // 独立限制为 16 Token，仍使用最低公开档位，不改变其他辅助调用的预算。
   const model = baseModel.bind({
     reasoningLevel: baseModel.optionSpecs.reasoningLevel.values[0]!,
     maxOutputTokens: CONNECTIVITY_PROBE_MAX_OUTPUT_TOKENS,
@@ -78,6 +79,7 @@ export async function testModelConnectivity(
     ],
   };
   let finished = false;
+  let finishReason: string | undefined;
   await runWithModelInvocationContext(
     {
       metadata: traceContextToLogContext(traceContext),
@@ -94,11 +96,17 @@ export async function testModelConnectivity(
     async () => {
       for await (const event of model.streamText(request)) {
         if (event.type === "error") throw normalizeStreamError(event.error);
-        if (event.type === "finish") finished = true;
+        if (event.type === "finish") {
+          finished = true;
+          finishReason = event.finishReason;
+        }
       }
     },
   );
   if (!finished) throw new Error("模型连通性测试流在 finish 事件前结束");
+  // 被输出上限截断的流不能证明模型可用；此前 Grok 的 1 Token 探测被上游记为 200 Failed。
+  if (finishReason !== "stop")
+    throw new Error(`模型连通性测试未正常结束：${finishReason ?? "unknown"}`);
 }
 
 export async function generateWorkspaceText(
