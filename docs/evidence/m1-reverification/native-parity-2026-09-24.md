@@ -28,4 +28,4 @@ M0 原生会话“创建 m1-rewind.txt 文件”的回答提供“1 个文件已
 
 `7e3ff518cd1219935664d54f4626bc1f38be7024` 修正了正式消息流中的已答复审批卡片和过期顶部提示。在这一代码提交上，从原 Root 新建 ZCode Harness Task，首轮经原 `PermissionDialog` 允许 Write，正式流只保留原工具行、回答操作条与文件摘要；[审批中](native-approval-pending-7e3ff51.png)、[完成后](native-approval-complete-7e3ff51.png)。随后同一产品及原生 Session 内切换到 `grok-4.6`，第二轮得到 Markdown 标题和 TypeScript 代码块，第三轮在正式回答区域完成前显示第 1–14 条，结束标记还未出现；[完成前](native-stream-before-complete-7e3ff51.png)、[最终三轮](native-three-round-final-7e3ff51.png)。详情及身份、事件时序见[最终集成复验](README.md)。
 
-按 [收口矩阵](README.md#m0-单参与者能力收口矩阵)，最终候选仍有 D 项：旧 M1 对话冷启动后安全恢复原生 Session、网页 / 共享上下文、真实 CLI 中断 / 断线恢复，以及其他未在 `7e3ff518cd1219935664d54f4626bc1f38be7024` 最终桌面候选重测的 M0 单参与者能力。早期候选的原生单项结果继续保留作历史证据，不能推断全能力等价或替代最终候选验收。
+以上“最终”指当时的 `7e3ff518cd1219935664d54f4626bc1f38be7024` 候选。后续产品代码候选为 `eecf9c686ec820e2a5a3c1c38f74eb4866ac5249`；其真实 App 的正常冷恢复、原生结构化提问、同 Provider 逐轮换模、同进程中断、允许审批、文件撤销、队列、compact、Fake A→B→A 与关闭 M1 的 M0 对照见[该候选证据](final-eecf9c6/README.md)。网页 / 共享上下文桌面导入、CLI 重启后的旧执行控制、断线对账、附件编辑等组合与其他未测场景继续按[唯一收口矩阵](README.md#m0-单参与者能力收口矩阵)列为 D；早期单项结果不能替代最新候选必测验收。
