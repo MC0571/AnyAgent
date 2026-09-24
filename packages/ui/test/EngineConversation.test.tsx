@@ -1773,6 +1773,15 @@ test("EngineConversation sends through the product composer and renders ordered 
       Object.defineProperty(storagePrototype, "removeItem", originalRemoveItemForClear);
     }
     const originalSetItemFunction = originalSetItem.value as Storage["setItem"];
+    const queuedDuringReview = {
+      id: "queued-during-review",
+      taskId,
+      participantId,
+      sessionId,
+      text: "New queued B must not include submitted A",
+      status: "queued",
+      receivedAt: 5_000,
+    };
     const originalRemoveItem = Object.getOwnPropertyDescriptor(storagePrototype, "removeItem")!;
     Object.defineProperty(storagePrototype, "setItem", {
       configurable: true,
@@ -1824,15 +1833,6 @@ test("EngineConversation sends through the product composer and renders ordered 
         '[data-testid="engine-composer-input"]',
       ) as HTMLElement & { __zcodeLexicalInputE2E?: { getText: () => string } };
       assert.equal(restartedEditor.__zcodeLexicalInputE2E?.getText(), "");
-      const queuedDuringReview = {
-        id: "queued-during-review",
-        taskId,
-        participantId,
-        sessionId,
-        text: "New queued B must not include submitted A",
-        status: "queued",
-        receivedAt: 5_000,
-      };
       history = { ...history, inputs: [...history.inputs, queuedDuringReview] };
       await act(async () => emit(taskId, history));
       const reviewBlockedEdit = container.querySelector<HTMLButtonElement>(
@@ -1884,17 +1884,11 @@ test("EngineConversation sends through the product composer and renders ordered 
         queuedDuringReview.text,
         "B's prepared text remains separate for later reconciliation",
       );
-      assert.equal(
-        clearV4ComposerDraft(
-          "/tmp/anyagent-ui",
-          undefined,
-          `anyagent-queue-edit:${taskId}:queued-during-review`,
-        ),
-        true,
-      );
       history = {
         ...history,
-        inputs: history.inputs.filter((input) => input.id !== queuedDuringReview.id),
+        inputs: history.inputs.map((input) =>
+          input.id === queuedDuringReview.id ? { ...input, status: "cancelled" } : input,
+        ),
       };
       await act(async () => emit(taskId, history));
     } finally {
@@ -1906,6 +1900,31 @@ test("EngineConversation sends through the product composer and renders ordered 
         .querySelector<HTMLButtonElement>('[data-testid="engine-queue-draft-review-discard"]')
         ?.click(),
     );
+    const reviewedEditor = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E: { getText: () => string; setText: (value: string) => void };
+    };
+    await waitFor(() =>
+      assert.equal(reviewedEditor.__zcodeLexicalInputE2E.getText(), queuedDuringReview.text),
+    );
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)?.text,
+      queuedDuringReview.text,
+      "resolving A restores only B",
+    );
+    assert.equal(
+      readV4ComposerDraft(
+        "/tmp/anyagent-ui",
+        undefined,
+        `anyagent-queue-edit:${taskId}:queued-during-review`,
+      ),
+      null,
+      "B's prepared scope is consumed once",
+    );
+    await act(async () => emit(taskId, history));
+    assert.equal(reviewedEditor.__zcodeLexicalInputE2E.getText(), queuedDuringReview.text);
+    await act(async () => reviewedEditor.__zcodeLexicalInputE2E.setText(""));
     await waitFor(() =>
       assert.equal(
         readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`),

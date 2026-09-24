@@ -687,7 +687,7 @@ export function EngineConversation({
   useEffect(() => {
     if (visibleTask && visibleHistory)
       onQueueRecoveryReconcile?.(visibleTask.id, visibleHistory.inputs);
-  }, [onQueueRecoveryReconcile, visibleHistory, visibleTask?.id]);
+  }, [draftStorageIssue, onQueueRecoveryReconcile, visibleHistory, visibleTask?.id]);
   useEffect(() => {
     if (
       !visibleTask ||
