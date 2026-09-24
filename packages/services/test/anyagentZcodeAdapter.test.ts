@@ -572,7 +572,7 @@ test("ZCode reconciliation accepts only exact persisted native terminal provenan
       {
         rowId: 1,
         kind: "turnHeader",
-        turnId: "turn-terminal-after-restart",
+        turnId: "msg_user-execution-terminal-after-restart",
         sourceCommandId: "execution-terminal-after-restart",
         state: "completedSuccess",
         historyRoundCount: 2,
@@ -580,14 +580,16 @@ test("ZCode reconciliation accepts only exact persisted native terminal provenan
           eventId: "event-terminal-after-restart",
           eventType: "turn_complete",
           sourceCommandId: "execution-terminal-after-restart",
-          turnId: "turn-terminal-after-restart",
+          // Cold transcript hydration gives the projection a different turn ID;
+          // evidence must preserve the native runtime's original ID.
+          turnId: "native-turn-terminal-after-restart",
           resultType: "success",
         },
       },
       {
         rowId: 2,
         kind: "assistantText",
-        turnId: "turn-terminal-after-restart",
+        turnId: "msg_user-execution-terminal-after-restart",
         text: "partially persisted answer",
       },
     ],

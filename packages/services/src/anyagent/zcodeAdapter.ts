@@ -1295,7 +1295,7 @@ export function createZCodeAdapter(options: {
         terminal &&
         terminal.eventId.trim() &&
         terminal.sourceCommandId === executionId &&
-        terminal.turnId === header.turnId &&
+        terminal.turnId.trim() &&
         expectedState === header.state
       ) {
         if (header.state === "completedSuccess") {
@@ -1312,10 +1312,12 @@ export function createZCodeAdapter(options: {
           return { status: "failed" as const, error: "Native turn failed.", evidence };
       }
       // Product projection state alone is not an execution outcome. Cold transcript
-      // hydration can synthesize terminal rows, so exact source command + turn + event
-      // provenance and a matching native event result are all required.
+      // hydration can synthesize terminal rows and its `hydrate-turn-N` identity differs
+      // from the native event's turn ID. The Gateway binds the original native turn ID to
+      // this unique sourceCommandId row and validates the durable event/session identity;
+      // here require that provenance plus the matching native event result.
       return unknown(
-        `The native turn row is ${header.state}, but rowsRange provides no sourceCommandId-bound native terminal event matching this row; outcome is unconfirmed.`,
+        `The native turn row is ${header.state}, but rowsRange provides no sourceCommandId-bound native terminal event matching this outcome; outcome is unconfirmed.`,
         evidence,
       );
     },

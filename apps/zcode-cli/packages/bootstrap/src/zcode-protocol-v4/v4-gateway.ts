@@ -548,11 +548,7 @@ function terminalEvidenceForRow(
   row: TurnHeaderRow,
   entries: SessionEntryInfo[],
 ): NativeTerminalEvidence | undefined {
-  if (
-    row.state === "running" ||
-    !row.sourceCommandId ||
-    row.sourceCommandId !== sourceCommandId
-  ) {
+  if (row.state === "running" || !row.sourceCommandId || row.sourceCommandId !== sourceCommandId) {
     return undefined;
   }
   const matchingEntries = entries.filter((entry) => {
@@ -566,7 +562,7 @@ function terminalEvidenceForRow(
       return false;
     }
     const data = entry.data as Record<string, unknown>;
-    return data.inputId === sourceCommandId && data.turnId === row.turnId;
+    return data.inputId === sourceCommandId;
   });
   if (matchingEntries.length !== 1) return undefined;
 
@@ -575,8 +571,10 @@ function terminalEvidenceForRow(
   const eventId = typeof data.eventId === "string" ? data.eventId : "";
   const eventType = data.eventType;
   const resultType = data.resultType;
+  const nativeTurnId = typeof data.turnId === "string" ? data.turnId : "";
   if (
     !eventId.trim() ||
+    !nativeTurnId.trim() ||
     entry.id !== `native-turn-terminal:${eventId}` ||
     (eventType !== SessionEventType.TurnComplete && eventType !== SessionEventType.TurnError) ||
     typeof resultType !== "string"
@@ -614,7 +612,9 @@ function terminalEvidenceForRow(
     eventId,
     eventType,
     sourceCommandId,
-    turnId: row.turnId,
+    // Transcript hydration assigns a display/projection turn ID (`hydrate-turn-N`).
+    // Preserve the original native turn ID as provenance; these identities need not match.
+    turnId: nativeTurnId,
     resultType: resultType as NativeTerminalEvidence["resultType"],
   };
 }
@@ -1656,6 +1656,21 @@ export class ConversationV4Gateway {
     const sourceCommandId = params.nativeTerminalSourceCommandId?.trim();
     if (!sourceCommandId || !this.host.loadNativeTurnTerminalEntries) return result;
     const entries = await this.host.loadNativeTurnTerminalEntries(params.sessionId);
+    const sourceHeaders = publisher
+      .getSnapshot()
+      .rows.window.filter(
+        (row) => row.kind === "turnHeader" && row.sourceCommandId === sourceCommandId,
+      );
+    if (sourceHeaders.length !== 1) {
+      return {
+        ...result,
+        rows: result.rows.map((row) => {
+          if (row.kind !== "turnHeader") return row;
+          const { nativeTerminalEvidence: _discarded, ...baseRow } = row;
+          return baseRow;
+        }),
+      };
+    }
     return {
       ...result,
       rows: result.rows.map((row) => {
