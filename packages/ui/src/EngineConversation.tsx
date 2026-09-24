@@ -87,6 +87,16 @@ type InheritedSource = {
   submissionConfig?: NonNullable<EngineHistory["inputs"][number]["submissionConfig"]>;
 };
 type EngineComposerAttachment = EngineLocalAttachment;
+export interface EngineTaskComposerDraft {
+  readonly text: string;
+  readonly config?: { readonly mode?: string; readonly modelSelection?: ModelSelection };
+  readonly editorStateJson?: string;
+  readonly recoveryParts?: readonly {
+    readonly version: number;
+    readonly text: string;
+  }[];
+  readonly recoveryVersion: number;
+}
 const contentWidthClassName = getConversationContentWidthClassName({
   centeredEmptyLayout: false,
   statusPanelLayout: "none",
@@ -366,6 +376,13 @@ export function EngineConversation({
   conversationFindActiveIndex = -1,
   conversationFindNavigationRequestId = 0,
   onConversationFindMatchStateChange,
+  composerDraft,
+  onRecoveredDraftChange,
+  onRecoveredConfigChange,
+  onComposerDraftSubmitted,
+  onQueueEditPrepare,
+  onQueueDraftRecovered,
+  onQueueRecoveryReconcile,
 }: {
   service: IAnyAgentService;
   selectedTaskId: string | null;
@@ -380,6 +397,23 @@ export function EngineConversation({
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
   onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
+  composerDraft?: EngineTaskComposerDraft;
+  onRecoveredDraftChange?: (taskId: string, text: string, editorStateJson?: string) => void;
+  onRecoveredConfigChange?: (
+    taskId: string,
+    config: NonNullable<EngineTaskComposerDraft["config"]>,
+  ) => void;
+  onComposerDraftSubmitted?: (taskId: string, submittedText: string) => void;
+  onQueueEditPrepare?: (
+    taskId: string,
+    inputId: string,
+    recovered: Pick<EngineTaskComposerDraft, "text" | "config">,
+  ) => boolean;
+  onQueueDraftRecovered?: (taskId: string, inputId: string) => boolean;
+  onQueueRecoveryReconcile?: (
+    taskId: string,
+    inputs: readonly { readonly id: string; readonly status: string }[],
+  ) => void;
 }) {
   const [task, setTask] = useState<EngineTask | null>(null);
   const [history, setHistory] = useState<EngineHistory | null>(null);
@@ -398,7 +432,6 @@ export function EngineConversation({
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [pendingEditQueueItemId, setPendingEditQueueItemId] = useState<string | null>(null);
-  const [recoveredQueueDrafts, setRecoveredQueueDrafts] = useState<Record<string, string>>({});
   const [restoreErrors, setRestoreErrors] = useState<Record<string, string>>({});
   const [reconcileErrors, setReconcileErrors] = useState<Record<string, string>>({});
   const lifecycleActionsRef = useRef(new Set<string>());
@@ -418,6 +451,7 @@ export function EngineConversation({
   const requestVersionRef = useRef(0);
   const changeVersionRef = useRef(0);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
+  const appliedQueueRecoveryVersion = useRef(0);
   const queuedSubmissionRef = useRef<{
     taskId: string;
     authorizationId: string;
@@ -634,18 +668,46 @@ export function EngineConversation({
   const queuePaused = visibleTask?.session.queuePaused === true;
   queuedInputs.sort((left, right) => (left.queuePosition ?? 0) - (right.queuePosition ?? 0));
   useEffect(() => {
-    if (!visibleTask) return;
-    const recovered = recoveredQueueDrafts[visibleTask.id];
+    if (visibleTask && visibleHistory)
+      onQueueRecoveryReconcile?.(visibleTask.id, visibleHistory.inputs);
+  }, [onQueueRecoveryReconcile, visibleHistory, visibleTask?.id]);
+  useEffect(() => {
+    if (
+      !visibleTask ||
+      !composerDraft ||
+      composerDraft.recoveryVersion <= appliedQueueRecoveryVersion.current
+    )
+      return;
     const editor = inputApiRef.current;
-    if (!recovered || !editor) return;
-    editor.setText([editor.getText(), recovered].filter(Boolean).join("\n\n"));
+    if (!editor) return;
+    const pendingText = composerDraft.recoveryParts
+      ?.filter((part) => part.version > appliedQueueRecoveryVersion.current)
+      .map((part) => part.text)
+      .join("\n\n");
+    appliedQueueRecoveryVersion.current = composerDraft.recoveryVersion;
+    if (editor.getText().trim() && pendingText) {
+      editor.appendText(`\n\n${pendingText}`);
+    } else if (composerDraft.editorStateJson) {
+      try {
+        editor.setEditorStateJson(composerDraft.editorStateJson);
+      } catch {
+        editor.setText(composerDraft.text);
+      }
+    } else if (editor.getText() !== composerDraft.text) {
+      editor.setText(composerDraft.text);
+    }
+    if (composerDraft.config)
+      setConfigByTask((current) => ({
+        ...current,
+        [visibleTask.id]: composerDraft.config!,
+      }));
     editor.focus();
-    setRecoveredQueueDrafts((current) => {
-      const next = { ...current };
-      delete next[visibleTask.id];
-      return next;
-    });
-  }, [recoveredQueueDrafts, visibleTask?.id]);
+  }, [composerDraft?.recoveryVersion, visibleTask?.id]);
+  useEffect(() => {
+    if (!visibleTask) return;
+    const config = configByTask[visibleTask.id];
+    if (config) onRecoveredConfigChange?.(visibleTask.id, config);
+  }, [configByTask, onRecoveredConfigChange, visibleTask?.id]);
   const activeRound =
     visibleHistory?.inputs.some((input) =>
       ["received", "native-accepted", "started"].includes(input.status),
@@ -1708,6 +1770,7 @@ export function EngineConversation({
         }
         if (inputApiRef.current === editor && editor?.getText().trim() === cleanText)
           editor?.clear();
+        onComposerDraftSubmitted?.(visibleTask.id, cleanText);
         if (selectedAttachments.length > 0) {
           setAttachmentsByTask((current) => ({
             ...current,
@@ -1893,6 +1956,25 @@ export function EngineConversation({
       setNotice({ kind: "info", message: "请先清空当前草稿，再撤回队列项编辑。" });
       return;
     }
+    const parsedModel = modelSelectionSchema.safeParse(input.submissionConfig?.modelSelection);
+    const config = input.submissionConfig
+      ? {
+          ...(typeof input.submissionConfig.mode === "string"
+            ? { mode: input.submissionConfig.mode }
+            : {}),
+          ...(parsedModel.success ? { modelSelection: parsedModel.data } : {}),
+        }
+      : undefined;
+    if (
+      onQueueEditPrepare &&
+      !onQueueEditPrepare(sourceTask.id, inputId, {
+        text: input.text,
+        ...(config ? { config } : {}),
+      })
+    ) {
+      setNotice({ kind: "error", message: "草稿保存失败，队列项已保留；请检查本地存储后重试。" });
+      return;
+    }
     setPendingEditQueueItemId(inputId);
     try {
       const accepted = await runAction(
@@ -1908,25 +1990,17 @@ export function EngineConversation({
         () => null,
       );
       if (!accepted) return;
-      if (selectedTaskIdRef.current === sourceTask.id && inputApiRef.current === editor) {
+      if (onQueueDraftRecovered) {
+        if (!onQueueDraftRecovered(sourceTask.id, inputId))
+          setNotice({ kind: "info", message: "队列项已撤回，草稿恢复待对账；请重新进入此 Task。" });
+      } else if (selectedTaskIdRef.current === sourceTask.id && inputApiRef.current === editor) {
         editor.setText([editor.getText(), input.text].filter(Boolean).join("\n\n"));
         editor.focus();
-      } else {
-        setRecoveredQueueDrafts((current) => ({
-          ...current,
-          [sourceTask.id]: [current[sourceTask.id], input.text].filter(Boolean).join("\n\n"),
-        }));
       }
-      if (input.submissionConfig) {
-        const parsedModel = modelSelectionSchema.safeParse(input.submissionConfig.modelSelection);
+      if (input.submissionConfig && !onQueueDraftRecovered) {
         setConfigByTask((current) => ({
           ...current,
-          [sourceTask.id]: {
-            ...(typeof input.submissionConfig?.mode === "string"
-              ? { mode: input.submissionConfig.mode }
-              : {}),
-            ...(parsedModel.success ? { modelSelection: parsedModel.data } : {}),
-          },
+          [sourceTask.id]: config ?? {},
         }));
       }
     } finally {
@@ -2402,6 +2476,19 @@ export function EngineConversation({
                   }
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
+                  onChange={(value) => {
+                    if (!onRecoveredDraftChange) return;
+                    let editorStateJson: string | undefined;
+                    try {
+                      const editorState = inputApiRef.current?.getEditorState();
+                      editorStateJson = editorState
+                        ? JSON.stringify(editorState.toJSON())
+                        : undefined;
+                    } catch {
+                      // Plain text remains recoverable when the editor state cannot be serialized.
+                    }
+                    onRecoveredDraftChange(visibleTask.id, value, editorStateJson);
+                  }}
                   onImportSharedContext={isZCodeHarness ? importSharedContext : undefined}
                   attachmentAction={platform.canSelectFilePath ? attachmentAction : undefined}
                   showMentionButton={isZCodeHarness}

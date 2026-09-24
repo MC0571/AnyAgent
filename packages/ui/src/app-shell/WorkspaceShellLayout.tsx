@@ -48,6 +48,7 @@ import type {
 import { AutomationsMainBreadcrumbFrame } from "@/settings/AutomationsMainBreadcrumbFrame.js";
 import { PluginStorePage } from "@/settings/PluginStorePage.js";
 import { EngineConversation } from "@/EngineConversation.js";
+import { useEngineComposerDrafts } from "@/app-shell/useEngineComposerDrafts.js";
 import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WorkspaceHeader } from "@/WorkspaceHeader.js";
 import { WorkspaceSidebar, type SidebarFileTreeOpenRequest } from "@/WorkspaceSidebar.js";
@@ -348,6 +349,12 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   const [engineRefreshVersion, setEngineRefreshVersion] = useState(0);
   const [engineInspectorOpen, setEngineInspectorOpen] = useState(false);
   const [engineHeader, setEngineHeader] = useState<{ taskId: string; title: string } | null>(null);
+  // The shell remains mounted while keyed conversations and main pages change.
+  const engineComposerDrafts = useEngineComposerDrafts(
+    workspaceAbsPath,
+    workspaceIdentity,
+    engineSelectedTaskId,
+  );
   const engineHeaderTitle =
     engineHeader?.taskId === engineSelectedTaskId ? engineHeader.title : "任务";
   const handleEngineTitleChange = useCallback((taskId: string, title: string) => {
@@ -1912,6 +1919,19 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                               key={engineSelectedTaskId ?? "engine-draft"}
                               service={engineService}
                               selectedTaskId={engineSelectedTaskId}
+                              composerDraft={
+                                engineSelectedTaskId
+                                  ? engineComposerDrafts.drafts[engineSelectedTaskId]
+                                  : undefined
+                              }
+                              onRecoveredDraftChange={engineComposerDrafts.onRecoveredDraftChange}
+                              onRecoveredConfigChange={engineComposerDrafts.onRecoveredConfigChange}
+                              onComposerDraftSubmitted={engineComposerDrafts.onSubmitted}
+                              onQueueEditPrepare={engineComposerDrafts.onQueueEditPrepare}
+                              onQueueDraftRecovered={engineComposerDrafts.onQueueRecovered}
+                              onQueueRecoveryReconcile={
+                                engineComposerDrafts.onQueueRecoveryReconcile
+                              }
                               onSelectTask={onEngineSelectedTaskIdChange}
                               onTitleChange={handleEngineTitleChange}
                               onOpenCodeViewer={handleOpenCodeViewer}

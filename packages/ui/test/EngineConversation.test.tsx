@@ -180,6 +180,7 @@ test("EngineConversation sends through the product composer and renders ordered 
   });
   const [
     { EngineConversation },
+    { useEngineComposerDrafts },
     { ServiceProvider },
     { PlatformProvider },
     { ZCodeIntlProvider },
@@ -187,6 +188,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     { TooltipProvider },
   ] = await Promise.all([
     import("../src/EngineConversation.js"),
+    import("../src/app-shell/useEngineComposerDrafts.js"),
     import("../src/hooks/useServices.js"),
     import("../src/hooks/usePlatform.js"),
     import("../src/i18n/IntlProvider.js"),
@@ -223,6 +225,7 @@ test("EngineConversation sends through the product composer and renders ordered 
   const feedbackRequests: Array<Record<string, unknown>> = [];
   const stopRequests: Array<{ taskId: string; executionId: string }> = [];
   const queueResumeRequests: string[] = [];
+  let queueCancelGate: Promise<void> | null = null;
   let failNextSubmit = false;
   let clock = 1_000;
   const taskRecord = (id: string) => {
@@ -343,6 +346,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       submissions.push({ text, inputId, executionId, ...(attachments ? { attachments } : {}) });
     },
     cancelQueuedInput: async ({ inputId }: { inputId: string }) => {
+      if (queueCancelGate) await queueCancelGate;
       history = {
         ...history,
         inputs: history.inputs.map((input) =>
@@ -1395,6 +1399,224 @@ test("EngineConversation sends through the product composer and renders ordered 
     );
     assert.doesNotMatch(container.textContent ?? "", /Late event from Task A/);
     assert.doesNotMatch(container.textContent ?? "", /inspect running execution/);
+
+    // The shell owner stays mounted when a keyed Task or main page changes while
+    // cancellation is pending. The ACK must restore the draft to its source Task.
+    let queueControls: ReturnType<typeof useEngineComposerDrafts> | null = null;
+    function QueueEditWorkspace({
+      selectedTaskId,
+      page,
+    }: {
+      selectedTaskId: string;
+      page: "engine" | "automations";
+    }) {
+      const drafts = useEngineComposerDrafts("/tmp/anyagent-ui", undefined, selectedTaskId);
+      queueControls = drafts;
+      return page === "engine"
+        ? createElement(EngineConversation, {
+            key: selectedTaskId,
+            service: service as never,
+            selectedTaskId,
+            onSelectTask: () => {},
+            composerDraft: drafts.drafts[selectedTaskId],
+            onRecoveredDraftChange: drafts.onRecoveredDraftChange,
+            onRecoveredConfigChange: drafts.onRecoveredConfigChange,
+            onComposerDraftSubmitted: drafts.onSubmitted,
+            onQueueEditPrepare: drafts.onQueueEditPrepare,
+            onQueueDraftRecovered: drafts.onQueueRecovered,
+            onQueueRecoveryReconcile: drafts.onQueueRecoveryReconcile,
+          })
+        : createElement("div", { "data-testid": "automation-page" });
+    }
+    const queueAppFor = (selectedTaskId: string, page: "engine" | "automations" = "engine") =>
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(
+          ServiceProvider,
+          { services: services as never },
+          createElement(
+            PlatformProvider,
+            { platform: platform as never },
+            createElement(
+              ZCodeIntlProvider,
+              { initialLocale: "zh-CN" },
+              createElement(
+                TabStoreProvider,
+                null,
+                createElement(QueueEditWorkspace, { selectedTaskId, page }),
+              ),
+            ),
+          ),
+        ),
+      );
+    engineProjection = currentEngine;
+    activeTask = { ...task, currentEngine };
+    unavailableWorkspacePath = null;
+    history = {
+      ...emptyHistory(),
+      inputs: [
+        {
+          id: "input-queued-late",
+          taskId,
+          participantId,
+          sessionId,
+          text: "Recovered after navigation",
+          status: "queued",
+          receivedAt: 3_000,
+          acceptedAt: null,
+          startedAt: null,
+          terminalAt: null,
+          error: null,
+        },
+      ],
+    };
+    await act(async () => root.render(queueAppFor(taskId)));
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="v4-queue-item-edit-input-queued-late"]')),
+    );
+    let releaseQueueCancel!: () => void;
+    queueCancelGate = new Promise<void>((resolve) => {
+      releaseQueueCancel = resolve;
+    });
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-edit-input-queued-late"]')
+        ?.click(),
+    );
+    assert.equal(history.inputs[0]?.status, "queued", "Host cancellation is still pending");
+    await act(async () => root.render(queueAppFor(taskBId)));
+    await act(async () => root.render(queueAppFor(taskBId, "automations")));
+    assert.ok(container.querySelector('[data-testid="automation-page"]'));
+    await act(async () => releaseQueueCancel());
+    await waitFor(() => assert.equal(history.inputs[0]?.status, "cancelled"));
+    await act(async () => root.render(queueAppFor(taskId)));
+    await waitFor(() => {
+      const editor = container.querySelector<HTMLElement>(
+        '[data-testid="engine-composer-input"]',
+      ) as HTMLElement & { __zcodeLexicalInputE2E?: { getText: () => string } };
+      assert.equal(editor?.__zcodeLexicalInputE2E?.getText(), "Recovered after navigation");
+    });
+    queueCancelGate = null;
+
+    const { readV4ComposerDraft } = await import("../src/v4/composer/composerDraftStore.js");
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)?.text,
+      "Recovered after navigation",
+    );
+    assert.equal(
+      queueControls!.onQueueEditPrepare(taskBId, "queued-before-restart", {
+        text: "Only after cancellation",
+        config: { mode: "plan" },
+      }),
+      true,
+    );
+    historyB = {
+      ...emptyHistory(taskBId),
+      inputs: [
+        {
+          id: "queued-before-restart",
+          taskId: taskBId,
+          participantId: activeTaskB.participant.id,
+          sessionId: activeTaskB.session.id,
+          text: "Only after cancellation",
+          status: "queued",
+          receivedAt: 4_000,
+        },
+      ],
+    };
+    // Unmount the owner as an App restart would, leaving only the existing V4 draft store.
+    await act(async () => root.render(appFor(taskBId)));
+    queueControls = null;
+    await act(async () => root.render(queueAppFor(taskBId)));
+    await waitFor(() =>
+      assert.equal(
+        container
+          .querySelector<HTMLElement>('[data-testid="engine-composer-input"]')
+          ?.__zcodeLexicalInputE2E?.getText(),
+        "",
+      ),
+    );
+    historyB = {
+      ...historyB,
+      inputs: historyB.inputs.map((input) =>
+        input.id === "queued-before-restart" ? { ...input, status: "cancelled" } : input,
+      ),
+    };
+    await act(async () => emit(taskBId, historyB));
+    await waitFor(() =>
+      assert.equal(
+        container
+          .querySelector<HTMLElement>('[data-testid="engine-composer-input"]')
+          ?.__zcodeLexicalInputE2E?.getText(),
+        "Only after cancellation",
+      ),
+    );
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`)
+        ?.queueEditOriginalMode,
+      "plan",
+    );
+    const recoveredB = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & { __zcodeLexicalInputE2E: { setText: (value: string) => void } };
+    await act(async () => recoveredB.__zcodeLexicalInputE2E.setText(""));
+    await waitFor(() =>
+      assert.equal(
+        readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`),
+        null,
+      ),
+    );
+    await act(async () => recoveredB.__zcodeLexicalInputE2E.setText("ordinary draft"));
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`),
+      null,
+      "ordinary Composer text must not become a queue recovery draft",
+    );
+    await act(async () => recoveredB.__zcodeLexicalInputE2E.setText(""));
+    historyB = {
+      ...historyB,
+      inputs: [
+        ...historyB.inputs,
+        {
+          id: "queue-storage-failure",
+          taskId: taskBId,
+          participantId: activeTaskB.participant.id,
+          sessionId: activeTaskB.session.id,
+          text: "Do not cancel without a saved copy",
+          status: "queued",
+          receivedAt: 4_001,
+        },
+      ],
+    };
+    await act(async () => emit(taskBId, historyB));
+    const storage = dom.window.localStorage;
+    const storagePrototype = Object.getPrototypeOf(storage);
+    const originalSetItem = Object.getOwnPropertyDescriptor(storagePrototype, "setItem")!;
+    Object.defineProperty(storagePrototype, "setItem", {
+      configurable: true,
+      value: () => {
+        throw new Error("storage unavailable");
+      },
+    });
+    try {
+      assert.equal(
+        queueControls!.onQueueEditPrepare(taskBId, "storage-probe", { text: "probe" }),
+        false,
+      );
+      const failedEditButton = container.querySelector<HTMLButtonElement>(
+        '[data-testid="v4-queue-item-edit-queue-storage-failure"]',
+      );
+      assert.ok(failedEditButton);
+      assert.equal(failedEditButton.disabled, false);
+      await act(async () => failedEditButton.click());
+      assert.equal(historyB.inputs.at(-1)?.status, "queued");
+      await waitFor(() =>
+        assert.match(document.body.textContent ?? "", /草稿保存失败，队列项已保留/),
+      );
+    } finally {
+      Object.defineProperty(storagePrototype, "setItem", originalSetItem);
+    }
   } finally {
     await act(async () => root.unmount());
     container.remove();

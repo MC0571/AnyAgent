@@ -24,6 +24,10 @@ export interface V4ComposerDraft {
   lastPlanTransitionId?: string;
   lastPermissionGrantId?: string;
   modelSelection?: ModelSelection;
+  /** AnyAgent queue-edit scopes only: makes a prepared Input merge idempotent. */
+  queueEditRecoveredInputIds?: string[];
+  /** Preserves the original queue mode, including plan, across draft restoration. */
+  queueEditOriginalMode?: SubmissionMode;
   /** 首次分享导入等待公共新任务初始化；不能由空 Session snapshot 抢先填充。 */
   initializeFromNewTask?: true;
   updatedAt: number;
@@ -133,6 +137,16 @@ function readDraft(value: unknown): V4ComposerDraft | null {
       ? { lastPlanTransitionId: value.lastPlanTransitionId }
       : {}),
     ...(modelSelection ? { modelSelection } : {}),
+    ...(Array.isArray(value.queueEditRecoveredInputIds)
+      ? {
+          queueEditRecoveredInputIds: value.queueEditRecoveredInputIds.filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          ),
+        }
+      : {}),
+    ...(submissionModeSchema.safeParse(value.queueEditOriginalMode).success
+      ? { queueEditOriginalMode: value.queueEditOriginalMode as SubmissionMode }
+      : {}),
     ...(value.initializeFromNewTask === true && !mode.success
       ? { initializeFromNewTask: true as const }
       : {}),
@@ -188,6 +202,8 @@ export function persistV4ComposerDraft(
     !draft.mention &&
     !draft.mode &&
     !draft.modelSelection &&
+    !draft.queueEditRecoveredInputIds?.length &&
+    !draft.queueEditOriginalMode &&
     !draft.initializeFromNewTask
   ) {
     delete file.scopes[scopeId];
