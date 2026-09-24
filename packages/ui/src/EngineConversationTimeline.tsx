@@ -37,6 +37,13 @@ import { isPlainRecord } from "@/ToolCallBlocks/fileSummaryTypes.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 import { Button } from "@/components/ui/button.js";
 import { Textarea } from "@/components/ui/textarea.js";
+import {
+  Attachment,
+  AttachmentInfo,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+} from "@/components/ai-elements/attachments.js";
 import type { AssistantTextRow, UserInputRow } from "@zcode/shared/zcode-protocol-v4";
 import { AssistantCodeCommentFeatureProvider } from "@/AssistantCodeCommentFeatureProvider.js";
 import { useConversationTimelineFind } from "@/v4/useConversationTimelineFind.js";
@@ -675,11 +682,52 @@ function EngineUserInputMessage({
   superseded: boolean;
   editable: boolean;
   busyAction: string | null;
-  onEdit?: (text: string) => Promise<boolean>;
+  onEdit?: (text: string, retainedAttachmentIds: readonly string[]) => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(input.text);
+  const [retainedAttachmentIds, setRetainedAttachmentIds] = useState<readonly string[]>(
+    input.attachments?.map((attachment) => attachment.id) ?? [],
+  );
   const { intl } = useZCodeIntl();
+  const retainedAttachments =
+    input.attachments?.filter((attachment) => retainedAttachmentIds.includes(attachment.id)) ?? [];
+  const attachmentList = (removable: boolean) =>
+    (removable ? retainedAttachments : (input.attachments ?? [])).length ? (
+      <Attachments variant="inline" className="flex max-w-full flex-wrap gap-2">
+        {(removable ? retainedAttachments : (input.attachments ?? [])).map((attachment) => (
+          <Attachment
+            key={attachment.id}
+            variant="inline"
+            data={{
+              id: attachment.id,
+              type: "file",
+              filename: attachment.fileName,
+              mediaType: attachment.mimeType,
+              url: "",
+            }}
+            {...(removable
+              ? {
+                  onRemove: () =>
+                    setRetainedAttachmentIds((current) =>
+                      current.filter((id) => id !== attachment.id),
+                    ),
+                }
+              : {})}
+            data-testid={`engine-edit-attachment-${attachment.id}`}
+          >
+            <AttachmentPreview />
+            <AttachmentInfo className="max-w-48 text-ui-base text-foreground" />
+            {removable ? (
+              <AttachmentRemove
+                alwaysVisible
+                label={intl.formatMessage({ id: "chat.attachments.remove" })}
+              />
+            ) : null}
+          </Attachment>
+        ))}
+      </Attachments>
+    ) : null;
   return (
     <Message from="user" data-testid={`engine-input-${input.id}`} data-row-id={findRowId}>
       <div className="group/user-row flex flex-col items-end">
@@ -689,6 +737,7 @@ function EngineUserInputMessage({
             taskId={null}
             enableMentionPanel={false}
             initialValue={input.text}
+            topContent={attachmentList(true)}
             submitting={busyAction !== null}
             submitDisabled={!draft.trim() || busyAction !== null}
             submitLabel={intl.formatMessage({ id: "chat.send" })}
@@ -700,7 +749,7 @@ function EngineUserInputMessage({
             shellClassName="min-h-32"
             onChange={setDraft}
             onSubmit={(text) => {
-              void onEdit(text).then((accepted) => {
+              void onEdit(text, retainedAttachmentIds).then((accepted) => {
                 if (accepted) setEditing(false);
               });
             }}
@@ -713,6 +762,7 @@ function EngineUserInputMessage({
               className="flex max-w-full flex-col gap-2 rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base text-foreground @min-[624px]/conversation:max-w-xl"
             >
               <ConversationUserInputContent text={input.text} />
+              {attachmentList(false)}
             </div>
             <ConversationUserInputActions
               text={input.text}
@@ -721,6 +771,9 @@ function EngineUserInputMessage({
                 editable && onEdit
                   ? () => {
                       setDraft(input.text);
+                      setRetainedAttachmentIds(
+                        input.attachments?.map((attachment) => attachment.id) ?? [],
+                      );
                       setEditing(true);
                     }
                   : undefined
@@ -836,7 +889,11 @@ export function EngineConversationTimeline({
   forkBlockedReason?: string | null;
   onForkExecution?: (executionId: string) => void;
   revisionBlockedReason?: string | null;
-  onEditExecution?: (executionId: string, text: string) => Promise<boolean>;
+  onEditExecution?: (
+    executionId: string,
+    text: string,
+    retainedAttachmentIds: readonly string[],
+  ) => Promise<boolean>;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -954,7 +1011,8 @@ export function EngineConversationTimeline({
             busyAction={busyAction}
             onEdit={
               onEditExecution && latestEditableExecutionId
-                ? (text) => onEditExecution(latestEditableExecutionId, text)
+                ? (text, retainedAttachmentIds) =>
+                    onEditExecution(latestEditableExecutionId, text, retainedAttachmentIds)
                 : undefined
             }
           />

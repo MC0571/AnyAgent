@@ -386,6 +386,9 @@ export interface EngineAdapter {
       readonly kind: "edit" | "retry";
       readonly sourceExecutionId: EngineExecutionRef;
       readonly commandId: string;
+      /** Source metadata is checked against native rows before selecting retained indices. */
+      readonly sourceAttachments?: readonly Omit<EngineAttachment, "locator" | "id">[];
+      readonly retainedAttachmentIndices?: readonly number[];
     };
   }): Promise<EngineRun>;
   replyToApproval(input: {

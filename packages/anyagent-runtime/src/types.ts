@@ -403,6 +403,8 @@ export interface ReviseTurn {
   readonly kind: "edit" | "retry";
   /** Required for edit; retry reuses the canonical original input. */
   readonly text?: string;
+  /** Exact source attachments retained by an edit; omitted keeps all for older callers. */
+  readonly retainedAttachmentIds?: readonly string[];
 }
 
 export type StageAttachment = StageRuntimeAttachmentInput;

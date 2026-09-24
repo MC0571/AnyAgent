@@ -1039,7 +1039,11 @@ export function EngineConversation({
     );
   };
 
-  const editExecution = async (executionId: string, text: string): Promise<boolean> => {
+  const editExecution = async (
+    executionId: string,
+    text: string,
+    retainedAttachmentIds: readonly string[],
+  ): Promise<boolean> => {
     if (!visibleTask || revisionBlockedReason || busyAction || !text.trim()) return false;
     return runAction(
       `edit:${executionId}`,
@@ -1052,6 +1056,7 @@ export function EngineConversation({
           sourceExecutionId: executionId,
           kind: "edit",
           text,
+          retainedAttachmentIds,
         }),
       () => null,
     );

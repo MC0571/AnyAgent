@@ -473,12 +473,30 @@ export function createZCodeAdapter(options: {
     target: { rowId: number; entityId: string };
     baseRevision: number;
     baseLogEpoch: string;
+    attachments?: readonly {
+      ref: string;
+      fileName: string;
+      mime: string;
+      bytes: number;
+      previewRef?: string;
+    }[];
   }> {
     let beforeRowId: number | undefined;
     let baseRevision: number | undefined;
     let baseLogEpoch: string | undefined;
     const sourceTurnIds: string[] = [];
-    const candidates: Array<{ turnId: string; rowId: number; entityId: string }> = [];
+    const candidates: Array<{
+      turnId: string;
+      rowId: number;
+      entityId: string;
+      attachments?: readonly {
+        ref: string;
+        fileName: string;
+        mime: string;
+        bytes: number;
+        previewRef?: string;
+      }[];
+    }> = [];
     try {
       while (true) {
         const page = await options.agent.conversationRowsRangeV4({
@@ -506,7 +524,12 @@ export function createZCodeAdapter(options: {
             ((kind === "edit" && row.kind === "userInput" && row.actions?.canEdit) ||
               (kind === "retry" && row.kind === "assistantText" && row.actions?.canRetry))
           )
-            candidates.push({ turnId: row.turnId, rowId: row.rowId, entityId: row.entityId });
+            candidates.push({
+              turnId: row.turnId,
+              rowId: row.rowId,
+              entityId: row.entityId,
+              ...(row.kind === "userInput" ? { attachments: row.attachments } : {}),
+            });
         }
         if (!page.hasMore) break;
         const nextBeforeRowId = page.rows[0]?.rowId;
@@ -545,6 +568,7 @@ export function createZCodeAdapter(options: {
       target: { rowId: targets[0]!.rowId, entityId: targets[0]!.entityId },
       baseRevision,
       baseLogEpoch,
+      attachments: targets[0]!.attachments,
     };
   }
 
@@ -1198,6 +1222,55 @@ export function createZCodeAdapter(options: {
       const nativeRevisionTarget = revision
         ? await resolveRevisionTarget(session, revision.sourceExecutionId, revision.kind)
         : null;
+      let editedAttachments:
+        | Array<{ ref: string; fileName: string; mime: string; bytes: number }>
+        | undefined;
+      if (revision?.kind === "edit" && revision.sourceAttachments) {
+        const nativeAttachments = nativeRevisionTarget?.attachments ?? [];
+        if (
+          nativeAttachments.length !== revision.sourceAttachments.length ||
+          nativeAttachments.some((attachment, index) => {
+            const expected = revision.sourceAttachments![index]!;
+            return (
+              attachment.fileName !== expected.fileName ||
+              attachment.mime !== expected.mimeType ||
+              attachment.bytes !== expected.sizeBytes
+            );
+          })
+        )
+          throw operationError(
+            operation,
+            "The native source attachments differ from the product Input.",
+            "result-unknown",
+            "none",
+          );
+        const indices =
+          revision.retainedAttachmentIndices ?? nativeAttachments.map((_, index) => index);
+        if (
+          indices.some(
+            (index, position) =>
+              !Number.isSafeInteger(index) ||
+              index < 0 ||
+              index >= nativeAttachments.length ||
+              (position > 0 && index <= indices[position - 1]!),
+          )
+        )
+          throw operationError(
+            operation,
+            "Invalid retained attachment selection.",
+            "protocol-error",
+            "none",
+          );
+        editedAttachments = indices.map((index) => nativeAttachments[index]!);
+        editedAttachments.push(
+          ...(attachments ?? []).map((attachment) => ({
+            ref: attachment.locator,
+            fileName: attachment.fileName,
+            mime: attachment.mimeType,
+            bytes: attachment.sizeBytes,
+          })),
+        );
+      }
       if (runs.has(session) || compactOperations.has(session))
         throw operationError(
           operation,
@@ -1210,7 +1283,13 @@ export function createZCodeAdapter(options: {
           ? {
               ...command(revision.kind === "edit" ? "editUserQuery" : "retryTurn", session, {
                 target: nativeRevisionTarget.target,
-                ...(revision.kind === "edit" ? { newText: input, workspaceMode: "preserve" } : {}),
+                ...(revision.kind === "edit"
+                  ? {
+                      newText: input,
+                      workspaceMode: "preserve",
+                      ...(editedAttachments ? { attachments: editedAttachments } : {}),
+                    }
+                  : {}),
               }),
               commandId: revision.commandId,
               baseRevision: nativeRevisionTarget.baseRevision,

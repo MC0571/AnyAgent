@@ -469,6 +469,18 @@ test("product conversation forks into a fresh Task and displays only its verifie
       participantId: sourceTask.participant.id,
       sessionId: sourceTask.session.id,
       text: `question ${index}`,
+      ...(index === 2
+        ? {
+            attachments: [
+              {
+                id: "source-attachment",
+                fileName: "notes.md",
+                mimeType: "text/markdown",
+                sizeBytes: 12,
+              },
+            ],
+          }
+        : {}),
       status: "completed",
       receivedAt: index * 1_000,
       acceptedAt: index * 1_000 + 1,
@@ -610,6 +622,15 @@ test("product conversation forks into a fresh Task and displays only its verifie
       '[data-testid="engine-edit-input-source-input-2"]',
     ) as HTMLElement & { __zcodeLexicalInputE2E?: { setText: (text: string) => void } };
     assert.ok(editInput?.__zcodeLexicalInputE2E);
+    const editAttachment = container.querySelector<HTMLElement>(
+      '[data-testid="engine-edit-attachment-source-attachment"]',
+    );
+    assert.match(editAttachment?.textContent ?? "", /notes\.md/u);
+    await act(async () => editAttachment?.querySelector<HTMLButtonElement>("button")?.click());
+    assert.equal(
+      container.querySelector('[data-testid="engine-edit-attachment-source-attachment"]'),
+      null,
+    );
     await act(async () => editInput.__zcodeLexicalInputE2E!.setText("revised second question"));
     await act(async () => {
       container
@@ -625,6 +646,7 @@ test("product conversation forks into a fresh Task and displays only its verifie
         sourceExecutionId: "source-execution-2",
         kind: "edit",
         text: "revised second question",
+        retainedAttachmentIds: [],
       },
     ]);
     assert.equal(sourceHistory.inputs.length, 3);

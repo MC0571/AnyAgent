@@ -19,6 +19,7 @@ interface NativeAssistantRow {
   state?: string;
   marker?: { type: string; status?: string };
   actions?: { canFork?: true; canEdit?: true; canRetry?: true };
+  attachments?: { ref: string; fileName: string; mime: string; bytes: number }[];
 }
 
 function harness({
@@ -994,6 +995,81 @@ test("ZCode edit and retry resolve only their native source turn and preserve a 
     } finally {
       fixture.adapter.dispose();
     }
+  }
+});
+
+test("ZCode edit sends the selected native attachments and refuses a mismatched source", async () => {
+  const rows: NativeAssistantRow[] = [];
+  const fixture = harness({ rows });
+  try {
+    const session = await fixture.adapter.createSession();
+    const source = await fixture.adapter.run({ session, input: "source" });
+    completeNativeSource(fixture);
+    rows.push(
+      {
+        rowId: 10,
+        entityId: "header",
+        kind: "turnHeader",
+        turnId: "source-turn",
+        sourceCommandId: source.executionId,
+      },
+      {
+        rowId: 11,
+        entityId: "user",
+        kind: "userInput",
+        turnId: "source-turn",
+        actions: { canEdit: true },
+        attachments: [
+          { ref: "native:a", fileName: "a.md", mime: "text/markdown", bytes: 1 },
+          { ref: "native:b", fileName: "b.md", mime: "text/markdown", bytes: 2 },
+        ],
+      },
+    );
+    const sourceAttachments = [
+      { fileName: "a.md", mimeType: "text/markdown", sizeBytes: 1 },
+      { fileName: "b.md", mimeType: "text/markdown", sizeBytes: 2 },
+    ];
+    await assert.rejects(
+      () =>
+        fixture.adapter.run({
+          session,
+          input: "unsafe",
+          revision: {
+            kind: "edit",
+            sourceExecutionId: source.executionId,
+            commandId: "edit-mismatch",
+            sourceAttachments: [{ ...sourceAttachments[0]!, sizeBytes: 99 }, sourceAttachments[1]!],
+            retainedAttachmentIndices: [],
+          },
+        }),
+      /native source attachments differ/u,
+    );
+    assert.equal(
+      fixture.commands.some((entry) => entry.commandId === "edit-mismatch"),
+      false,
+    );
+    await fixture.adapter.run({
+      session,
+      input: "edited",
+      revision: {
+        kind: "edit",
+        sourceExecutionId: source.executionId,
+        commandId: "edit-retain-b",
+        sourceAttachments,
+        retainedAttachmentIndices: [1],
+      },
+    });
+    assert.deepEqual(
+      fixture.commands.find((entry) => entry.commandId === "edit-retain-b")?.payload,
+      {
+        target: { rowId: 11, entityId: "user" },
+        newText: "edited",
+        workspaceMode: "preserve",
+        attachments: [{ ref: "native:b", fileName: "b.md", mime: "text/markdown", bytes: 2 }],
+      },
+    );
+  } finally {
+    fixture.adapter.dispose();
   }
 });
 

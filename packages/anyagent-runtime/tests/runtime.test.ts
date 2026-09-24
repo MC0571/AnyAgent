@@ -1505,6 +1505,7 @@ test("edit and retry create new product Input and Execution in the same Task and
   const runtime = createTaskRuntime({
     databasePath: ":memory:",
     engines: new Map([["manual", engine]]),
+    stageAttachment: async () => ({ locator: "host:source-attachment", sizeBytes: 12 }),
   });
   try {
     const task = await runtime.createTask({ engineId: "manual", environment, authorization });
@@ -1527,7 +1528,14 @@ test("edit and retry create new product Input and Execution in the same Task and
       });
       await until(() => runtime.getHistory(task.id)!.executions[index]!.status === "completed");
     };
-    await runtime.submitInput({ ...identity, text: "original text" });
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/tmp/source.md",
+      fileName: "source.md",
+      mimeType: "text/markdown",
+      sizeBytes: 12,
+    });
+    await runtime.submitInput({ ...identity, text: "original text", attachments: [attachment] });
     await completeRun(0, "original answer");
     const original = structuredClone(runtime.getHistory(task.id)!);
     await assert.rejects(() =>
@@ -1539,12 +1547,25 @@ test("edit and retry create new product Input and Execution in the same Task and
       }),
     );
     assert.equal(engine.runs.length, 1);
+    await assert.rejects(
+      () =>
+        runtime.reviseTurn({
+          ...identity,
+          sourceExecutionId: original.executions[0]!.id,
+          kind: "edit",
+          text: "unsafe edit",
+          retainedAttachmentIds: ["attachment-from-another-task"],
+        }),
+      /does not belong to the source Input/u,
+    );
+    assert.equal(engine.runs.length, 1);
 
     const edited = await runtime.reviseTurn({
       ...identity,
       sourceExecutionId: original.executions[0]!.id,
       kind: "edit",
       text: "edited text",
+      retainedAttachmentIds: [],
     });
     assert.equal(edited.text, "edited text");
     assert.deepEqual(edited.revisionOf, {
@@ -1555,6 +1576,15 @@ test("edit and retry create new product Input and Execution in the same Task and
     assert.equal(engine.runs[1]?.session, task.session.nativeSessionId);
     assert.equal(engine.runs[1]?.revision?.sourceExecutionId, engine.runs[0]?.executionId);
     assert.equal(engine.runs[1]?.executionId, engine.runs[1]?.revision?.commandId);
+    assert.deepEqual(edited.attachments, []);
+    assert.deepEqual(engine.runs[1]?.revision?.sourceAttachments, [
+      {
+        fileName: "source.md",
+        mimeType: "text/markdown",
+        sizeBytes: 12,
+      },
+    ]);
+    assert.deepEqual(engine.runs[1]?.revision?.retainedAttachmentIndices, []);
     await completeRun(1, "edited answer");
 
     const retrySource = runtime.getHistory(task.id)!.executions[1]!;

@@ -924,6 +924,27 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError("Revision source Input ownership does not match.");
     const text = input.kind === "retry" ? sourceInput.data.text : input.text?.trim();
     if (!text) throw new RuntimeEligibilityError("Edited input text must not be empty.");
+    if (input.kind === "retry" && input.retainedAttachmentIds !== undefined)
+      throw new RuntimeEligibilityError("Retry cannot change source attachments.");
+    const sourceAttachments = sourceInput.data.attachments ?? [];
+    const retainedIds = input.retainedAttachmentIds;
+    if (
+      retainedIds !== undefined &&
+      (!Array.isArray(retainedIds) || retainedIds.some((id) => typeof id !== "string"))
+    )
+      throw new RuntimeEligibilityError("Retained attachments must be source attachment IDs.");
+    const retained =
+      retainedIds === undefined
+        ? sourceAttachments
+        : sourceAttachments.filter((attachment) => retainedIds.includes(attachment.id));
+    if (
+      retainedIds &&
+      (new Set(retainedIds).size !== retainedIds.length || retained.length !== retainedIds.length)
+    )
+      throw new RuntimeEligibilityError(
+        "An edited attachment does not belong to the source Input.",
+        "ownership",
+      );
     return this.#submitInput(
       {
         taskId: input.taskId,
@@ -944,7 +965,11 @@ export class TaskRuntime {
           inputId: sourceInput.id,
           executionId: sourceExecution.id,
         },
-        historicalAttachments: sourceInput.data.attachments,
+        historicalAttachments: retained,
+        sourceAttachments,
+        retainedAttachmentIndices: retained.map((attachment) =>
+          sourceAttachments.indexOf(attachment),
+        ),
       },
     );
   }
@@ -957,6 +982,8 @@ export class TaskRuntime {
       readonly commandId: string;
       readonly revisionOf: NonNullable<RuntimeInput["revisionOf"]>;
       readonly historicalAttachments?: readonly RuntimeAttachmentReference[];
+      readonly sourceAttachments?: readonly RuntimeAttachmentReference[];
+      readonly retainedAttachmentIndices?: readonly number[];
     },
     promotedInputId?: string,
   ): Promise<RuntimeInput> {
@@ -1279,6 +1306,14 @@ export class TaskRuntime {
                 kind: revision.kind,
                 sourceExecutionId: revision.sourceExecutionId,
                 commandId: revision.commandId,
+                ...(revision.kind === "edit"
+                  ? {
+                      sourceAttachments: revision.sourceAttachments?.map(
+                        ({ fileName, mimeType, sizeBytes }) => ({ fileName, mimeType, sizeBytes }),
+                      ),
+                      retainedAttachmentIndices: revision.retainedAttachmentIndices,
+                    }
+                  : {}),
               },
             }
           : {}),
