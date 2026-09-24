@@ -1614,6 +1614,60 @@ test("edit and retry create new product Input and Execution in the same Task and
   }
 });
 
+test("an edit appends a fresh Host-staged attachment without rewriting its source", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async () => ({ locator: "host:new-attachment", sizeBytes: 7 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "source" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "source-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "source answer",
+      evidence: { source: "engine", evidenceId: "source-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    const source = runtime.getHistory(task.id)!;
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/tmp/new.txt",
+      fileName: "new.txt",
+      mimeType: "text/plain",
+      sizeBytes: 7,
+    });
+    const edited = await runtime.reviseTurn({
+      ...identity,
+      sourceExecutionId: source.executions[0]!.id,
+      kind: "edit",
+      text: "edited",
+      retainedAttachmentIds: [],
+      attachments: [attachment],
+    });
+    assert.deepEqual(edited.attachments, [attachment]);
+    assert.equal(source.inputs[0]!.attachments, undefined);
+    assert.deepEqual(engine.runs[1]?.attachments, [
+      { ...attachment, locator: "host:new-attachment" },
+    ]);
+    assert.deepEqual(engine.runs[1]?.revision?.sourceAttachments, []);
+  } finally {
+    runtime.close();
+  }
+});
+
 test("unknown native revision leaves its product Input and stable command intent recorded", async () => {
   const engine = new ManualEngine();
   const runtime = createTaskRuntime({

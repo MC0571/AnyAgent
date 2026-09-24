@@ -405,6 +405,8 @@ export interface ReviseTurn {
   readonly text?: string;
   /** Exact source attachments retained by an edit; omitted keeps all for older callers. */
   readonly retainedAttachmentIds?: readonly string[];
+  /** Newly staged attachments to append to the retained source list. */
+  readonly attachments?: readonly RuntimeAttachmentReference[];
 }
 
 export type StageAttachment = StageRuntimeAttachmentInput;

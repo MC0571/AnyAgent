@@ -1051,6 +1051,15 @@ test("ZCode edit sends the selected native attachments and refuses a mismatched 
     await fixture.adapter.run({
       session,
       input: "edited",
+      attachments: [
+        {
+          id: "fresh",
+          locator: "host:new",
+          fileName: "new.txt",
+          mimeType: "text/plain",
+          sizeBytes: 7,
+        },
+      ],
       revision: {
         kind: "edit",
         sourceExecutionId: source.executionId,
@@ -1065,7 +1074,10 @@ test("ZCode edit sends the selected native attachments and refuses a mismatched 
         target: { rowId: 11, entityId: "user" },
         newText: "edited",
         workspaceMode: "preserve",
-        attachments: [{ ref: "native:b", fileName: "b.md", mime: "text/markdown", bytes: 2 }],
+        attachments: [
+          { ref: "native:b", fileName: "b.md", mime: "text/markdown", bytes: 2 },
+          { ref: "host:new", fileName: "new.txt", mime: "text/plain", bytes: 7 },
+        ],
       },
     );
   } finally {

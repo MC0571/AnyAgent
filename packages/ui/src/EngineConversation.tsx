@@ -21,7 +21,10 @@ import {
   timeLabel,
 } from "@/EngineUiParts.js";
 import type { EngineHistory, EngineTask } from "@/EngineUiParts.js";
-import { EngineConversationTimeline } from "@/EngineConversationTimeline.js";
+import {
+  EngineConversationTimeline,
+  type EngineLocalAttachment,
+} from "@/EngineConversationTimeline.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
 import {
   projectEngineConversation,
@@ -72,12 +75,7 @@ type InheritedSource = {
   projection: EngineConversationProjection | null;
   submissionConfig?: NonNullable<EngineHistory["inputs"][number]["submissionConfig"]>;
 };
-type EngineComposerAttachment = {
-  localPath: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-};
+type EngineComposerAttachment = EngineLocalAttachment;
 const contentWidthClassName = getConversationContentWidthClassName({
   centeredEmptyLayout: false,
   statusPanelLayout: "none",
@@ -1043,12 +1041,24 @@ export function EngineConversation({
     executionId: string,
     text: string,
     retainedAttachmentIds: readonly string[],
+    addedAttachments: readonly EngineLocalAttachment[],
   ): Promise<boolean> => {
     if (!visibleTask || revisionBlockedReason || busyAction || !text.trim()) return false;
     return runAction(
       `edit:${executionId}`,
-      () =>
-        service.reviseTurn({
+      async () => {
+        const attachments = await Promise.all(
+          addedAttachments.map((attachment) =>
+            service.stageAttachment({
+              taskId: visibleTask.id,
+              participantId: visibleTask.participant.id,
+              sessionId: visibleTask.session.id,
+              authorizationId: visibleTask.authorizationId,
+              ...attachment,
+            }),
+          ),
+        );
+        return service.reviseTurn({
           taskId: visibleTask.id,
           participantId: visibleTask.participant.id,
           sessionId: visibleTask.session.id,
@@ -1057,13 +1067,14 @@ export function EngineConversation({
           kind: "edit",
           text,
           retainedAttachmentIds,
-        }),
+          ...(attachments.length ? { attachments } : {}),
+        });
+      },
       () => null,
     );
   };
 
-  const openAttachmentPicker = useCallback(async () => {
-    if (!visibleTask) return;
+  const chooseLocalAttachments = useCallback(async (): Promise<EngineLocalAttachment[]> => {
     try {
       const selectedPaths = platform.selectFiles
         ? await platform.selectFiles()
@@ -1080,15 +1091,21 @@ export function EngineConversation({
             sizeBytes: 0,
           };
         });
-      if (attachments.length === 0) return;
-      setAttachmentsByTask((current) => ({
-        ...current,
-        [visibleTask.id]: [...(current[visibleTask.id] ?? []), ...attachments],
-      }));
+      return attachments;
     } catch (error) {
       setNotice({ kind: "error", message: errorText(error) });
+      return [];
     }
-  }, [platform, visibleTask]);
+  }, [platform]);
+  const openAttachmentPicker = useCallback(async () => {
+    if (!visibleTask) return;
+    const attachments = await chooseLocalAttachments();
+    if (attachments.length === 0) return;
+    setAttachmentsByTask((current) => ({
+      ...current,
+      [visibleTask.id]: [...(current[visibleTask.id] ?? []), ...attachments],
+    }));
+  }, [chooseLocalAttachments, visibleTask]);
   const attachmentAction = useMemo(
     () => ({
       label: intl.formatMessage({ id: "chat.composer.attachment" }),
@@ -1171,6 +1188,7 @@ export function EngineConversation({
               onForkExecution={forkExecution}
               revisionBlockedReason={revisionBlockedReason}
               onEditExecution={editExecution}
+              onPickEditAttachments={chooseLocalAttachments}
               conversationFindQuery={conversationFindQuery}
               conversationFindActiveIndex={conversationFindActiveIndex}
               conversationFindNavigationRequestId={conversationFindNavigationRequestId}

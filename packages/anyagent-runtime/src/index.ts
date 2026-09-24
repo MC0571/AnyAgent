@@ -924,7 +924,10 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError("Revision source Input ownership does not match.");
     const text = input.kind === "retry" ? sourceInput.data.text : input.text?.trim();
     if (!text) throw new RuntimeEligibilityError("Edited input text must not be empty.");
-    if (input.kind === "retry" && input.retainedAttachmentIds !== undefined)
+    if (
+      input.kind === "retry" &&
+      (input.retainedAttachmentIds !== undefined || input.attachments !== undefined)
+    )
       throw new RuntimeEligibilityError("Retry cannot change source attachments.");
     const sourceAttachments = sourceInput.data.attachments ?? [];
     const retainedIds = input.retainedAttachmentIds;
@@ -945,6 +948,9 @@ export class TaskRuntime {
         "An edited attachment does not belong to the source Input.",
         "ownership",
       );
+    const newAttachments = normalizeAttachmentReferences(input.attachments);
+    if (retained.length + (newAttachments?.length ?? 0) > 8)
+      throw new RuntimeEligibilityError("An input cannot contain more than 8 attachments.");
     return this.#submitInput(
       {
         taskId: input.taskId,
@@ -952,6 +958,7 @@ export class TaskRuntime {
         sessionId: input.sessionId,
         authorizationId: input.authorizationId,
         text,
+        ...(newAttachments?.length ? { attachments: newAttachments } : {}),
         ...(sourceInput.data.submissionConfig
           ? { submissionConfig: sourceInput.data.submissionConfig }
           : {}),
@@ -1012,6 +1019,9 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError("Revision inputs cannot be queued.", "unsupported");
     const submissionConfig = normalizeSubmissionConfig(input.submissionConfig);
     const attachments = normalizeAttachmentReferences(input.attachments);
+    const recordedAttachments = revision?.historicalAttachments
+      ? [...revision.historicalAttachments, ...(attachments ?? [])]
+      : attachments;
     const idempotencyKey = input.idempotencyKey;
     if (
       idempotencyKey !== undefined &&
@@ -1165,11 +1175,7 @@ export class TaskRuntime {
             ? { revisionOf: revision.revisionOf, nativeRevisionCommandId: revision.commandId }
             : {}),
           ...(submissionConfig ? { submissionConfig } : {}),
-          ...(attachments
-            ? { attachments }
-            : revision?.historicalAttachments
-              ? { attachments: revision.historicalAttachments }
-              : {}),
+          ...(recordedAttachments ? { attachments: recordedAttachments } : {}),
           status: queued ? "queued" : "received",
           receivedAt,
           acceptedAt: null,

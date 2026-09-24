@@ -667,6 +667,13 @@ function UserInputReply({
   );
 }
 
+export type EngineLocalAttachment = {
+  localPath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
 function EngineUserInputMessage({
   input,
   findRowId,
@@ -675,6 +682,7 @@ function EngineUserInputMessage({
   editable,
   busyAction,
   onEdit,
+  onPickEditAttachments,
 }: {
   input: EngineInput;
   findRowId?: number;
@@ -682,13 +690,19 @@ function EngineUserInputMessage({
   superseded: boolean;
   editable: boolean;
   busyAction: string | null;
-  onEdit?: (text: string, retainedAttachmentIds: readonly string[]) => Promise<boolean>;
+  onEdit?: (
+    text: string,
+    retainedAttachmentIds: readonly string[],
+    addedAttachments: readonly EngineLocalAttachment[],
+  ) => Promise<boolean>;
+  onPickEditAttachments?: () => Promise<EngineLocalAttachment[]>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(input.text);
   const [retainedAttachmentIds, setRetainedAttachmentIds] = useState<readonly string[]>(
     input.attachments?.map((attachment) => attachment.id) ?? [],
   );
+  const [addedAttachments, setAddedAttachments] = useState<readonly EngineLocalAttachment[]>([]);
   const { intl } = useZCodeIntl();
   const retainedAttachments =
     input.attachments?.filter((attachment) => retainedAttachmentIds.includes(attachment.id)) ?? [];
@@ -728,6 +742,34 @@ function EngineUserInputMessage({
         ))}
       </Attachments>
     ) : null;
+  const addedAttachmentList = addedAttachments.length ? (
+    <Attachments variant="inline" className="flex max-w-full flex-wrap gap-2">
+      {addedAttachments.map((attachment, index) => (
+        <Attachment
+          key={`${attachment.localPath}:${index}`}
+          variant="inline"
+          data={{
+            id: `${attachment.localPath}:${index}`,
+            type: "file",
+            filename: attachment.fileName,
+            mediaType: attachment.mimeType,
+            url: "",
+          }}
+          onRemove={() =>
+            setAddedAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))
+          }
+          data-testid={`engine-edit-added-attachment-${index}`}
+        >
+          <AttachmentPreview />
+          <AttachmentInfo className="max-w-48 text-ui-base text-foreground" />
+          <AttachmentRemove
+            alwaysVisible
+            label={intl.formatMessage({ id: "chat.attachments.remove" })}
+          />
+        </Attachment>
+      ))}
+    </Attachments>
+  ) : null;
   return (
     <Message from="user" data-testid={`engine-input-${input.id}`} data-row-id={findRowId}>
       <div className="group/user-row flex flex-col items-end">
@@ -737,9 +779,33 @@ function EngineUserInputMessage({
             taskId={null}
             enableMentionPanel={false}
             initialValue={input.text}
-            topContent={attachmentList(true)}
+            topContent={
+              retainedAttachments.length || addedAttachments.length ? (
+                <>
+                  {attachmentList(true)}
+                  {addedAttachmentList}
+                </>
+              ) : null
+            }
+            attachmentAction={
+              onPickEditAttachments
+                ? {
+                    label: intl.formatMessage({ id: "chat.composer.attachment" }),
+                    onSelect: () =>
+                      void onPickEditAttachments().then((picked) =>
+                        setAddedAttachments((current) => [...current, ...picked]),
+                      ),
+                    testId: `engine-edit-attachment-action-${input.id}`,
+                    menuItemTestId: `engine-edit-attachment-menu-item-${input.id}`,
+                  }
+                : undefined
+            }
             submitting={busyAction !== null}
-            submitDisabled={!draft.trim() || busyAction !== null}
+            submitDisabled={
+              !draft.trim() ||
+              busyAction !== null ||
+              retainedAttachments.length + addedAttachments.length > 8
+            }
             submitLabel={intl.formatMessage({ id: "chat.send" })}
             cancelLabel={intl.formatMessage({ id: "common.cancel" })}
             inputTestId={`engine-edit-input-${input.id}`}
@@ -749,7 +815,7 @@ function EngineUserInputMessage({
             shellClassName="min-h-32"
             onChange={setDraft}
             onSubmit={(text) => {
-              void onEdit(text, retainedAttachmentIds).then((accepted) => {
+              void onEdit(text, retainedAttachmentIds, addedAttachments).then((accepted) => {
                 if (accepted) setEditing(false);
               });
             }}
@@ -774,6 +840,7 @@ function EngineUserInputMessage({
                       setRetainedAttachmentIds(
                         input.attachments?.map((attachment) => attachment.id) ?? [],
                       );
+                      setAddedAttachments([]);
                       setEditing(true);
                     }
                   : undefined
@@ -859,6 +926,7 @@ export function EngineConversationTimeline({
   onForkExecution,
   revisionBlockedReason = null,
   onEditExecution,
+  onPickEditAttachments,
   conversationFindQuery = "",
   conversationFindActiveIndex = -1,
   conversationFindNavigationRequestId = 0,
@@ -893,7 +961,9 @@ export function EngineConversationTimeline({
     executionId: string,
     text: string,
     retainedAttachmentIds: readonly string[],
+    addedAttachments: readonly EngineLocalAttachment[],
   ) => Promise<boolean>;
+  onPickEditAttachments?: () => Promise<EngineLocalAttachment[]>;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -1009,10 +1079,16 @@ export function EngineConversationTimeline({
               turn.executions.some((entry) => entry.execution.id === latestEditableExecutionId)
             }
             busyAction={busyAction}
+            onPickEditAttachments={!readOnlySource ? onPickEditAttachments : undefined}
             onEdit={
               onEditExecution && latestEditableExecutionId
-                ? (text, retainedAttachmentIds) =>
-                    onEditExecution(latestEditableExecutionId, text, retainedAttachmentIds)
+                ? (text, retainedAttachmentIds, addedAttachments) =>
+                    onEditExecution(
+                      latestEditableExecutionId,
+                      text,
+                      retainedAttachmentIds,
+                      addedAttachments,
+                    )
                 : undefined
             }
           />

@@ -51,12 +51,30 @@ function installDom() {
   }
   dom.window.Range.prototype.getBoundingClientRect = () => new dom.window.DOMRect();
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
+  Object.defineProperty(dom.window.HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get() {
+      return this.getAttribute("role") === "listbox" ? 224 : 0;
+    },
+  });
+  dom.window.Element.prototype.hasPointerCapture = () => false;
+  dom.window.Element.prototype.setPointerCapture = () => {};
+  dom.window.Element.prototype.releasePointerCapture = () => {};
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
     configurable: true,
     writable: true,
     value: true,
   });
   return dom;
+}
+
+async function waitForElement(selector: string): Promise<HTMLElement> {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element) return element;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`Timed out waiting for ${selector}`);
 }
 
 test("Engine completed answers reuse native bubble and message actions", async () => {
@@ -510,6 +528,7 @@ test("product conversation forks into a fresh Task and displays only its verifie
   const childHistory = { ...sourceHistory, taskId: childTask.id, inputs: [], executions: [] };
   const forkRequests: Record<string, unknown>[] = [];
   const revisionRequests: Record<string, unknown>[] = [];
+  const stageRequests: Record<string, unknown>[] = [];
   let childCreated = false;
   let sourceAvailable = true;
   let refreshVersion = 0;
@@ -529,6 +548,10 @@ test("product conversation forks into a fresh Task and displays only its verifie
     },
     listEngines: async () => [engine],
     onDidChange: () => ({ dispose: () => {} }),
+    stageAttachment: async (request: Record<string, unknown>) => {
+      stageRequests.push(request);
+      return { id: "new-attachment", fileName: "new.txt", mimeType: "text/plain", sizeBytes: 7 };
+    },
     forkTask: async (request: Record<string, unknown>) => {
       forkRequests.push(request);
       childCreated = true;
@@ -588,7 +611,12 @@ test("product conversation forks into a fresh Task and displays only its verifie
             { services: services as never },
             createElement(
               PlatformProvider,
-              { platform: { onSettingsChanged: () => () => {} } as never },
+              {
+                platform: {
+                  onSettingsChanged: () => () => {},
+                  selectFiles: async () => ["/tmp/new.txt"],
+                } as never,
+              },
               createElement(
                 ZCodeIntlProvider,
                 { initialLocale: "zh-CN" },
@@ -631,6 +659,27 @@ test("product conversation forks into a fresh Task and displays only its verifie
       container.querySelector('[data-testid="engine-edit-attachment-source-attachment"]'),
       null,
     );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="engine-edit-attachment-action-source-input-2"]',
+        )
+        ?.click(),
+    );
+    const editAttachmentMenuItem = await waitForElement(
+      '[data-testid="engine-edit-attachment-menu-item-source-input-2"]',
+    );
+    const editAttachmentOption = editAttachmentMenuItem.closest<HTMLElement>('[role="option"]');
+    assert.ok(editAttachmentOption);
+    await act(async () =>
+      editAttachmentOption.dispatchEvent(
+        new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }),
+      ),
+    );
+    assert.match(
+      container.querySelector('[data-testid="engine-edit-added-attachment-0"]')?.textContent ?? "",
+      /new\.txt/u,
+    );
     await act(async () => editInput.__zcodeLexicalInputE2E!.setText("revised second question"));
     await act(async () => {
       container
@@ -647,8 +696,12 @@ test("product conversation forks into a fresh Task and displays only its verifie
         kind: "edit",
         text: "revised second question",
         retainedAttachmentIds: [],
+        attachments: [
+          { id: "new-attachment", fileName: "new.txt", mimeType: "text/plain", sizeBytes: 7 },
+        ],
       },
     ]);
+    assert.equal(stageRequests[0]?.localPath, "/tmp/new.txt");
     assert.equal(sourceHistory.inputs.length, 3);
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
