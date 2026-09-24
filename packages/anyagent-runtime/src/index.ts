@@ -1962,6 +1962,7 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError("A safe file rewind preview is required.");
     const target = await this.#readyFileTarget(input);
     this.#assertSessionIdle(target.task.id, target.session.id);
+    this.#assertNoUnknownFileRewind(input.taskId, input.executionId);
     if (!target.engine.applyFileRewind)
       throw new RuntimeEligibilityError("This Engine has no file rewind command.", "unsupported");
 
@@ -1987,6 +1988,7 @@ export class TaskRuntime {
       )
         throw new RuntimeEligibilityError("The native file rewind target changed.");
       this.#assertSessionIdle(latest.task.id, latest.session.id);
+      this.#assertNoUnknownFileRewind(input.taskId, input.executionId);
       this.#store.insert(
         this.#record(
           "file-rewind-operation",
@@ -3477,6 +3479,18 @@ export class TaskRuntime {
     if (pendingRewind)
       throw new RuntimeEligibilityError(
         `Session already has unresolved file rewind ${pendingRewind.id}.`,
+      );
+  }
+
+  #assertNoUnknownFileRewind(taskId: string, executionId: string): void {
+    const unknown = this.#store
+      .list<RuntimeFileRewindOperation>("file-rewind-operation", taskId)
+      .find(
+        (record) => record.data.executionId === executionId && record.data.status === "unknown",
+      );
+    if (unknown)
+      throw new RuntimeEligibilityError(
+        `Execution has an unknown file rewind ${unknown.id}; native state needs reconciliation.`,
       );
   }
 

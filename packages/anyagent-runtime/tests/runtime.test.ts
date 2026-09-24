@@ -126,6 +126,7 @@ class ManualEngine implements EngineAdapter {
   readonly feedbackByTarget = new Map<string, "like" | "dislike" | null>();
   interruptStatus: EngineCommandReceipt["status"] = "requested";
   fileRewindEffects = 0;
+  fileRewindStatus: "applied" | "unknown" = "applied";
   beforeFileDispatch: (() => Promise<void>) | null = null;
 
   getCapabilities(): EngineCapabilitySnapshot {
@@ -260,7 +261,7 @@ class ManualEngine implements EngineAdapter {
     input.beforeDispatch?.();
     this.fileRewindEffects++;
     return {
-      status: "applied" as const,
+      status: this.fileRewindStatus,
       evidence: { source: "engine" as const, evidenceId: input.commandId },
     };
   }
@@ -1940,6 +1941,20 @@ test("file rewind is scoped to one terminal Execution and records native outcome
     assert.equal(rejected.status, "rejected");
     assert.equal(engine.fileRewindEffects, 1);
     assert.equal(runtime.getHistory(task.id)?.fileRewindOperations?.[1]?.status, "rejected");
+    engine.setCapability("workspace.file-rewind", {
+      support: "supported",
+      availability: "available",
+    });
+    engine.beforeFileDispatch = null;
+    engine.fileRewindStatus = "unknown";
+    assert.equal(
+      (await runtime.applyFileRewind({ ...target, expectedPreview: preview })).status,
+      "unknown",
+    );
+    await assert.rejects(
+      () => runtime.applyFileRewind({ ...target, expectedPreview: preview }),
+      /unknown file rewind/u,
+    );
   } finally {
     engine.closeEvents(0);
     runtime.close();
