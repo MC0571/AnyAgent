@@ -3,20 +3,26 @@ import { randomUUID } from "node:crypto";
 import {
   EngineContractError,
   type EngineAdapter,
+  type EngineAttachment,
   type EngineApprovalRef,
   type EngineCapability,
   type EngineCapabilitySnapshot,
   type EngineEvent,
   type EngineExecutionRef,
+  type EngineJsonObject,
+  type EngineJsonValue,
   type EngineSessionRef,
   type EngineUserInputRef,
 } from "@anyagent/engine-contract";
 import { RuntimeStore, type StoredRecord } from "./store.js";
 import type {
+  CompactSession,
   CreateTaskInput,
+  ForkTaskInput,
   ReplyToApproval,
   ReplyToUserInput,
   RequestStop,
+  ReviseTurn,
   RuntimeApproval,
   RuntimeAuthorization,
   RuntimeAuthorizationScope,
@@ -26,6 +32,8 @@ import type {
   RuntimeEngineProjection,
   RuntimeEnvironment,
   RuntimeEvent,
+  RuntimeAssistantFeedbackResult,
+  RuntimeCompactOperation,
   RuntimeExecution,
   RuntimeIdKind,
   RuntimeInput,
@@ -37,6 +45,12 @@ import type {
   RuntimeTaskStatus,
   RuntimeUserInput,
   SubmitInput,
+  RuntimeAttachmentReference,
+  RuntimeAttachmentStager,
+  RuntimeAttachmentStageRequest,
+  RuntimeAttachmentStageResult,
+  StageRuntimeAttachmentInput,
+  SetAssistantFeedback,
   TaskLifecycleRequest,
   TaskHistory,
 } from "./types.js";
@@ -67,6 +81,8 @@ export interface CreateTaskRuntimeOptions {
   ) => EngineAdapter | undefined;
   readonly now?: () => number;
   readonly idFactory?: (kind: RuntimeIdKind) => string;
+  /** Stages user-selected files through a Host-owned path after Runtime qualification. */
+  readonly stageAttachment?: RuntimeAttachmentStager;
 }
 
 interface TaskData {
@@ -77,6 +93,8 @@ interface TaskData {
   readonly authorization: RuntimeAuthorization;
   readonly participantId: string;
   readonly sessionId: string;
+  readonly forkedFrom?: RuntimeTask["forkedFrom"];
+  readonly nativeForkCommandId?: string;
   status: RuntimeTaskStatus;
   createdAt: number;
   updatedAt: number;
@@ -90,7 +108,25 @@ interface SessionData {
 }
 
 type Mutable<T> = { -readonly [Key in keyof T]: T[Key] };
-type InputData = Mutable<RuntimeInput> & { nativeExecutionId: string | null };
+type InputData = Mutable<RuntimeInput> & {
+  nativeExecutionId: string | null;
+  nativeRevisionCommandId?: string;
+};
+interface AttachmentData {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly authorizationId: string;
+  readonly environmentId: string;
+  readonly engineId: string;
+  readonly nativeSessionId: string;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly expiresAt: number;
+  inputId: string | null;
+  status: "staged" | "claimed";
+}
 type ExecutionData = Mutable<RuntimeExecution> & { nativeExecutionId: string };
 type ApprovalData = Mutable<RuntimeApproval> & { nativeApprovalId: string };
 type UserInputData = Mutable<RuntimeUserInput> & { nativeRequestId: string };
@@ -107,7 +143,175 @@ interface RunTarget {
 }
 
 const ACTIVE_INPUT_STATUSES = new Set(["received", "native-accepted", "started", "unknown"]);
+const ACTIVE_COMPACT_STATUSES = new Set(["requested", "accepted", "unknown"]);
 const TERMINAL_EXECUTION_STATUSES = new Set(["completed", "failed", "stopped"]);
+const MAX_SUBMISSION_CONFIG_BYTES = 16 * 1024;
+const MAX_SUBMISSION_CONFIG_DEPTH = 8;
+const MAX_SUBMISSION_CONFIG_NODES = 512;
+
+interface SubmissionConfigBudget {
+  nodes: number;
+  readonly ancestors: Set<object>;
+}
+
+function cloneSubmissionConfigValue(
+  value: unknown,
+  budget: SubmissionConfigBudget,
+  depth: number,
+): EngineJsonValue {
+  budget.nodes += 1;
+  if (budget.nodes > MAX_SUBMISSION_CONFIG_NODES || depth > MAX_SUBMISSION_CONFIG_DEPTH)
+    throw new RuntimeEligibilityError("Submission configuration exceeds its structural limits.");
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.length > 8_192)
+      throw new RuntimeEligibilityError("Submission configuration string is too long.");
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value))
+      throw new RuntimeEligibilityError("Submission configuration numbers must be finite.");
+    return value;
+  }
+  if (!value || typeof value !== "object")
+    throw new RuntimeEligibilityError("Submission configuration must contain JSON values only.");
+  if (budget.ancestors.has(value))
+    throw new RuntimeEligibilityError("Submission configuration cannot contain cycles.");
+  budget.ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      if (
+        Object.getPrototypeOf(value) !== Array.prototype ||
+        value.length > 256 ||
+        Reflect.ownKeys(value).length !== value.length + 1
+      )
+        throw new RuntimeEligibilityError("Submission configuration array is not JSON-compatible.");
+      const items: EngineJsonValue[] = [];
+      for (let index = 0; index < value.length; index += 1) {
+        if (!Object.hasOwn(value, index))
+          throw new RuntimeEligibilityError(
+            "Submission configuration cannot contain sparse arrays.",
+          );
+        items.push(cloneSubmissionConfigValue(value[index], budget, depth + 1));
+      }
+      return Object.freeze(items);
+    }
+    const prototype = Object.getPrototypeOf(value);
+    const keys = Object.keys(value);
+    if (
+      (prototype !== Object.prototype && prototype !== null) ||
+      Object.getOwnPropertySymbols(value).length > 0 ||
+      Reflect.ownKeys(value).length !== keys.length ||
+      keys.length > 128
+    )
+      throw new RuntimeEligibilityError("Submission configuration object is not JSON-compatible.");
+    const result: Record<string, EngineJsonValue> = {};
+    for (const key of keys) {
+      if (key.length > 256)
+        throw new RuntimeEligibilityError("Submission configuration key is too long.");
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor?.enumerable || !("value" in descriptor))
+        throw new RuntimeEligibilityError("Submission configuration cannot contain accessors.");
+      Object.defineProperty(result, key, {
+        configurable: true,
+        enumerable: true,
+        value: cloneSubmissionConfigValue(descriptor.value, budget, depth + 1),
+        writable: true,
+      });
+    }
+    return Object.freeze(result);
+  } finally {
+    budget.ancestors.delete(value);
+  }
+}
+
+function normalizeSubmissionConfig(value: unknown): EngineJsonObject | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new RuntimeEligibilityError("Submission configuration must be a JSON object.");
+  const normalized = cloneSubmissionConfigValue(value, { nodes: 0, ancestors: new Set() }, 0);
+  if (normalized === null || Array.isArray(normalized) || typeof normalized !== "object")
+    throw new RuntimeEligibilityError("Submission configuration must be a JSON object.");
+  const encoded = JSON.stringify(normalized);
+  if (new TextEncoder().encode(encoded).byteLength > MAX_SUBMISSION_CONFIG_BYTES)
+    throw new RuntimeEligibilityError("Submission configuration exceeds 16 KiB.");
+  return normalized as EngineJsonObject;
+}
+
+function normalizeAttachmentReferences(value: unknown): RuntimeAttachmentReference[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value))
+    throw new RuntimeEligibilityError("Attachments must be an array of Host-issued references.");
+  if (value.length > 8)
+    throw new RuntimeEligibilityError("An input cannot contain more than 8 attachments.");
+
+  const ids = new Set<string>();
+  const attachments = value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item))
+      throw new RuntimeEligibilityError("Attachment reference must be an object.");
+    const attachment = item as Record<string, unknown>;
+    if (
+      Object.keys(attachment).some(
+        (key) => !["id", "fileName", "mimeType", "sizeBytes"].includes(key),
+      )
+    )
+      throw new RuntimeEligibilityError("Attachment reference contains unsupported fields.");
+    const id = typeof attachment.id === "string" ? attachment.id.trim() : "";
+    const fileName = typeof attachment.fileName === "string" ? attachment.fileName.trim() : "";
+    const mimeType = typeof attachment.mimeType === "string" ? attachment.mimeType.trim() : "";
+    const sizeBytes = attachment.sizeBytes;
+    if (!id || !fileName || !mimeType)
+      throw new RuntimeEligibilityError(
+        "Attachment reference requires an ID, name, and MIME type.",
+      );
+    if (ids.has(id)) throw new RuntimeEligibilityError("Attachment references must be unique.");
+    if (!Number.isSafeInteger(sizeBytes) || (sizeBytes as number) < 0)
+      throw new RuntimeEligibilityError("Attachment size must be a non-negative safe integer.");
+    ids.add(id);
+    return { id, fileName, mimeType, sizeBytes: sizeBytes as number };
+  });
+  return attachments.length ? attachments : undefined;
+}
+
+function normalizeStageAttachmentInput(
+  value: StageRuntimeAttachmentInput,
+): StageRuntimeAttachmentInput {
+  if (!value || typeof value !== "object")
+    throw new RuntimeEligibilityError("Attachment staging requires a selected local file.");
+  const localPath = typeof value.localPath === "string" ? value.localPath.trim() : "";
+  const fileName = typeof value.fileName === "string" ? value.fileName.trim() : "";
+  const mimeType = typeof value.mimeType === "string" ? value.mimeType.trim() : "";
+  if (
+    !localPath ||
+    localPath.length > 4_096 ||
+    localPath.includes("\0") ||
+    !fileName ||
+    fileName.length > 255 ||
+    /[\\/]|\p{Cc}/u.test(fileName) ||
+    !mimeType ||
+    mimeType.length > 255 ||
+    /\p{Cc}/u.test(mimeType) ||
+    !Number.isSafeInteger(value.sizeBytes) ||
+    value.sizeBytes < 0
+  ) {
+    throw new RuntimeEligibilityError("Selected attachment metadata is invalid.");
+  }
+  return { ...value, localPath, fileName, mimeType, sizeBytes: value.sizeBytes };
+}
+
+function validateAttachmentStageResult(
+  result: RuntimeAttachmentStageResult | undefined,
+): RuntimeAttachmentStageResult {
+  if (
+    !result ||
+    typeof result.locator !== "string" ||
+    !result.locator.trim() ||
+    !Number.isSafeInteger(result.sizeBytes) ||
+    result.sizeBytes < 0
+  )
+    throw new RuntimeEligibilityError("The Host could not stage this attachment safely.");
+  return { locator: result.locator, sizeBytes: result.sizeBytes };
+}
 
 export type RuntimeErrorKind =
   | "unsupported"
@@ -136,12 +340,21 @@ export class TaskRuntime {
   readonly #store: RuntimeStore;
   readonly #engines: EngineMap;
   readonly #engineForEnvironment: CreateTaskRuntimeOptions["engineForEnvironment"];
+  readonly #stageAttachment: RuntimeAttachmentStager | undefined;
+  readonly #attachmentLocators = new Map<string, string>();
   readonly #now: () => number;
   readonly #idFactory: (kind: RuntimeIdKind) => string;
   readonly #listeners = new Set<(change: RuntimeChange) => void>();
   readonly #runs = new Map<string, RunTarget>();
   readonly #liveSessions = new Map<string, EngineSessionRef>();
   readonly #commandLocks = new Set<string>();
+  readonly #assistantFeedbackInFlight = new Map<
+    string,
+    {
+      readonly feedback: SetAssistantFeedback["feedback"];
+      readonly promise: Promise<RuntimeAssistantFeedbackResult>;
+    }
+  >();
   readonly #capabilityRevisions = new Map<string, number>();
   readonly #currentEngines = new Map<string, CurrentEngineRecord>();
   #pendingChanges: { kind: RuntimeChange["kind"]; taskId: string; entityId: string }[] | null =
@@ -152,6 +365,7 @@ export class TaskRuntime {
     this.#store = new RuntimeStore(options.databasePath);
     this.#engines = options.engines;
     this.#engineForEnvironment = options.engineForEnvironment;
+    this.#stageAttachment = options.stageAttachment;
     this.#now = options.now ?? Date.now;
     this.#idFactory = options.idFactory ?? ((kind) => `${kind}_${randomUUID()}`);
     this.#markRecoveredStateUnknown();
@@ -204,6 +418,120 @@ export class TaskRuntime {
   }
 
   async createTask(input: CreateTaskInput): Promise<RuntimeTask> {
+    return this.#createTask(input);
+  }
+
+  async forkTask(input: ForkTaskInput): Promise<RuntimeTask> {
+    this.#assertOpen();
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "session.fork",
+    );
+    const execution = this.#require<ExecutionData>("execution", input.executionId);
+    if (
+      execution.taskId !== task.id ||
+      execution.sessionId !== session.id ||
+      execution.data.participantId !== input.participantId ||
+      execution.data.status !== "completed"
+    )
+      throw new RuntimeEligibilityError("Fork requires a completed Execution owned by this Task.");
+    const nativeSessionId = session.data.nativeSessionId;
+    if (!nativeSessionId || this.#liveSessions.get(session.id) !== nativeSessionId)
+      throw new RuntimeEligibilityError("The source native Session is not attached in this Host.");
+    const sourceInput = this.#require<InputData>("input", execution.data.inputId);
+    if (
+      sourceInput.taskId !== task.id ||
+      sourceInput.sessionId !== session.id ||
+      sourceInput.data.participantId !== input.participantId ||
+      !execution.data.nativeExecutionId ||
+      input.authorization.id === task.data.authorization.id
+    )
+      throw new RuntimeEligibilityError("Fork source or child authorization is invalid.");
+    const nativeExecutionId = execution.data.nativeExecutionId as EngineExecutionRef;
+    const forkedFrom = {
+      taskId: task.id,
+      inputId: sourceInput.id,
+      executionId: execution.id,
+    };
+    const nativeForkCommandId = this.#newId("fork");
+    return this.#createTask(
+      {
+        engineId: task.data.engineId,
+        environment: task.data.environment,
+        authorization: input.authorization,
+        credentialSource: task.data.credentialSource,
+      },
+      {
+        capability: "session.fork",
+        forkedFrom,
+        nativeForkCommandId,
+        createNativeSession: async (engine) => {
+          this.#assertCapability(
+            await this.#capabilities(engine),
+            task.data.engineId,
+            task.data.environment.id,
+            "session.fork",
+            task.data.engine.configurationVersion,
+            task.data.engine.adapterVersion,
+          );
+          if (!engine.forkSession)
+            throw new RuntimeEligibilityError(
+              "This Engine has no native fork command.",
+              "unsupported",
+            );
+          const beforeDispatch = this.#dispatchGuard({
+            taskId: input.taskId,
+            participantId: input.participantId,
+            sessionId: input.sessionId,
+            authorizationId: input.authorizationId,
+            capability: "session.fork",
+            engine,
+            nativeSessionId: nativeSessionId as EngineSessionRef,
+          });
+          const checkSourceExecution = () => {
+            beforeDispatch();
+            const current = this.#require<ExecutionData>("execution", input.executionId);
+            if (
+              current.taskId !== task.id ||
+              current.sessionId !== session.id ||
+              current.data.participantId !== input.participantId ||
+              current.data.status !== "completed" ||
+              current.data.nativeExecutionId !== nativeExecutionId
+            )
+              throw new RuntimeEligibilityError(
+                "The source Execution changed before fork.",
+                "ownership",
+              );
+            this.#validateEnvironmentAndAuthorization(
+              task.data.environment,
+              input.authorization,
+              "session.create",
+            );
+          };
+          checkSourceExecution();
+          return engine.forkSession({
+            session: nativeSessionId as EngineSessionRef,
+            sourceExecutionId: nativeExecutionId,
+            commandId: nativeForkCommandId,
+            beforeDispatch: checkSourceExecution,
+          });
+        },
+      },
+    );
+  }
+
+  async #createTask(
+    input: CreateTaskInput,
+    fork?: {
+      readonly capability: "session.fork";
+      readonly forkedFrom: NonNullable<RuntimeTask["forkedFrom"]>;
+      readonly nativeForkCommandId: string;
+      readonly createNativeSession: (engine: EngineAdapter) => Promise<EngineSessionRef>;
+    },
+  ): Promise<RuntimeTask> {
     this.#assertOpen();
     const engine =
       this.#engineForEnvironment?.(input.engineId, input.environment) ??
@@ -215,7 +543,12 @@ export class TaskRuntime {
       "session.create",
     );
     const snapshot = await this.#capabilities(engine);
-    this.#assertCapability(snapshot, input.engineId, input.environment.id, "session.create");
+    this.#assertCapability(
+      snapshot,
+      input.engineId,
+      input.environment.id,
+      fork?.capability ?? "session.create",
+    );
 
     const createdAt = this.#now();
     const taskId = this.#newId("task");
@@ -233,6 +566,9 @@ export class TaskRuntime {
       authorization,
       participantId,
       sessionId,
+      ...(fork
+        ? { forkedFrom: fork.forkedFrom, nativeForkCommandId: fork.nativeForkCommandId }
+        : {}),
       status: "active",
       createdAt,
       updatedAt: createdAt,
@@ -288,11 +624,11 @@ export class TaskRuntime {
         latest,
         input.engineId,
         environment.id,
-        "session.create",
+        fork?.capability ?? "session.create",
         snapshot.configurationVersion,
         snapshot.adapterVersion,
       );
-      const nativeSessionId = await engine.createSession();
+      const nativeSessionId = await (fork?.createNativeSession(engine) ?? engine.createSession());
       this.#liveSessions.set(sessionId, nativeSessionId);
       const activeSession: RuntimeSession = {
         ...session,
@@ -363,14 +699,205 @@ export class TaskRuntime {
     }
   }
 
+  async stageAttachment(input: StageRuntimeAttachmentInput): Promise<RuntimeAttachmentReference> {
+    this.#assertOpen();
+    const source = normalizeStageAttachmentInput(input);
+    const { task, session } = this.#qualify(
+      source.taskId,
+      source.participantId,
+      source.sessionId,
+      source.authorizationId,
+      "execution.run",
+    );
+    this.#requireActiveTask(task);
+    if (session.data.projection.status !== "active")
+      throw new RuntimeEligibilityError(
+        `Session ${source.sessionId} is ${session.data.projection.status}; attachments cannot be staged.`,
+      );
+    if (!this.#stageAttachment)
+      throw new RuntimeEligibilityError(
+        "This Host does not provide a safe local attachment staging path.",
+        "unsupported",
+      );
+    if (
+      this.#store
+        .list<InputData>("input", task.id)
+        .some(
+          (record) =>
+            record.sessionId === session.id &&
+            record.status !== null &&
+            ACTIVE_INPUT_STATUSES.has(record.status),
+        )
+    )
+      throw new RuntimeEligibilityError("Cannot stage an attachment while this Session is busy.");
+    this.#assertNoActiveCompact(task.id, session.id);
+
+    const engine = this.#engineFor(task.data);
+    const snapshot = await this.#capabilities(engine);
+    this.#assertCapability(
+      snapshot,
+      task.data.engineId,
+      task.data.environment.id,
+      "execution.run",
+      task.data.engine.configurationVersion,
+      task.data.engine.adapterVersion,
+    );
+    const nativeSessionId = session.data.nativeSessionId;
+    if (!nativeSessionId)
+      throw new RuntimeEligibilityError("The native Session handle is unavailable.");
+
+    const id = this.#newId("attachment");
+    const stageRequest: RuntimeAttachmentStageRequest = {
+      ...source,
+      attachmentId: id,
+      environment: task.data.environment,
+      engineId: task.data.engineId,
+      nativeSessionId: nativeSessionId as EngineSessionRef,
+    };
+    const beforeDispatch = this.#dispatchGuard({
+      taskId: source.taskId,
+      participantId: source.participantId,
+      sessionId: source.sessionId,
+      authorizationId: source.authorizationId,
+      capability: "execution.run",
+      engine,
+      nativeSessionId: nativeSessionId as EngineSessionRef,
+    });
+    beforeDispatch();
+    if (
+      this.#store
+        .list<InputData>("input", task.id)
+        .some(
+          (record) =>
+            record.sessionId === session.id &&
+            record.status !== null &&
+            ACTIVE_INPUT_STATUSES.has(record.status),
+        )
+    )
+      throw new RuntimeEligibilityError("Cannot stage an attachment while this Session is busy.");
+    this.#assertNoActiveCompact(task.id, session.id);
+    const staged = validateAttachmentStageResult(await this.#stageAttachment(stageRequest));
+
+    // The stager may take long enough for the Task to be frozen or the Session to change.
+    const latest = this.#qualify(
+      source.taskId,
+      source.participantId,
+      source.sessionId,
+      source.authorizationId,
+      "execution.run",
+    );
+    this.#requireActiveTask(latest.task);
+    if (
+      latest.session.data.projection.status !== "active" ||
+      latest.session.data.nativeSessionId !== nativeSessionId
+    )
+      throw new RuntimeEligibilityError("The Task or native Session changed while staging.");
+
+    const createdAt = this.#now();
+    const reference: RuntimeAttachmentReference = {
+      id,
+      fileName: source.fileName,
+      mimeType: source.mimeType,
+      sizeBytes: staged.sizeBytes,
+    };
+    const data: AttachmentData = {
+      taskId: task.id,
+      participantId: source.participantId,
+      sessionId: session.id,
+      authorizationId: task.data.authorization.id,
+      environmentId: task.data.environment.id,
+      engineId: task.data.engineId,
+      nativeSessionId: nativeSessionId as EngineSessionRef,
+      fileName: reference.fileName,
+      mimeType: reference.mimeType,
+      sizeBytes: reference.sizeBytes,
+      expiresAt: createdAt + 10 * 60 * 1_000,
+      inputId: null,
+      status: "staged",
+    };
+    this.#store.insert(
+      this.#record("attachment", id, task.id, session.id, null, data, data.status, createdAt),
+    );
+    this.#attachmentLocators.set(id, staged.locator);
+    return this.#clone(reference);
+  }
+
   async submitInput(input: SubmitInput): Promise<RuntimeInput> {
+    return this.#submitInput(input);
+  }
+
+  async reviseTurn(input: ReviseTurn): Promise<RuntimeInput> {
     this.#assertOpen();
     const { task, session } = this.#qualify(
       input.taskId,
       input.participantId,
       input.sessionId,
       input.authorizationId,
-      "execution.run",
+      "execution.revise",
+    );
+    const sourceExecution = this.#require<ExecutionData>("execution", input.sourceExecutionId);
+    if (
+      sourceExecution.taskId !== task.id ||
+      sourceExecution.sessionId !== session.id ||
+      sourceExecution.data.participantId !== input.participantId ||
+      sourceExecution.data.status !== "completed" ||
+      !sourceExecution.data.nativeExecutionId
+    )
+      throw new RuntimeEligibilityError(
+        "Revision requires a completed Execution owned by this Task.",
+      );
+    const sourceInput = this.#require<InputData>("input", sourceExecution.data.inputId);
+    if (
+      sourceInput.taskId !== task.id ||
+      sourceInput.sessionId !== session.id ||
+      sourceInput.data.participantId !== input.participantId
+    )
+      throw new RuntimeEligibilityError("Revision source Input ownership does not match.");
+    const text = input.kind === "retry" ? sourceInput.data.text : input.text?.trim();
+    if (!text) throw new RuntimeEligibilityError("Edited input text must not be empty.");
+    return this.#submitInput(
+      {
+        taskId: input.taskId,
+        participantId: input.participantId,
+        sessionId: input.sessionId,
+        authorizationId: input.authorizationId,
+        text,
+        ...(sourceInput.data.submissionConfig
+          ? { submissionConfig: sourceInput.data.submissionConfig }
+          : {}),
+      },
+      {
+        kind: input.kind,
+        sourceExecutionId: sourceExecution.data.nativeExecutionId as EngineExecutionRef,
+        commandId: this.#newId("revision"),
+        revisionOf: {
+          kind: input.kind,
+          inputId: sourceInput.id,
+          executionId: sourceExecution.id,
+        },
+        historicalAttachments: sourceInput.data.attachments,
+      },
+    );
+  }
+
+  async #submitInput(
+    input: SubmitInput,
+    revision?: {
+      readonly kind: "edit" | "retry";
+      readonly sourceExecutionId: EngineExecutionRef;
+      readonly commandId: string;
+      readonly revisionOf: NonNullable<RuntimeInput["revisionOf"]>;
+      readonly historicalAttachments?: readonly RuntimeAttachmentReference[];
+    },
+  ): Promise<RuntimeInput> {
+    this.#assertOpen();
+    const capability = revision ? "execution.revise" : "execution.run";
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      capability,
     );
     if (task.data.status !== "active")
       throw new RuntimeEligibilityError(
@@ -382,27 +909,20 @@ export class TaskRuntime {
       );
     if (typeof input.text !== "string" || input.text.length === 0)
       throw new RuntimeEligibilityError("Input text must not be empty.");
+    const submissionConfig = normalizeSubmissionConfig(input.submissionConfig);
+    const attachments = normalizeAttachmentReferences(input.attachments);
     const engine = this.#engineFor(task.data);
     const snapshot = await this.#capabilities(engine);
     this.#assertCapability(
       snapshot,
       task.data.engineId,
       task.data.environment.id,
-      "execution.run",
+      capability,
       task.data.engine.configurationVersion,
       task.data.engine.adapterVersion,
     );
 
-    const pending = this.#store
-      .list<InputData>("input", task.id)
-      .find(
-        (record) =>
-          record.sessionId === input.sessionId &&
-          record.status !== null &&
-          ACTIVE_INPUT_STATUSES.has(record.status),
-      );
-    if (pending)
-      throw new RuntimeEligibilityError(`Session already has unresolved input ${pending.id}.`);
+    this.#assertSessionIdle(task.id, session.id);
 
     const id = this.#newId("input");
     const receivedAt = this.#now();
@@ -412,6 +932,15 @@ export class TaskRuntime {
       participantId: input.participantId,
       sessionId: input.sessionId,
       text: input.text,
+      ...(revision
+        ? { revisionOf: revision.revisionOf, nativeRevisionCommandId: revision.commandId }
+        : {}),
+      ...(submissionConfig ? { submissionConfig } : {}),
+      ...(attachments
+        ? { attachments }
+        : revision?.historicalAttachments
+          ? { attachments: revision.historicalAttachments }
+          : {}),
       status: "received",
       receivedAt,
       acceptedAt: null,
@@ -420,25 +949,28 @@ export class TaskRuntime {
       error: null,
       nativeExecutionId: null,
     };
+    let resolvedAttachments: EngineAttachment[] | undefined;
+    let attachmentClaimError: unknown;
     this.#store.transaction(() => {
       // Check and insert under one SQLite write transaction to serialize concurrent submissions.
-      const active = this.#store
-        .list<InputData>("input", task.id)
-        .find(
-          (record) =>
-            record.sessionId === input.sessionId &&
-            record.status !== null &&
-            ACTIVE_INPUT_STATUSES.has(record.status),
-        );
-      if (active)
-        throw new RuntimeEligibilityError(`Session already has unresolved input ${active.id}.`);
+      this.#assertSessionIdle(task.id, session.id);
       this.#store.insert(
         this.#record("input", id, task.id, input.sessionId, id, data, data.status, receivedAt),
       );
+      if (attachments) {
+        try {
+          resolvedAttachments = this.#claimAttachments(task, session, id, attachments);
+        } catch (error) {
+          attachmentClaimError = error;
+        }
+      }
     });
+    if (resolvedAttachments)
+      for (const attachment of resolvedAttachments) this.#attachmentLocators.delete(attachment.id);
     this.#publish(task.id, "input", id);
 
     try {
+      if (attachmentClaimError) throw attachmentClaimError;
       const nativeSessionId = session.data.nativeSessionId;
       if (!nativeSessionId)
         throw new RuntimeEligibilityError("The native Session handle is unavailable.");
@@ -447,7 +979,7 @@ export class TaskRuntime {
         latest,
         task.data.engineId,
         task.data.environment.id,
-        "execution.run",
+        capability,
         task.data.engine.configurationVersion,
         task.data.engine.adapterVersion,
       );
@@ -456,11 +988,71 @@ export class TaskRuntime {
         input.participantId,
         input.sessionId,
         input.authorizationId,
-        "execution.run",
+        capability,
       );
+      const beforeDispatch = this.#dispatchGuard({
+        taskId: input.taskId,
+        participantId: input.participantId,
+        sessionId: input.sessionId,
+        authorizationId: input.authorizationId,
+        capability,
+        engine,
+        nativeSessionId: nativeSessionId as EngineSessionRef,
+      });
+      const checkDispatch = () => {
+        beforeDispatch();
+        if (revision) {
+          const source = this.#require<ExecutionData>("execution", revision.revisionOf.executionId);
+          if (
+            source.taskId !== task.id ||
+            source.sessionId !== session.id ||
+            source.data.participantId !== input.participantId ||
+            source.data.status !== "completed" ||
+            source.data.nativeExecutionId !== revision.sourceExecutionId
+          )
+            throw new RuntimeEligibilityError(
+              "The source Execution changed before revision dispatch.",
+              "ownership",
+            );
+        }
+        for (const attachment of resolvedAttachments ?? []) {
+          const stored = this.#require<AttachmentData>("attachment", attachment.id);
+          if (
+            stored.data.status !== "claimed" ||
+            stored.data.inputId !== id ||
+            stored.data.taskId !== task.id ||
+            stored.data.participantId !== input.participantId ||
+            stored.data.sessionId !== session.id ||
+            stored.data.authorizationId !== task.data.authorization.id ||
+            stored.data.environmentId !== task.data.environment.id ||
+            stored.data.engineId !== task.data.engineId ||
+            stored.data.nativeSessionId !== nativeSessionId ||
+            stored.data.fileName !== attachment.fileName ||
+            stored.data.mimeType !== attachment.mimeType ||
+            stored.data.sizeBytes !== attachment.sizeBytes
+          )
+            throw new RuntimeEligibilityError(
+              "The claimed attachment changed before dispatch.",
+              "ownership",
+            );
+        }
+      };
+      checkDispatch();
       const run = await engine.run({
         session: nativeSessionId as EngineSessionRef,
         input: input.text,
+        beforeDispatch: checkDispatch,
+        ...(submissionConfig ? { submissionConfig } : {}),
+        ...(resolvedAttachments ? { attachments: resolvedAttachments } : {}),
+        ...(revision
+          ? {
+              revision: {
+                kind: revision.kind,
+                sourceExecutionId: revision.sourceExecutionId,
+                commandId: revision.commandId,
+              },
+            }
+          : {}),
       });
       const target: RunTarget = {
         taskId: task.id,
@@ -552,6 +1144,23 @@ export class TaskRuntime {
       const latest = this.#require<ApprovalData>("approval", input.approvalId);
       if (latest.data.status !== "pending")
         throw new RuntimeEligibilityError(`Approval ${input.approvalId} is ${latest.data.status}.`);
+      const selectedOption = latest.data.options.find((option) => option.id === input.optionId);
+      if (!selectedOption)
+        throw new RuntimeEligibilityError(
+          `Option ${input.optionId} does not belong to Approval ${input.approvalId}.`,
+        );
+      if (selectedOption.requiresFeedback) {
+        if (!input.feedback?.trim())
+          throw new RuntimeEligibilityError(
+            `Option ${input.optionId} requires non-empty user feedback.`,
+          );
+        if (input.feedback.length > 4096)
+          throw new RuntimeEligibilityError("Approval feedback exceeds the 4096 character limit.");
+      } else if (input.feedback !== undefined) {
+        throw new RuntimeEligibilityError(
+          `Option ${input.optionId} does not accept user feedback.`,
+        );
+      }
       if (latest.data.expiresAt !== null && this.#now() >= latest.data.expiresAt) {
         const expired: ApprovalData = { ...latest.data, status: "expired" };
         this.#save(
@@ -594,6 +1203,7 @@ export class TaskRuntime {
         session: session.data.nativeSessionId as EngineSessionRef,
         approvalId: latest.data.nativeApprovalId as EngineApprovalRef,
         optionId: input.optionId,
+        ...(input.feedback === undefined ? {} : { feedback: input.feedback }),
       });
       const resolved = this.#require<ApprovalData>("approval", input.approvalId);
       if (resolved.data.status !== "pending") return this.#publicApproval(resolved.data);
@@ -706,23 +1316,33 @@ export class TaskRuntime {
         response: input.response,
       });
       const resolved = this.#require<UserInputData>("user-input", input.requestId);
-      if (resolved.data.status !== "pending") return this.#publicUserInput(resolved.data);
-      const status = mapReplyStatus(receipt.status);
+      // A native response event can overtake the command ACK. Preserve its more
+      // authoritative status while still recording the answer this authorized
+      // Runtime call sent; otherwise the selected value is lost on that race.
+      const status =
+        resolved.data.status === "pending" ? mapReplyStatus(receipt.status) : resolved.data.status;
+      const response =
+        resolved.data.response !== null
+          ? resolved.data.response
+          : receipt.status === "forwarded" && status === "forwarded"
+            ? input.response
+            : null;
       const updated: UserInputData = {
-        ...latest.data,
+        ...resolved.data,
         status,
-        response: this.#jsonSafe(input.response),
+        response: this.#clone(response),
       };
       this.#save(
         "user-input",
-        latest.id,
+        resolved.id,
         task.id,
         input.sessionId,
-        latest.executionId,
+        resolved.executionId,
         updated,
         status,
-        latest.createdAt,
+        resolved.createdAt,
         this.#now(),
+        resolved.nativeKey,
       );
       this.#publish(task.id, "user-input", latest.id);
       return this.#publicUserInput(updated);
@@ -875,6 +1495,344 @@ export class TaskRuntime {
     });
   }
 
+  async compactSession(input: CompactSession): Promise<RuntimeCompactOperation> {
+    this.#assertOpen();
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "session.compact",
+    );
+    this.#requireActiveTask(task);
+    this.#assertSessionIdle(task.id, session.id);
+    const nativeSessionId = session.data.nativeSessionId;
+    if (!nativeSessionId || this.#liveSessions.get(session.id) !== nativeSessionId)
+      throw new RuntimeEligibilityError("The native Session is not attached in this Host.");
+
+    const engine = this.#engineFor(task.data);
+    const snapshot = await this.#capabilities(engine);
+    this.#assertCapability(
+      snapshot,
+      task.data.engineId,
+      task.data.environment.id,
+      "session.compact",
+      task.data.engine.configurationVersion,
+      task.data.engine.adapterVersion,
+    );
+    if (!engine.compactSession)
+      throw new RuntimeEligibilityError(
+        "This Engine has no native Session compaction command.",
+        "unsupported",
+      );
+
+    const operationId = this.#newId("compact");
+    const requestedAt = this.#now();
+    const operation: RuntimeCompactOperation = {
+      id: operationId,
+      taskId: task.id,
+      participantId: input.participantId,
+      sessionId: session.id,
+      status: "requested",
+      requestedAt,
+      acceptedAt: null,
+      terminalAt: null,
+      requestedEvidence: {
+        source: "host",
+        evidenceId: operationId,
+        detail: "Product Session compaction request recorded.",
+      },
+      acceptedEvidence: null,
+      terminalEvidence: null,
+      failureEvidence: null,
+      unknownEvidence: null,
+      reason: null,
+    };
+    this.#store.transaction(() => {
+      const latest = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "session.compact",
+      );
+      this.#requireActiveTask(latest.task);
+      this.#assertSessionIdle(task.id, session.id);
+      if (
+        latest.session.data.nativeSessionId !== nativeSessionId ||
+        this.#liveSessions.get(session.id) !== nativeSessionId
+      )
+        throw new RuntimeEligibilityError("The native Session changed before compaction request.");
+      this.#store.insert(
+        this.#record(
+          "compact-operation",
+          operationId,
+          task.id,
+          session.id,
+          null,
+          operation,
+          operation.status,
+          requestedAt,
+          requestedAt,
+          operationId,
+        ),
+      );
+    });
+    this.#publish(task.id, "compact-operation", operationId);
+
+    const beforeDispatch = this.#dispatchGuard({
+      taskId: input.taskId,
+      participantId: input.participantId,
+      sessionId: input.sessionId,
+      authorizationId: input.authorizationId,
+      capability: "session.compact",
+      engine,
+      nativeSessionId: nativeSessionId as EngineSessionRef,
+    });
+    const checkDispatch = () => {
+      beforeDispatch();
+      this.#assertSessionIdle(task.id, session.id, operationId);
+      const current = this.#require<RuntimeCompactOperation>("compact-operation", operationId);
+      if (current.data.status !== "requested")
+        throw new RuntimeEligibilityError("Compaction request is no longer awaiting dispatch.");
+    };
+    try {
+      const receipt = await engine.compactSession({
+        session: nativeSessionId as EngineSessionRef,
+        commandId: operationId,
+        beforeDispatch: checkDispatch,
+        onAccepted: (evidence) => {
+          const current = this.#require<RuntimeCompactOperation>("compact-operation", operationId);
+          if (current.data.status === "requested")
+            this.#updateCompactOperation(operationId, {
+              status: "accepted",
+              acceptedAt: this.#now(),
+              acceptedEvidence: evidence,
+            });
+        },
+      });
+      if (receipt.status === "unknown")
+        return this.#updateCompactOperation(operationId, {
+          status: "unknown",
+          unknownEvidence: receipt.evidence ?? {
+            source: "adapter",
+            evidenceId: `${operationId}:unknown`,
+            detail: "Native compaction outcome is unknown.",
+          },
+          reason: receipt.reason ?? "Native compaction outcome is unknown.",
+        });
+      const terminalAt = this.#now();
+      const failed = receipt.status === "failed";
+      return this.#updateCompactOperation(operationId, {
+        status: receipt.status,
+        terminalAt,
+        terminalEvidence: receipt.evidence ?? null,
+        ...(failed ? { failureEvidence: receipt.evidence ?? null } : {}),
+        reason: receipt.reason ?? null,
+      });
+    } catch (error) {
+      const reason = errorMessage(error);
+      const uncertain =
+        error instanceof EngineContractError
+          ? error.failure.sideEffects !== "none" || error.kind === "result-unknown"
+          : !(error instanceof RuntimeEligibilityError);
+      const evidence = {
+        source: error instanceof EngineContractError ? ("adapter" as const) : ("host" as const),
+        evidenceId: `${operationId}:${uncertain ? "unknown" : "failed"}`,
+        detail: reason,
+      };
+      return this.#updateCompactOperation(operationId, {
+        status: uncertain ? "unknown" : "failed",
+        ...(uncertain ? { unknownEvidence: evidence } : { failureEvidence: evidence }),
+        ...(!uncertain ? { terminalAt: this.#now() } : {}),
+        reason,
+      });
+    }
+  }
+
+  async setAssistantFeedback(input: SetAssistantFeedback): Promise<RuntimeAssistantFeedbackResult> {
+    this.#assertOpen();
+    const { session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "assistant.feedback",
+    );
+    const messageId = input.messageId;
+    if (
+      typeof messageId !== "string" ||
+      messageId.length === 0 ||
+      messageId.length > 512 ||
+      messageId.trim() !== messageId
+    ) {
+      throw new RuntimeEligibilityError("Assistant feedback requires a valid message ID.");
+    }
+    if (input.feedback !== null && input.feedback !== "like" && input.feedback !== "dislike") {
+      throw new RuntimeEligibilityError("Assistant feedback value is invalid.");
+    }
+
+    const execution = this.#require<ExecutionData>("execution", input.executionId);
+    this.#assertRelated(
+      execution.data.taskId,
+      execution.data.participantId,
+      execution.data.sessionId,
+      input,
+    );
+    if (!TERMINAL_EXECUTION_STATUSES.has(execution.data.status))
+      throw new RuntimeEligibilityError(
+        `Execution ${input.executionId} is ${execution.data.status}; feedback requires a terminal Execution.`,
+        "terminal",
+      );
+    const ownsMessage = this.#store
+      .listInSession<RuntimeEvent>("event", session.id)
+      .some(
+        (record) =>
+          record.status === "observed" &&
+          record.data.executionId === execution.id &&
+          record.data.source === "engine" &&
+          record.data.type === "message.delta" &&
+          record.data.duplicateOf === null &&
+          record.data.payload.messageId === messageId,
+      );
+    if (!ownsMessage)
+      throw new RuntimeEligibilityError(
+        "The selected assistant message was not observed in this product Execution.",
+        "ownership",
+      );
+
+    const lockKey = JSON.stringify([session.id, execution.id, messageId]);
+    return this.#withAssistantFeedbackLock(lockKey, input.feedback, async () => {
+      // Recheck all product authorization and provenance after waiting for an earlier action
+      // or probing current Engine state, immediately before forwarding the native command.
+      const currentOwnership = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "assistant.feedback",
+      );
+      const currentExecution = this.#require<ExecutionData>("execution", execution.id);
+      this.#assertRelated(
+        currentExecution.data.taskId,
+        currentExecution.data.participantId,
+        currentExecution.data.sessionId,
+        input,
+      );
+      if (!TERMINAL_EXECUTION_STATUSES.has(currentExecution.data.status))
+        throw new RuntimeEligibilityError(
+          `Execution ${input.executionId} is ${currentExecution.data.status}; feedback requires a terminal Execution.`,
+          "terminal",
+        );
+      const stillOwnsMessage = this.#store
+        .listInSession<RuntimeEvent>("event", currentOwnership.session.id)
+        .some(
+          (record) =>
+            record.status === "observed" &&
+            record.data.executionId === currentExecution.id &&
+            record.data.source === "engine" &&
+            record.data.type === "message.delta" &&
+            record.data.duplicateOf === null &&
+            record.data.payload.messageId === messageId,
+        );
+      if (!stillOwnsMessage)
+        throw new RuntimeEligibilityError(
+          "The selected assistant message is no longer attributable to this Execution.",
+          "ownership",
+        );
+
+      const nativeSession = this.#liveSessions.get(currentOwnership.session.id);
+      const storedNativeSession = currentOwnership.session.data.nativeSessionId;
+      const nativeExecutionId = currentExecution.data.nativeExecutionId;
+      if (!nativeSession || !storedNativeSession || nativeSession !== storedNativeSession)
+        return {
+          status: "unknown",
+          reason: "The native Session is not attached in this Runtime process.",
+        };
+      if (!nativeExecutionId)
+        return {
+          status: "unknown",
+          reason: "The product Execution has no verified native execution handle.",
+        };
+
+      const engine = this.#engineFor(currentOwnership.task.data);
+      const snapshot = await this.#capabilities(engine);
+      this.#assertCapability(
+        snapshot,
+        currentOwnership.task.data.engineId,
+        currentOwnership.task.data.environment.id,
+        "assistant.feedback",
+        currentOwnership.task.data.engine.configurationVersion,
+        currentOwnership.task.data.engine.adapterVersion,
+      );
+      if (!engine.setAssistantFeedback)
+        return {
+          status: "unsupported",
+          reason: "The current Engine Adapter does not implement assistant feedback.",
+        };
+
+      const latestOwnership = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "assistant.feedback",
+      );
+      const latestExecution = this.#require<ExecutionData>("execution", execution.id);
+      this.#assertRelated(
+        latestExecution.data.taskId,
+        latestExecution.data.participantId,
+        latestExecution.data.sessionId,
+        input,
+      );
+      if (!TERMINAL_EXECUTION_STATUSES.has(latestExecution.data.status))
+        throw new RuntimeEligibilityError(
+          `Execution ${input.executionId} is ${latestExecution.data.status}; feedback requires a terminal Execution.`,
+          "terminal",
+        );
+      const latestOwnsMessage = this.#store
+        .listInSession<RuntimeEvent>("event", latestOwnership.session.id)
+        .some(
+          (record) =>
+            record.status === "observed" &&
+            record.data.executionId === latestExecution.id &&
+            record.data.source === "engine" &&
+            record.data.type === "message.delta" &&
+            record.data.duplicateOf === null &&
+            record.data.payload.messageId === messageId,
+        );
+      if (!latestOwnsMessage)
+        throw new RuntimeEligibilityError(
+          "The selected assistant message is no longer attributable to this Execution.",
+          "ownership",
+        );
+      if (
+        !latestExecution.data.nativeExecutionId ||
+        latestExecution.data.nativeExecutionId !== nativeExecutionId
+      ) {
+        return {
+          status: "unknown",
+          reason: "The product Execution native handle changed before feedback was sent.",
+        };
+      }
+      if (
+        this.#liveSessions.get(latestOwnership.session.id) !== nativeSession ||
+        latestOwnership.session.data.nativeSessionId !== nativeSession
+      ) {
+        return {
+          status: "unknown",
+          reason: "The native Session attachment changed before feedback was sent.",
+        };
+      }
+      return engine.setAssistantFeedback({
+        session: nativeSession,
+        executionId: latestExecution.data.nativeExecutionId as EngineExecutionRef,
+        messageId,
+        feedback: input.feedback,
+      });
+    });
+  }
+
   freezeTask(input: TaskLifecycleRequest & { readonly reason: string }): RuntimeTask {
     this.#assertOpen();
     const { task } = this.#qualify(
@@ -933,9 +1891,12 @@ export class TaskRuntime {
       const unresolvedExecution = this.#store
         .list<ExecutionData>("execution", task.id)
         .find((record) => !TERMINAL_EXECUTION_STATUSES.has(record.data.status));
-      if (unresolvedInput || unresolvedExecution) {
+      const unresolvedCompact = this.#store
+        .list<RuntimeCompactOperation>("compact-operation", task.id)
+        .find((record) => ACTIVE_COMPACT_STATUSES.has(record.data.status));
+      if (unresolvedInput || unresolvedExecution || unresolvedCompact) {
         throw new RuntimeEligibilityError(
-          "Cannot close a Task with unresolved input or Execution evidence; use abandoned to close without claiming an outcome.",
+          "Cannot close a Task with unresolved Input, Execution, or Session maintenance evidence; use abandoned to close without claiming an outcome.",
         );
       }
     }
@@ -969,6 +1930,7 @@ export class TaskRuntime {
     if (this.#closed) return;
     this.#closed = true;
     this.#listeners.clear();
+    this.#attachmentLocators.clear();
     this.#store.close();
   }
 
@@ -1263,6 +2225,9 @@ export class TaskRuntime {
           participantId: target.participantId,
           sessionId: target.sessionId,
           inputId: target.inputId,
+          ...(this.#require<InputData>("input", target.inputId).data.revisionOf
+            ? { revisionOf: this.#require<InputData>("input", target.inputId).data.revisionOf }
+            : {}),
           status: "accepted",
           acceptedAt,
           startedAt: null,
@@ -1417,6 +2382,11 @@ export class TaskRuntime {
         operation: event.operation,
         scope: event.scope ?? null,
         options: this.#jsonSafe(event.options) as RuntimeApproval["options"],
+        ...(event.presentation
+          ? {
+              presentation: this.#jsonSafe(event.presentation) as RuntimeApproval["presentation"],
+            }
+          : {}),
         expiresAt: event.expiresAt,
         status: "pending",
         repliedOptionId: null,
@@ -1470,6 +2440,11 @@ export class TaskRuntime {
         prompt: event.prompt,
         inputKind: event.inputKind,
         options: this.#jsonSafe(event.options ?? []) as RuntimeUserInput["options"],
+        ...(event.presentation
+          ? {
+              presentation: this.#jsonSafe(event.presentation) as RuntimeUserInput["presentation"],
+            }
+          : {}),
         expiresAt: event.expiresAt,
         status: "pending",
         response: null,
@@ -1497,6 +2472,7 @@ export class TaskRuntime {
       );
       if (request) {
         request.data.status = mapReplyStatus(event.status);
+        if (event.response !== undefined) request.data.response = this.#clone(event.response);
         this.#save(
           "user-input",
           request.id,
@@ -1670,6 +2646,65 @@ export class TaskRuntime {
     );
   }
 
+  #claimAttachments(
+    task: StoredRecord<TaskData>,
+    session: StoredRecord<SessionData>,
+    inputId: string,
+    references: readonly RuntimeAttachmentReference[],
+  ): EngineAttachment[] {
+    const now = this.#now();
+    const claims = references.map((reference) => {
+      const record = this.#store.get<AttachmentData>("attachment", reference.id);
+      const data = record?.data;
+      const locator = this.#attachmentLocators.get(reference.id);
+      if (
+        !record ||
+        !data ||
+        record.status !== "staged" ||
+        data.status !== "staged" ||
+        data.expiresAt <= now ||
+        data.inputId !== null ||
+        record.taskId !== task.id ||
+        record.sessionId !== session.id ||
+        data.taskId !== task.id ||
+        data.participantId !== task.data.participantId ||
+        data.sessionId !== session.id ||
+        data.authorizationId !== task.data.authorization.id ||
+        data.environmentId !== task.data.environment.id ||
+        data.engineId !== task.data.engineId ||
+        data.nativeSessionId !== session.data.nativeSessionId ||
+        data.fileName !== reference.fileName ||
+        data.mimeType !== reference.mimeType ||
+        data.sizeBytes !== reference.sizeBytes ||
+        !locator?.trim()
+      ) {
+        throw new RuntimeEligibilityError(
+          "Attachment reference is expired or does not belong to this Task and Session.",
+          "ownership",
+        );
+      }
+      return { record, data, locator, reference };
+    });
+    for (const claim of claims) {
+      claim.data.status = "claimed";
+      claim.data.inputId = inputId;
+      this.#store.update(
+        this.#record(
+          "attachment",
+          claim.record.id,
+          task.id,
+          session.id,
+          inputId,
+          claim.data,
+          "claimed",
+          claim.record.createdAt,
+          now,
+        ),
+      );
+    }
+    return claims.map(({ reference, locator }) => ({ ...reference, locator }));
+  }
+
   #qualify(
     taskId: string,
     participantId: string,
@@ -1684,6 +2719,7 @@ export class TaskRuntime {
     if (
       !participant ||
       !session ||
+      participant.status !== "active" ||
       task.data.participantId !== participantId ||
       task.data.sessionId !== sessionId ||
       participant.id !== participantId ||
@@ -1719,6 +2755,51 @@ export class TaskRuntime {
     return { task, session };
   }
 
+  #dispatchGuard(input: {
+    readonly taskId: string;
+    readonly participantId: string;
+    readonly sessionId: string;
+    readonly authorizationId: string;
+    readonly capability: EngineCapability & RuntimeAuthorizationScope;
+    readonly engine: EngineAdapter;
+    readonly nativeSessionId: EngineSessionRef;
+  }): () => void {
+    return () => {
+      this.#assertOpen();
+      const { task, session } = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        input.capability,
+      );
+      if (
+        session.data.nativeSessionId !== input.nativeSessionId ||
+        this.#liveSessions.get(session.id) !== input.nativeSessionId
+      )
+        throw new RuntimeEligibilityError(
+          "The native Session is no longer attached to this Host.",
+          "ownership",
+        );
+
+      const current = this.#currentEngineProjection(input.engine);
+      if (current.state !== "current")
+        throw new RuntimeEligibilityError(
+          current.capabilities[input.capability].reason ??
+            "Engine capability state is no longer current.",
+          "temporarily-unavailable",
+        );
+      this.#assertCapability(
+        this.#clone(input.engine.getCapabilities()),
+        task.data.engineId,
+        task.data.environment.id,
+        input.capability,
+        task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
+      );
+    };
+  }
+
   #assertRelated(
     taskId: string,
     participantId: string,
@@ -1739,6 +2820,35 @@ export class TaskRuntime {
   #requireActiveTask(task: StoredRecord<TaskData>): void {
     if (task.data.status !== "active")
       throw new RuntimeEligibilityError(`Task ${task.id} is ${task.data.status}.`);
+  }
+
+  #assertSessionIdle(taskId: string, sessionId: string, exceptCompactId?: string): void {
+    const pendingInput = this.#store
+      .list<InputData>("input", taskId)
+      .find(
+        (record) =>
+          record.sessionId === sessionId &&
+          record.status !== null &&
+          ACTIVE_INPUT_STATUSES.has(record.status),
+      );
+    if (pendingInput)
+      throw new RuntimeEligibilityError(`Session already has unresolved input ${pendingInput.id}.`);
+    this.#assertNoActiveCompact(taskId, sessionId, exceptCompactId);
+  }
+
+  #assertNoActiveCompact(taskId: string, sessionId: string, exceptCompactId?: string): void {
+    const pendingCompact = this.#store
+      .list<RuntimeCompactOperation>("compact-operation", taskId)
+      .find(
+        (record) =>
+          record.data.sessionId === sessionId &&
+          record.id !== exceptCompactId &&
+          ACTIVE_COMPACT_STATUSES.has(record.data.status),
+      );
+    if (pendingCompact)
+      throw new RuntimeEligibilityError(
+        `Session already has unresolved compaction ${pendingCompact.id}.`,
+      );
   }
 
   #validateEnvironmentAndAuthorization(
@@ -1995,6 +3105,38 @@ export class TaskRuntime {
           execution.id,
         );
       }
+      for (const operation of this.#store.list<RuntimeCompactOperation>(
+        "compact-operation",
+        session.taskId,
+      )) {
+        if (
+          operation.data.sessionId !== session.id ||
+          !ACTIVE_COMPACT_STATUSES.has(operation.data.status)
+        )
+          continue;
+        const data: RuntimeCompactOperation = {
+          ...operation.data,
+          status: "unknown",
+          unknownEvidence: {
+            source: "host",
+            evidenceId: `${operation.id}:restart`,
+            detail: "Runtime restarted before native compaction reached terminal evidence.",
+          },
+          reason: "Runtime restarted; native compaction cannot be safely reattached or resent.",
+        };
+        this.#save(
+          "compact-operation",
+          operation.id,
+          operation.taskId,
+          session.id,
+          null,
+          data,
+          data.status,
+          operation.createdAt,
+          recoveredAt,
+          operation.id,
+        );
+      }
     }
   }
 
@@ -2014,6 +3156,7 @@ export class TaskRuntime {
       updatedAt: record.data.updatedAt,
       closedAt: record.data.closedAt,
       closeReason: record.data.closeReason,
+      ...(record.data.forkedFrom ? { forkedFrom: record.data.forkedFrom } : {}),
       engine: record.data.engine,
       currentEngine: this.#engines.has(record.data.engineId)
         ? this.#currentEngineProjection(this.#engineFor(record.data))
@@ -2051,6 +3194,9 @@ export class TaskRuntime {
       stopRequests: this.#store
         .list<RuntimeStopRequest>("stop-request", taskId)
         .map((record) => record.data),
+      compactOperations: this.#store
+        .list<RuntimeCompactOperation>("compact-operation", taskId)
+        .map((record) => record.data),
       integrityIssues: this.#store
         .list<RuntimeIntegrityIssue>("integrity-issue", taskId)
         .map((record) => record.data),
@@ -2058,7 +3204,11 @@ export class TaskRuntime {
   }
 
   #publicInput(data: InputData): RuntimeInput {
-    const { nativeExecutionId: _nativeExecutionId, ...projection } = data;
+    const {
+      nativeExecutionId: _nativeExecutionId,
+      nativeRevisionCommandId: _nativeRevisionCommandId,
+      ...projection
+    } = data;
     return projection;
   }
 
@@ -2243,6 +3393,29 @@ export class TaskRuntime {
     else this.#store.insert(record);
   }
 
+  #updateCompactOperation(
+    id: string,
+    changes: Partial<RuntimeCompactOperation>,
+  ): RuntimeCompactOperation {
+    const record = this.#require<RuntimeCompactOperation>("compact-operation", id);
+    const data = { ...record.data, ...changes };
+    const updatedAt = this.#now();
+    this.#save(
+      "compact-operation",
+      id,
+      record.taskId,
+      record.sessionId,
+      null,
+      data,
+      data.status,
+      record.createdAt,
+      updatedAt,
+      id,
+    );
+    this.#publish(record.taskId, "compact-operation", id);
+    return this.#clone(data);
+  }
+
   #addIssue(
     taskId: string,
     sessionId: string,
@@ -2311,6 +3484,35 @@ export class TaskRuntime {
     } finally {
       this.#commandLocks.delete(key);
     }
+  }
+
+  #withAssistantFeedbackLock(
+    key: string,
+    feedback: SetAssistantFeedback["feedback"],
+    operation: () => Promise<RuntimeAssistantFeedbackResult>,
+  ): Promise<RuntimeAssistantFeedbackResult> {
+    const existing = this.#assistantFeedbackInFlight.get(key);
+    if (existing?.feedback === feedback) return existing.promise;
+    let request!: {
+      readonly feedback: SetAssistantFeedback["feedback"];
+      readonly promise: Promise<RuntimeAssistantFeedbackResult>;
+    };
+    const previous = existing?.promise.catch(() => undefined) ?? Promise.resolve(undefined);
+    const promise = previous.then(operation).then(
+      (result) => {
+        if (this.#assistantFeedbackInFlight.get(key) === request)
+          this.#assistantFeedbackInFlight.delete(key);
+        return result;
+      },
+      (error: unknown) => {
+        if (this.#assistantFeedbackInFlight.get(key) === request)
+          this.#assistantFeedbackInFlight.delete(key);
+        throw error;
+      },
+    );
+    request = { feedback, promise };
+    this.#assistantFeedbackInFlight.set(key, request);
+    return promise;
   }
 
   #clone<T>(value: T): T {

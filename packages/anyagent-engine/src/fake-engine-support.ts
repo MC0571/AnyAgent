@@ -1,6 +1,7 @@
 import type {
   CapabilityStatus,
   EngineApprovalOption,
+  EngineApprovalPresentation,
   EngineApprovalRef,
   EngineCapability,
   EngineEvent,
@@ -8,6 +9,7 @@ import type {
   EngineFailure,
   EngineSessionRef,
   EngineUserInputOption,
+  EngineUserInputPresentation,
   EngineUserInputRef,
 } from "./types.js";
 
@@ -48,6 +50,7 @@ export type FakeEngineStep =
       readonly operation: string;
       readonly scope?: string;
       readonly options?: readonly EngineApprovalOption[];
+      readonly presentation?: EngineApprovalPresentation;
       readonly expiresAt?: number | null;
     }
   | {
@@ -55,6 +58,7 @@ export type FakeEngineStep =
       readonly prompt: string;
       readonly inputKind: "text" | "choice" | "form";
       readonly options?: readonly EngineUserInputOption[];
+      readonly presentation?: EngineUserInputPresentation;
       readonly expiresAt?: number | null;
     }
   | { readonly type: "execution.completed"; readonly result?: string }
@@ -71,6 +75,30 @@ export interface FakeEngineOptions {
   readonly adapterVersion?: string;
   readonly configurationVersion?: string | null;
   readonly environment?: string | null;
+}
+
+export function defaultFakeCapability(capability: EngineCapability): CapabilityStatus {
+  const unavailable =
+    capability === "execution.reconcile" ||
+    capability === "assistant.feedback" ||
+    capability === "session.fork" ||
+    capability === "session.compact" ||
+    capability === "execution.revise";
+  return {
+    support: unavailable ? "unsupported" : "supported",
+    availability: unavailable ? "unknown" : "available",
+    ...(capability === "execution.reconcile"
+      ? { reason: "Fake Engine has no native reconciliation query." }
+      : capability === "assistant.feedback"
+        ? { reason: "Fake Engine does not store assistant feedback." }
+        : capability === "session.fork"
+          ? { reason: "Fake Engine has no native conversation to fork." }
+          : capability === "execution.revise"
+            ? { reason: "Fake Engine has no native conversation branch to revise." }
+            : capability === "session.compact"
+              ? { reason: "Fake Engine has no native Session compaction command." }
+              : {}),
+  };
 }
 
 export interface PendingApproval {
@@ -148,8 +176,11 @@ export class AsyncEventQueue implements AsyncIterable<EngineEvent>, AsyncIterato
 
 export const CAPABILITIES: readonly EngineCapability[] = [
   "session.create",
+  "session.fork",
+  "session.compact",
   "session.close",
   "execution.run",
+  "execution.revise",
   "execution.interrupt",
   "execution.reconcile",
   "events.stream",
@@ -157,6 +188,7 @@ export const CAPABILITIES: readonly EngineCapability[] = [
   "events.file",
   "approval.respond",
   "user-input.respond",
+  "assistant.feedback",
 ];
 
 export function defaultScript(round: number): readonly FakeEngineStep[] {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createAnyAgentService } from "../src/anyagent/createAnyAgentService.js";
 import { setDataBaseDir } from "../src/paths.js";
+import type { IPromptAttachmentTransferService } from "../src/prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
 
 async function waitForCompleted(
@@ -41,6 +42,7 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
     const engines = await host.service.listEngines();
     const fakeEngine = engines.find((item) => item.engineId === "fake")!;
     assert.equal(fakeEngine.capabilities["execution.run"].availability, "available");
+    assert.equal(fakeEngine.capabilities["session.compact"].support, "unsupported");
     assert.equal(fakeEngine.state, "current");
     assert.notEqual(fakeEngine.observedAt, null);
     assert.equal(
@@ -63,6 +65,11 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
       sessionId: task.session.id,
       authorizationId: task.authorizationId,
     };
+    await assert.rejects(
+      host.service.compactSession(input),
+      /no native Session compaction command/i,
+    );
+    assert.deepEqual((await host.service.getHistory(task.id))?.compactOperations, []);
     await host.service.submitInput({ ...input, text: "first" });
     await waitForCompleted(host.service, task.id, 1);
     await host.service.submitInput({ ...input, text: "second" });
@@ -130,6 +137,68 @@ test("concurrent engine list refreshes share only the in-flight probe", async ()
 
     await host.service.listEngines();
     assert.equal(initializeCalls, 3);
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Host stages a renderer-selected local path through the existing transfer service", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-host-attachment-"));
+  setDataBaseDir(directory);
+  let stagedParams: Parameters<IPromptAttachmentTransferService["stage"]>[0] | undefined;
+  const transferService = {
+    stage: async (params: Parameters<IPromptAttachmentTransferService["stage"]>[0]) => {
+      stagedParams = params;
+      return {
+        operationId: params.operationId,
+        ref: `host-resolved:${params.localPath}`,
+        bytes: 17,
+        staged: false,
+      };
+    },
+  } as unknown as IPromptAttachmentTransferService;
+  const host = createAnyAgentService(
+    {} as IZCodeAgentService,
+    undefined,
+    undefined,
+    transferService,
+  );
+  try {
+    const task = await host.service.createTask({ engineId: "fake" });
+    const attachment = await host.service.stageAttachment({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      localPath: "/tmp/selected.md",
+      fileName: "selected.md",
+      mimeType: "text/markdown",
+      sizeBytes: 0,
+    });
+    assert.equal(stagedParams?.localPath, "/tmp/selected.md");
+    assert.equal(stagedParams?.workspacePath, task.environment.workDirectory);
+    assert.equal(stagedParams?.sessionId, task.session.nativeSessionId);
+    assert.equal(stagedParams?.operationId, attachment.id);
+    assert.deepEqual(attachment, {
+      id: attachment.id,
+      fileName: "selected.md",
+      mimeType: "text/markdown",
+      sizeBytes: 17,
+    });
+    assert.equal(JSON.stringify(attachment).includes("/tmp/selected.md"), false);
+
+    await host.service.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "summarize selected.md",
+      attachments: [attachment],
+    });
+    const history = await waitForCompleted(host.service, task.id, 1);
+    assert.deepEqual(history.inputs[0]?.attachments, [attachment]);
   } finally {
     host.close();
     setDataBaseDir(null);

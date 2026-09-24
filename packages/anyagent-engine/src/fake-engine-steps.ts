@@ -60,6 +60,7 @@ export function createFakeStepPayload(
         operation: step.operation,
         ...(step.scope === undefined ? {} : { scope: step.scope }),
         options,
+        ...(step.presentation ? { presentation: step.presentation } : {}),
         expiresAt,
       };
     }
@@ -79,6 +80,7 @@ export function createFakeStepPayload(
         prompt: step.prompt,
         inputKind: step.inputKind,
         ...(step.options === undefined ? {} : { options }),
+        ...(step.presentation === undefined ? {} : { presentation: step.presentation }),
         expiresAt,
       };
     }

@@ -5,10 +5,13 @@ import { FakeEngine, type EngineAdapter } from "@anyagent/engine-contract";
 import {
   createTaskRuntime,
   RuntimeEligibilityError,
+  type RuntimeAuthorization,
   type RuntimeEnvironment,
 } from "@anyagent/runtime";
+import type { ModelSelection } from "@zcode/shared/zcode-protocol-v4";
 import { Emitter } from "@zcode/rpc";
 import { getConversationWorkspaceDir, getDataBaseDir } from "../paths.js";
+import type { IPromptAttachmentTransferService } from "../prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
 import { createZCodeAdapter } from "./zcodeAdapter.js";
 import type { IAnyAgentService } from "./anyAgentService.js";
@@ -17,6 +20,8 @@ import type { IAnyAgentService } from "./anyAgentService.js";
 export function createAnyAgentService(
   agent: IZCodeAgentService,
   readZCodeConfigurationVersion?: () => Promise<string>,
+  validateModelSelection?: (selection: ModelSelection) => Promise<string | undefined>,
+  attachmentTransferService?: IPromptAttachmentTransferService,
 ): {
   service: IAnyAgentService;
   close(): void;
@@ -69,6 +74,7 @@ export function createAnyAgentService(
           agent,
           workspacePath: path,
           readConfigurationVersion: readZCodeConfigurationVersion,
+          validateModelSelection,
         }),
       };
       enginesByEnvironment.set(target.id, engines);
@@ -76,6 +82,25 @@ export function createAnyAgentService(
     return engines;
   }
   const defaultEngines = enginesFor(environment);
+  function hostAuthorization(environmentId: string): RuntimeAuthorization {
+    return {
+      id: `authorization_${randomUUID()}`,
+      environmentId,
+      issuer: "host",
+      expiresAt: null,
+      scopes: [
+        "session.create",
+        "session.fork",
+        "session.compact",
+        "execution.run",
+        "execution.revise",
+        "assistant.feedback",
+        "approval.respond",
+        "user-input.respond",
+        "execution.interrupt",
+      ],
+    };
+  }
   const runtime = createTaskRuntime({
     databasePath,
     engines: new Map<string, EngineAdapter>([
@@ -86,6 +111,38 @@ export function createAnyAgentService(
       const engines = enginesFor(target);
       return engineId === "fake" ? engines.fake : engineId === "zcode" ? engines.zcode : undefined;
     },
+    ...(attachmentTransferService
+      ? {
+          stageAttachment: async (request) => {
+            const workspacePath = request.environment.workDirectory;
+            if (
+              request.environment.kind !== "workspace" ||
+              !workspacePath ||
+              request.environment.id !== `local:${workspacePath}` ||
+              !isAbsolute(request.localPath)
+            ) {
+              throw new RuntimeEligibilityError(
+                "Harness attachments require a local file and the Task's local workspace.",
+                "unsupported",
+              );
+            }
+            const staged = await attachmentTransferService.stage({
+              operationId: request.attachmentId,
+              sessionId: request.nativeSessionId,
+              workspacePath,
+              localPath: request.localPath,
+              fileName: request.fileName,
+              mime: request.mimeType,
+              sizeBytes: request.sizeBytes,
+            });
+            if (staged.operationId !== request.attachmentId)
+              throw new RuntimeEligibilityError(
+                "Host attachment staging returned a mismatched ID.",
+              );
+            return { locator: staged.ref, sizeBytes: staged.bytes };
+          },
+        }
+      : {}),
   });
   const changes = new Emitter<Parameters<Parameters<typeof runtime.subscribe>[0]>[0]>();
   const unsubscribe = runtime.subscribe((change) => changes.fire(change));
@@ -127,27 +184,35 @@ export function createAnyAgentService(
       return runtime.createTask({
         engineId,
         environment: target,
-        authorization: {
-          id: `authorization_${randomUUID()}`,
-          environmentId: target.id,
-          issuer: "host",
-          expiresAt: null,
-          scopes: [
-            "session.create",
-            "execution.run",
-            "approval.respond",
-            "user-input.respond",
-            "execution.interrupt",
-          ],
-        },
+        authorization: hostAuthorization(target.id),
         credentialSource:
           engineId === "fake"
             ? { kind: "none", label: "Controlled Fake Engine" }
             : { kind: "engine", label: "ZCode provider configuration in AnyAgent home" },
       });
     },
+    async forkTask(input) {
+      const source = runtime.getTask(input.taskId);
+      if (!source) throw new RuntimeEligibilityError("Fork source Task does not exist.");
+      return runtime.forkTask({
+        ...input,
+        authorization: hostAuthorization(source.environment.id),
+      });
+    },
+    async stageAttachment(input) {
+      return runtime.stageAttachment(input);
+    },
     async submitInput(input) {
       await runtime.submitInput(input);
+    },
+    async reviseTurn(input) {
+      await runtime.reviseTurn(input);
+    },
+    async setAssistantFeedback(input) {
+      return runtime.setAssistantFeedback(input);
+    },
+    async compactSession(input) {
+      return runtime.compactSession(input);
     },
     async replyToApproval(input) {
       await runtime.replyToApproval(input);

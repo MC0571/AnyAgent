@@ -14,15 +14,19 @@ export interface CapabilityStatus {
 
 export type EngineCapability =
   | "session.create"
+  | "session.fork"
+  | "session.compact"
   | "session.close"
   | "execution.run"
+  | "execution.revise"
   | "execution.interrupt"
   | "execution.reconcile"
   | "events.stream"
   | "events.tool"
   | "events.file"
   | "approval.respond"
-  | "user-input.respond";
+  | "user-input.respond"
+  | "assistant.feedback";
 
 export interface EngineCapabilitySnapshot {
   /** Runtime adapter identifier; do not use as a persisted product identity. */
@@ -59,10 +63,14 @@ export interface EngineEvidence {
 
 export type EngineOperation =
   | "session.create"
+  | "session.fork"
+  | "session.compact"
   | "session.close"
   | "execution.run"
+  | "execution.revise"
   | "execution.interrupt"
-  | "approval.respond";
+  | "approval.respond"
+  | "assistant.feedback";
 
 export type EngineFailureKind =
   | "unsupported"
@@ -112,11 +120,50 @@ export interface EngineApprovalOption {
   readonly id: string;
   readonly label: string;
   readonly decision: "approve" | "reject" | "other";
+  /** This option requires a non-empty user feedback string to be meaningful. */
+  readonly requiresFeedback?: boolean;
+  /** Engine-owned option semantics needed by a richer approval renderer. */
+  readonly presentation?: EngineApprovalOptionPresentation;
+}
+
+/** JSON-only display details; command replies still use the Host-owned option ID. */
+export interface EngineApprovalOptionPresentation {
+  readonly kind: string;
+  readonly description?: string;
+  readonly response?: EngineJsonValue;
+}
+
+/** Generic preview metadata associated with the original approval request. */
+export interface EngineApprovalPresentation {
+  readonly toolCallId?: string;
+  readonly input?: EngineJsonValue;
+  readonly riskLevel?: "low" | "medium" | "high" | "critical";
+  readonly origin?: EngineJsonValue;
 }
 
 export interface EngineUserInputOption {
   readonly id: string;
   readonly label: string;
+}
+
+export type EngineUserInputAnswer = string | EngineJsonObject;
+
+/** A generic question form supplied by the Engine for a user-input request. */
+export interface EngineUserInputQuestion {
+  readonly question: string;
+  readonly header: string;
+  readonly options: readonly {
+    readonly value: string;
+    readonly label: string;
+    readonly description?: string;
+  }[];
+  readonly multiSelect?: boolean;
+}
+
+/** Display-only, JSON-safe user-input structure; native Engine SDK types stay in its Adapter. */
+export interface EngineUserInputPresentation {
+  readonly questions: readonly EngineUserInputQuestion[];
+  readonly origin?: EngineJsonValue;
 }
 
 export type EngineEventPayload =
@@ -168,6 +215,7 @@ export type EngineEventPayload =
       readonly operation: string;
       readonly scope?: string;
       readonly options: readonly EngineApprovalOption[];
+      readonly presentation?: EngineApprovalPresentation;
       readonly expiresAt: number | null;
     }
   | {
@@ -190,12 +238,21 @@ export type EngineEventPayload =
       readonly prompt: string;
       readonly inputKind: "text" | "choice" | "form";
       readonly options?: readonly EngineUserInputOption[];
+      readonly presentation?: EngineUserInputPresentation;
       readonly expiresAt: number | null;
     }
   | {
       readonly type: "user-input.response";
       readonly requestId: EngineUserInputRef;
-      readonly status: "forwarded" | "expired" | "already-answered" | "unsupported" | "unknown";
+      readonly status:
+        | "forwarded"
+        | "expired"
+        | "already-answered"
+        | "unsupported"
+        | "unknown"
+        | "rejected";
+      /** Native answer evidence, when the source includes the accepted response payload. */
+      readonly response?: EngineJsonObject;
       readonly evidence?: EngineEvidence;
     }
   | {
@@ -235,6 +292,28 @@ export interface EngineRun {
   readonly events: AsyncIterable<EngineEvent>;
 }
 
+/** JSON-only adapter input configuration; each Adapter owns its supported keys and semantics. */
+export type EngineJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly EngineJsonValue[]
+  | { readonly [key: string]: EngineJsonValue };
+
+export type EngineJsonObject = Readonly<Record<string, EngineJsonValue>>;
+
+/** A Host-resolved attachment locator. Renderer supplied paths are never valid here. */
+export interface EngineAttachment {
+  /** Opaque Host-issued attachment identity used to retain the input association. */
+  readonly id: string;
+  /** Adapter-consumable locator resolved by the Host for this exact Task and Session. */
+  readonly locator: string;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+}
+
 export interface EngineCommandReceipt {
   readonly status:
     | "requested"
@@ -257,22 +336,74 @@ export interface EngineUserInputReceipt {
   readonly evidence?: EngineEvidence;
 }
 
+export interface EngineAssistantFeedbackReceipt {
+  readonly status: "updated" | "unchanged" | "unsupported" | "temporarily-unavailable" | "unknown";
+  readonly evidence?: EngineEvidence;
+  readonly reason?: string;
+}
+
+export interface EngineCompactReceipt {
+  readonly status: "completed" | "skipped" | "failed" | "cancelled" | "unknown";
+  readonly evidence?: EngineEvidence;
+  readonly reason?: string;
+}
+
 export interface EngineAdapter {
   getCapabilities(): EngineCapabilitySnapshot;
   /** Recheck conditional availability when the adapter can actively probe it. */
   refreshCapabilities?(): Promise<EngineCapabilitySnapshot>;
   createSession(): Promise<EngineSessionRef>;
-  run(input: { readonly session: EngineSessionRef; readonly input: string }): Promise<EngineRun>;
+  /** Create a distinct native child Session from a proven source Execution. */
+  forkSession?(input: {
+    readonly session: EngineSessionRef;
+    readonly sourceExecutionId: EngineExecutionRef;
+    /** Host-persisted idempotency key; retries must reuse this value. */
+    readonly commandId: string;
+    /** Synchronous Host eligibility check immediately before native dispatch. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineSessionRef>;
+  /** Compact the native Session without creating a product Input or Execution. */
+  compactSession?(input: {
+    readonly session: EngineSessionRef;
+    /** Product-owned, persisted idempotency key; retries must reuse this value. */
+    readonly commandId: string;
+    /** Synchronous Host eligibility check immediately before native dispatch. */
+    readonly beforeDispatch?: () => void;
+    /** Command acceptance is evidence, never compaction completion. */
+    readonly onAccepted?: (evidence: EngineEvidence) => void;
+  }): Promise<EngineCompactReceipt>;
+  run(input: {
+    readonly session: EngineSessionRef;
+    readonly input: string;
+    readonly submissionConfig?: EngineJsonObject;
+    readonly attachments?: readonly EngineAttachment[];
+    /** Synchronous Host eligibility check immediately before native dispatch. */
+    readonly beforeDispatch?: () => void;
+    /** One product-owned replacement turn; the Adapter resolves its native target. */
+    readonly revision?: {
+      readonly kind: "edit" | "retry";
+      readonly sourceExecutionId: EngineExecutionRef;
+      readonly commandId: string;
+    };
+  }): Promise<EngineRun>;
   replyToApproval(input: {
     readonly session: EngineSessionRef;
     readonly approvalId: EngineApprovalRef;
     readonly optionId: string;
+    readonly feedback?: string;
   }): Promise<EngineApprovalReceipt>;
   replyToUserInput(input: {
     readonly session: EngineSessionRef;
     readonly requestId: EngineUserInputRef;
-    readonly response: unknown;
+    readonly response: EngineUserInputAnswer;
   }): Promise<EngineUserInputReceipt>;
+  /** Set feedback on a source assistant message. Runtime must qualify its Execution first. */
+  setAssistantFeedback?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+    readonly messageId: string;
+    readonly feedback: "like" | "dislike" | null;
+  }): Promise<EngineAssistantFeedbackReceipt>;
   interrupt(input: {
     readonly session: EngineSessionRef;
     readonly executionId: EngineExecutionRef;

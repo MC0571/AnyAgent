@@ -6,13 +6,17 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type {
   EngineAdapter,
+  EngineAttachment,
+  EngineAssistantFeedbackReceipt,
   EngineApprovalReceipt,
   EngineCapability,
   EngineCapabilitySnapshot,
   EngineCommandReceipt,
+  EngineCompactReceipt,
   EngineEvent,
   EngineEventInput,
   EngineExecutionRef,
+  EngineJsonObject,
   EngineRun,
   EngineSessionRef,
   EngineUserInputReceipt,
@@ -21,6 +25,7 @@ import type {
 import {
   createTaskRuntime,
   type RuntimeAuthorization,
+  type RuntimeAttachmentStageRequest,
   type RuntimeEnvironment,
 } from "../src/index.js";
 
@@ -56,6 +61,10 @@ class ManualEngine implements EngineAdapter {
   readonly sessions: EngineSessionRef[] = [];
   readonly runs: {
     session: EngineSessionRef;
+    input: string;
+    submissionConfig?: EngineJsonObject;
+    attachments?: readonly EngineAttachment[];
+    revision?: Parameters<EngineAdapter["run"]>[0]["revision"];
     executionId: EngineExecutionRef;
     events: EventQueue;
     sourceSequence: number;
@@ -64,8 +73,11 @@ class ManualEngine implements EngineAdapter {
   readonly capabilities = Object.fromEntries(
     [
       "session.create",
+      "session.fork",
+      "session.compact",
       "session.close",
       "execution.run",
+      "execution.revise",
       "execution.interrupt",
       "execution.reconcile",
       "events.stream",
@@ -73,6 +85,7 @@ class ManualEngine implements EngineAdapter {
       "events.file",
       "approval.respond",
       "user-input.respond",
+      "assistant.feedback",
     ].map((name) => [
       name,
       {
@@ -82,6 +95,21 @@ class ManualEngine implements EngineAdapter {
     ]),
   ) as Record<EngineCapability, CapabilityStatus>;
   #nextSession = 0;
+  createSessionCalls = 0;
+  readonly forkCalls: Parameters<NonNullable<EngineAdapter["forkSession"]>>[0][] = [];
+  forkFailure: Error | null = null;
+  readonly compactCalls: Parameters<NonNullable<EngineAdapter["compactSession"]>>[0][] = [];
+  compactReceipt: EngineCompactReceipt = {
+    status: "completed",
+    evidence: { source: "engine", evidenceId: "compact-terminal" },
+  };
+  compactHandler:
+    | ((
+        input: Parameters<NonNullable<EngineAdapter["compactSession"]>>[0],
+      ) => Promise<EngineCompactReceipt>)
+    | null = null;
+  runFailure: Error | null = null;
+  beforeRunDispatch: (() => Promise<void>) | null = null;
   #nextExecution = 0;
   adapterVersion = "test";
   configurationVersion = "test";
@@ -89,6 +117,9 @@ class ManualEngine implements EngineAdapter {
   approvalReplies = 0;
   userInputReplies = 0;
   interrupts = 0;
+  readonly feedbackCalls: Parameters<NonNullable<EngineAdapter["setAssistantFeedback"]>>[0][] = [];
+  feedbackEffects = 0;
+  readonly feedbackByTarget = new Map<string, "like" | "dislike" | null>();
   interruptStatus: EngineCommandReceipt["status"] = "requested";
 
   getCapabilities(): EngineCapabilitySnapshot {
@@ -111,15 +142,53 @@ class ManualEngine implements EngineAdapter {
   }
 
   async createSession(): Promise<EngineSessionRef> {
+    this.createSessionCalls++;
     const session = `native-session-${++this.#nextSession}` as EngineSessionRef;
     this.sessions.push(session);
     return session;
   }
 
-  async run({ session }: { session: EngineSessionRef; input: string }): Promise<EngineRun> {
-    const executionId = `native-execution-${++this.#nextExecution}` as EngineExecutionRef;
+  async forkSession(input: Parameters<NonNullable<EngineAdapter["forkSession"]>>[0]) {
+    input.beforeDispatch?.();
+    this.forkCalls.push(input);
+    if (this.forkFailure) throw this.forkFailure;
+    const session = `native-fork-${++this.#nextSession}` as EngineSessionRef;
+    this.sessions.push(session);
+    return session;
+  }
+
+  async compactSession(
+    input: Parameters<NonNullable<EngineAdapter["compactSession"]>>[0],
+  ): Promise<EngineCompactReceipt> {
+    input.beforeDispatch?.();
+    this.compactCalls.push(input);
+    const acceptedEvidence = {
+      source: "engine" as const,
+      evidenceId: `${input.commandId}:accepted`,
+    };
+    input.onAccepted?.(acceptedEvidence);
+    return this.compactHandler ? this.compactHandler(input) : this.compactReceipt;
+  }
+
+  async run(request: Parameters<EngineAdapter["run"]>[0]): Promise<EngineRun> {
+    await this.beforeRunDispatch?.();
+    request.beforeDispatch?.();
+    if (this.runFailure) throw this.runFailure;
+    const { session, input, submissionConfig, attachments, revision } = request;
+    const executionId = (revision?.commandId ??
+      `native-execution-${++this.#nextExecution}`) as EngineExecutionRef;
     const events = new EventQueue();
-    this.runs.push({ session, executionId, events, sourceSequence: 0, deliverySequence: 0 });
+    this.runs.push({
+      session,
+      input,
+      ...(submissionConfig ? { submissionConfig } : {}),
+      ...(attachments ? { attachments } : {}),
+      ...(revision ? { revision } : {}),
+      executionId,
+      events,
+      sourceSequence: 0,
+      deliverySequence: 0,
+    });
     return { executionId, events };
   }
 
@@ -134,6 +203,20 @@ class ManualEngine implements EngineAdapter {
   async interrupt(): Promise<EngineCommandReceipt> {
     this.interrupts++;
     return { status: this.interruptStatus };
+  }
+  async setAssistantFeedback(
+    input: Parameters<NonNullable<EngineAdapter["setAssistantFeedback"]>>[0],
+  ): Promise<EngineAssistantFeedbackReceipt> {
+    this.feedbackCalls.push(input);
+    const target = JSON.stringify([input.session, input.executionId, input.messageId]);
+    const current = this.feedbackByTarget.get(target) ?? null;
+    if (current === input.feedback) return { status: "unchanged" };
+    this.feedbackByTarget.set(target, input.feedback);
+    this.feedbackEffects++;
+    return {
+      status: "updated",
+      evidence: { source: "engine", evidenceId: `feedback-${this.feedbackEffects}` },
+    };
   }
   async closeSession(): Promise<EngineCommandReceipt> {
     return { status: "closed" };
@@ -166,6 +249,39 @@ class ManualEngine implements EngineAdapter {
   }
 }
 
+test("Runtime persists and forwards generic submission JSON without interpreting Engine keys", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  const submissionConfig = {
+    mode: "engine-specific-mode",
+    modelSelection: {
+      providerId: "configured-provider",
+      modelId: "configured-model",
+      options: { reasoningLevel: "custom-level" },
+    },
+    engineExtension: { enabled: true },
+  } satisfies EngineJsonObject;
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const input = await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "use adapter-owned config",
+      submissionConfig,
+    });
+    assert.deepEqual(input.submissionConfig, submissionConfig);
+    assert.deepEqual(runtime.getHistory(task.id)?.inputs[0]?.submissionConfig, submissionConfig);
+    assert.deepEqual(engine.runs[0]?.submissionConfig, submissionConfig);
+  } finally {
+    runtime.close();
+  }
+});
+
 const environment: RuntimeEnvironment = {
   id: "workspace-a",
   kind: "workspace",
@@ -179,7 +295,11 @@ const authorization: RuntimeAuthorization = {
   environmentId: "workspace-a",
   scopes: [
     "session.create",
+    "session.fork",
+    "session.compact",
     "execution.run",
+    "execution.revise",
+    "assistant.feedback",
     "approval.respond",
     "user-input.respond",
     "execution.interrupt",
@@ -197,6 +317,118 @@ async function until(predicate: () => boolean): Promise<void> {
   }
   assert.fail("Timed out waiting for Runtime state to update.");
 }
+
+test("Session compaction requires Task ownership and scope, records native terminal outcomes only", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const otherTask = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const noCompactScope = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: {
+        ...authorization,
+        id: "grant-without-compact",
+        scopes: authorization.scopes.filter((scope) => scope !== "session.compact"),
+      },
+    });
+    const request = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+
+    await assert.rejects(
+      runtime.compactSession({ ...request, participantId: otherTask.participant.id }),
+      /participant|ownership/i,
+    );
+    await assert.rejects(
+      runtime.compactSession({ ...request, sessionId: otherTask.session.id }),
+      /participant|Session ownership/i,
+    );
+    await assert.rejects(
+      runtime.compactSession({ ...request, authorizationId: noCompactScope.authorizationId }),
+      /authorization/i,
+    );
+    await assert.rejects(
+      runtime.compactSession({
+        taskId: noCompactScope.id,
+        participantId: noCompactScope.participant.id,
+        sessionId: noCompactScope.session.id,
+        authorizationId: noCompactScope.authorizationId,
+      }),
+      /session.compact scope/i,
+    );
+    assert.equal(engine.compactCalls.length, 0);
+
+    for (const status of ["completed", "skipped", "failed", "cancelled"] as const) {
+      const evidence = { source: "engine" as const, evidenceId: `terminal-${status}` };
+      engine.compactReceipt = {
+        status,
+        evidence,
+        ...(status === "failed" ? { reason: "native error" } : {}),
+      };
+      const operation = await runtime.compactSession(request);
+      assert.equal(operation.status, status);
+      assert.equal(operation.taskId, task.id);
+      assert.equal(operation.participantId, task.participant.id);
+      assert.equal(operation.sessionId, task.session.id);
+      assert.equal(operation.acceptedEvidence?.evidenceId, `${operation.id}:accepted`);
+      assert.equal(operation.terminalEvidence?.evidenceId, evidence.evidenceId);
+      assert.ok(operation.terminalAt !== null);
+    }
+
+    const history = runtime.getHistory(task.id)!;
+    assert.deepEqual(history.inputs, []);
+    assert.deepEqual(history.executions, []);
+    assert.deepEqual(
+      history.compactOperations.map((operation) => operation.status),
+      ["completed", "skipped", "failed", "cancelled"],
+    );
+    assert.equal(engine.compactCalls.length, 4);
+    assert.equal(engine.compactCalls[0]?.commandId, history.compactOperations[0]?.id);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Runtime restart marks a pending compaction unknown and never resends it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-compact-restart-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  engine.compactHandler = () => new Promise<EngineCompactReceipt>(() => undefined);
+  const options = { databasePath, engines: new Map([["manual", engine]]) };
+  let runtime = createTaskRuntime(options);
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const request = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const pending = runtime.compactSession(request);
+    void pending.catch(() => undefined);
+    await until(() => engine.compactCalls.length === 1);
+    runtime.close();
+
+    runtime = createTaskRuntime(options);
+    const operation = runtime.getHistory(task.id)?.compactOperations[0];
+    assert.equal(operation?.status, "unknown");
+    assert.match(operation?.reason ?? "", /cannot be safely reattached or resent/i);
+    assert.equal(operation?.unknownEvidence?.source, "host");
+    await assert.rejects(() => runtime.compactSession(request), /Session is unknown/i);
+    assert.equal(engine.compactCalls.length, 1);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("creates distinct Task ownership and persists serializable projections", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-"));
@@ -253,6 +485,283 @@ test("creates distinct Task ownership and persists serializable projections", as
     restored.close();
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Host-staged attachment tickets are Task-bound, one-use, and never persist local paths", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-attachment-runtime-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  const stageRequests: RuntimeAttachmentStageRequest[] = [];
+  const runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async (request) => {
+      stageRequests.push(request);
+      return { locator: `host-resolved:${request.attachmentId}`, sizeBytes: 12 };
+    },
+  });
+  try {
+    const first = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const attachment = await runtime.stageAttachment({
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+      authorizationId: authorization.id,
+      localPath: "/private/notes.md",
+      fileName: "notes.md",
+      mimeType: "text/markdown",
+      sizeBytes: 12,
+    });
+    assert.notEqual(attachment.id, "/private/notes.md");
+    assert.equal(JSON.stringify(attachment).includes("/private/notes.md"), false);
+    assert.equal(stageRequests[0]?.taskId, first.id);
+    assert.equal(stageRequests[0]?.nativeSessionId, first.session.nativeSessionId);
+    assert.equal(stageRequests[0]?.localPath, "/private/notes.md");
+
+    const acceptedInput = await runtime.submitInput({
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+      authorizationId: authorization.id,
+      text: "summarize this file",
+      attachments: [attachment],
+    });
+    assert.deepEqual(acceptedInput.attachments, [attachment]);
+    assert.deepEqual(runtime.getHistory(first.id)?.inputs[0]?.attachments, [attachment]);
+    assert.deepEqual(engine.runs[0]?.attachments, [
+      { ...attachment, locator: `host-resolved:${attachment.id}` },
+    ]);
+    assert.equal(JSON.stringify(runtime.getHistory(first.id)).includes("host-resolved:"), false);
+    const database = new DatabaseSync(databasePath);
+    const stored = database
+      .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+      .get("attachment", attachment.id) as { data: string };
+    assert.equal(stored.data.includes("/private/notes.md"), false);
+    assert.equal(stored.data.includes("host-resolved:"), false);
+    database.close();
+
+    const second = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await assert.rejects(
+      () =>
+        runtime.submitInput({
+          taskId: second.id,
+          participantId: second.participant.id,
+          sessionId: second.session.id,
+          authorizationId: authorization.id,
+          text: "reuse another Task's attachment",
+          attachments: [attachment],
+        }),
+      /expired or does not belong to this Task and Session/i,
+    );
+    const rejected = runtime.getHistory(second.id)?.inputs[0];
+    assert.equal(rejected?.status, "rejected");
+    assert.deepEqual(rejected?.attachments, [attachment]);
+    assert.equal(engine.runs.length, 1);
+    assert.equal(stageRequests.length, 1);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Runtime rejects renderer-supplied attachment metadata without a Host-staged ticket", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const attachment = {
+      id: "renderer-supplied-ticket",
+      fileName: "secret.txt",
+      mimeType: "text/plain",
+      sizeBytes: 6,
+    };
+    await assert.rejects(
+      () =>
+        runtime.submitInput({
+          taskId: task.id,
+          participantId: task.participant.id,
+          sessionId: task.session.id,
+          authorizationId: authorization.id,
+          text: "do not dispatch an unverified attachment",
+          attachments: [attachment],
+        }),
+      /expired or does not belong to this Task and Session/i,
+    );
+    assert.deepEqual(runtime.getHistory(task.id)?.inputs[0]?.attachments, [attachment]);
+    assert.equal(runtime.getHistory(task.id)?.inputs[0]?.status, "rejected");
+    assert.equal(engine.runs.length, 0);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("attachment staging rechecks Task eligibility after the capability probe", async () => {
+  const engine = new ManualEngine();
+  let entered!: () => void;
+  let release!: () => void;
+  const probeEntered = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const heldProbe = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let stageCalls = 0;
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async () => {
+      stageCalls += 1;
+      return { locator: "staged", sizeBytes: 1 };
+    },
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    engine.refreshHandler = async () => {
+      entered();
+      await heldProbe;
+      return engine.getCapabilities();
+    };
+    const staging = runtime.stageAttachment({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      localPath: "/private/file.txt",
+      fileName: "file.txt",
+      mimeType: "text/plain",
+      sizeBytes: 1,
+    });
+    await probeEntered;
+    runtime.freezeTask({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      reason: "freeze during capability probe",
+    });
+    release();
+    await assert.rejects(staging, /frozen/i);
+    assert.equal(stageCalls, 0);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("fork rechecks its source Task after the final capability probe", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const source = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await runtime.submitInput({
+      taskId: source.id,
+      participantId: source.participant.id,
+      sessionId: source.session.id,
+      authorizationId: source.authorizationId,
+      text: "source round",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "fork-race-admit" },
+    });
+    await until(() => runtime.getHistory(source.id)!.executions.length === 1);
+    const execution = runtime.getHistory(source.id)!.executions[0]!;
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "source answer",
+      evidence: { source: "engine", evidenceId: "fork-race-complete" },
+    });
+    await until(() => runtime.getHistory(source.id)!.executions[0]!.status === "completed");
+
+    let probeCount = 0;
+    let entered!: () => void;
+    let release!: () => void;
+    const probeEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const heldProbe = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    engine.refreshHandler = async () => {
+      probeCount += 1;
+      if (probeCount === 3) {
+        entered();
+        await heldProbe;
+      }
+      return engine.getCapabilities();
+    };
+    const fork = runtime.forkTask({
+      taskId: source.id,
+      participantId: source.participant.id,
+      sessionId: source.session.id,
+      authorizationId: source.authorizationId,
+      executionId: execution.id,
+      authorization: { ...authorization, id: "grant-fork-race" },
+    });
+    await probeEntered;
+    runtime.freezeTask({
+      taskId: source.id,
+      participantId: source.participant.id,
+      sessionId: source.session.id,
+      authorizationId: source.authorizationId,
+      reason: "freeze during capability probe",
+    });
+    release();
+    await assert.rejects(fork, /frozen/i);
+    assert.equal(engine.forkCalls.length, 0);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Adapter dispatch rechecks an authorization that expires while it waits", async () => {
+  const engine = new ManualEngine();
+  let now = 1;
+  let entered!: () => void;
+  let release!: () => void;
+  const dispatchEntered = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const heldDispatch = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+  });
+  try {
+    const grant = { ...authorization, expiresAt: 2 };
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+    });
+    engine.beforeRunDispatch = async () => {
+      entered();
+      await heldDispatch;
+    };
+    const submission = runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "expires before native dispatch",
+    });
+    await dispatchEntered;
+    now = 2;
+    release();
+    await assert.rejects(submission, /expired/i);
+    assert.equal(engine.runs.length, 0);
+    assert.equal(runtime.getHistory(task.id)?.inputs[0]?.status, "rejected");
+  } finally {
+    runtime.close();
   }
 });
 
@@ -400,6 +909,452 @@ test("only native input.accepted evidence creates a product Execution", async ()
       /completed/i,
     );
   } finally {
+    runtime.close();
+  }
+});
+
+test("fork reserves a new Task and native child without reusing the source Session", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const source = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await runtime.submitInput({
+      taskId: source.id,
+      participantId: source.participant.id,
+      sessionId: source.session.id,
+      authorizationId: authorization.id,
+      text: "source round",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "fork-admit" },
+    });
+    await until(() => runtime.getHistory(source.id)!.executions.length === 1);
+    const execution = runtime.getHistory(source.id)!.executions[0]!;
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "source answer",
+      evidence: { source: "engine", evidenceId: "fork-complete" },
+    });
+    await until(() => runtime.getHistory(source.id)!.executions[0]!.status === "completed");
+
+    const childAuthorization = { ...authorization, id: "grant-fork-child" };
+    const request = {
+      taskId: source.id,
+      participantId: source.participant.id,
+      sessionId: source.session.id,
+      authorizationId: authorization.id,
+      executionId: execution.id,
+      authorization: childAuthorization,
+    };
+    await assert.rejects(() => runtime.forkTask({ ...request, executionId: "wrong" }));
+    await assert.rejects(() => runtime.forkTask({ ...request, authorizationId: "wrong" }));
+    assert.equal(engine.forkCalls.length, 0);
+
+    const child = await runtime.forkTask(request);
+    assert.notEqual(child.id, source.id);
+    assert.notEqual(child.participant.id, source.participant.id);
+    assert.notEqual(child.session.id, source.session.id);
+    assert.notEqual(child.session.nativeSessionId, source.session.nativeSessionId);
+    assert.notEqual(child.authorizationId, source.authorizationId);
+    assert.deepEqual(child.forkedFrom, {
+      taskId: source.id,
+      inputId: execution.inputId,
+      executionId: execution.id,
+    });
+    assert.equal(engine.createSessionCalls, 1);
+    assert.equal(engine.forkCalls.length, 1);
+    assert.equal(engine.forkCalls[0]?.sourceExecutionId, engine.runs[0]?.executionId);
+    assert.equal(runtime.getHistory(child.id)?.inputs.length, 0);
+    assert.equal(runtime.getHistory(child.id)?.executions.length, 0);
+    await runtime.submitInput({
+      taskId: child.id,
+      participantId: child.participant.id,
+      sessionId: child.session.id,
+      authorizationId: child.authorizationId,
+      text: "child round",
+    });
+    assert.equal(engine.runs[1]?.session, child.session.nativeSessionId);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("uncertain native fork leaves one frozen child instead of creating another Session", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const source = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await runtime.submitInput({
+      taskId: source.id,
+      participantId: source.participant.id,
+      sessionId: source.session.id,
+      authorizationId: authorization.id,
+      text: "source round",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "fork-unknown-admit" },
+    });
+    await until(() => runtime.getHistory(source.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "source answer",
+      evidence: { source: "engine", evidenceId: "fork-unknown-complete" },
+    });
+    await until(() => runtime.getHistory(source.id)!.executions[0]!.status === "completed");
+    engine.forkFailure = new Error("reply lost after native side effect");
+    await assert.rejects(
+      () =>
+        runtime.forkTask({
+          taskId: source.id,
+          participantId: source.participant.id,
+          sessionId: source.session.id,
+          authorizationId: source.authorizationId,
+          executionId: runtime.getHistory(source.id)!.executions[0]!.id,
+          authorization: { ...authorization, id: "grant-unknown-child" },
+        }),
+      /reply lost/,
+    );
+    const child = runtime.listTasks().find((task) => task.id !== source.id)!;
+    assert.equal(child.status, "frozen");
+    assert.equal(child.session.status, "unknown");
+    assert.equal(child.session.nativeSessionId, null);
+    assert.equal(engine.forkCalls.length, 1);
+    assert.equal(engine.createSessionCalls, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("edit and retry create new product Input and Execution in the same Task and Session", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const completeRun = async (index: number, result: string) => {
+      engine.emit(index, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: `accept-${index}` },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions.length === index + 1);
+      engine.emit(index, {
+        type: "execution.completed",
+        result,
+        evidence: { source: "engine", evidenceId: `complete-${index}` },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions[index]!.status === "completed");
+    };
+    await runtime.submitInput({ ...identity, text: "original text" });
+    await completeRun(0, "original answer");
+    const original = structuredClone(runtime.getHistory(task.id)!);
+    await assert.rejects(() =>
+      runtime.reviseTurn({
+        ...identity,
+        sourceExecutionId: "wrong",
+        kind: "edit",
+        text: "edited text",
+      }),
+    );
+    assert.equal(engine.runs.length, 1);
+
+    const edited = await runtime.reviseTurn({
+      ...identity,
+      sourceExecutionId: original.executions[0]!.id,
+      kind: "edit",
+      text: "edited text",
+    });
+    assert.equal(edited.text, "edited text");
+    assert.deepEqual(edited.revisionOf, {
+      kind: "edit",
+      inputId: original.inputs[0]!.id,
+      executionId: original.executions[0]!.id,
+    });
+    assert.equal(engine.runs[1]?.session, task.session.nativeSessionId);
+    assert.equal(engine.runs[1]?.revision?.sourceExecutionId, engine.runs[0]?.executionId);
+    assert.equal(engine.runs[1]?.executionId, engine.runs[1]?.revision?.commandId);
+    await completeRun(1, "edited answer");
+
+    const retrySource = runtime.getHistory(task.id)!.executions[1]!;
+    const retried = await runtime.reviseTurn({
+      ...identity,
+      sourceExecutionId: retrySource.id,
+      kind: "retry",
+    });
+    assert.equal(retried.text, "edited text");
+    assert.deepEqual(retried.revisionOf, {
+      kind: "retry",
+      inputId: edited.id,
+      executionId: retrySource.id,
+    });
+    await completeRun(2, "retried answer");
+    const final = runtime.getHistory(task.id)!;
+    assert.equal(final.inputs.length, 3);
+    assert.equal(final.executions.length, 3);
+    assert.deepEqual(final.inputs[0], original.inputs[0]);
+    assert.deepEqual(final.executions[0], original.executions[0]);
+    assert.deepEqual(final.executions[1]?.revisionOf, edited.revisionOf);
+    assert.deepEqual(final.executions[2]?.revisionOf, retried.revisionOf);
+    assert.equal(runtime.listTasks().length, 1);
+    assert.equal(engine.createSessionCalls, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("unknown native revision leaves its product Input and stable command intent recorded", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "original text" });
+    engine.emit(0, { type: "input.accepted", evidence: { source: "engine", evidenceId: "admit" } });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "done",
+      evidence: { source: "engine", evidenceId: "done" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "completed");
+    const sourceExecutionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    engine.runFailure = new Error("native revision outcome unknown");
+    await assert.rejects(
+      () => runtime.reviseTurn({ ...identity, sourceExecutionId, kind: "retry" }),
+      /unknown/,
+    );
+    const history = runtime.getHistory(task.id)!;
+    assert.equal(history.inputs.length, 2);
+    assert.equal(history.inputs[1]?.status, "unknown");
+    assert.equal(history.executions.length, 1);
+    assert.deepEqual(history.inputs[1]?.revisionOf, {
+      kind: "retry",
+      inputId: history.inputs[0]!.id,
+      executionId: sourceExecutionId,
+    });
+    await assert.rejects(
+      () => runtime.reviseTurn({ ...identity, sourceExecutionId, kind: "retry" }),
+      /unresolved input/,
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("assistant feedback is bound to an Execution message and repeated updates are safe", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      text: "produce a reply",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "feedback-input-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const execution = runtime.getHistory(task.id)!.executions[0]!;
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "feedback-execution-started" },
+    });
+    engine.emit(0, {
+      type: "message.delta",
+      text: "answer",
+      messageId: "assistant-message-1",
+      blockId: "text-1",
+    });
+    await until(() =>
+      runtime
+        .getHistory(task.id)!
+        .events.some(
+          (event) =>
+            event.executionId === execution.id && event.payload.messageId === "assistant-message-1",
+        ),
+    );
+    const request = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      executionId: execution.id,
+      messageId: "assistant-message-1",
+      feedback: "like" as const,
+    };
+    await assert.rejects(
+      () => runtime.setAssistantFeedback(request),
+      /feedback requires a terminal Execution/i,
+    );
+
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "answer",
+      evidence: { source: "engine", evidenceId: "feedback-execution-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    await assert.rejects(
+      () => runtime.setAssistantFeedback({ ...request, messageId: "wrong-message" }),
+      /not observed in this product Execution/i,
+    );
+
+    const [first, duplicate] = await Promise.all([
+      runtime.setAssistantFeedback(request),
+      runtime.setAssistantFeedback(request),
+    ]);
+    assert.deepEqual(first, {
+      status: "updated",
+      evidence: { source: "engine", evidenceId: "feedback-1" },
+    });
+    assert.deepEqual(duplicate, first);
+    assert.equal(engine.feedbackCalls.length, 1);
+    assert.equal(engine.feedbackEffects, 1);
+
+    assert.equal((await runtime.setAssistantFeedback(request)).status, "unchanged");
+    assert.equal(engine.feedbackEffects, 1);
+    assert.equal(
+      (await runtime.setAssistantFeedback({ ...request, feedback: "dislike" })).status,
+      "updated",
+    );
+    assert.equal(
+      (await runtime.setAssistantFeedback({ ...request, feedback: null })).status,
+      "updated",
+    );
+    assert.equal(engine.feedbackEffects, 3);
+
+    const otherTask = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await assert.rejects(
+      () =>
+        runtime.setAssistantFeedback({
+          ...request,
+          taskId: otherTask.id,
+          participantId: otherTask.participant.id,
+          sessionId: otherTask.session.id,
+        }),
+      /different Task, participant, or Session/i,
+    );
+    assert.equal(engine.feedbackEffects, 3);
+
+    runtime.closeTask({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      outcome: "completed",
+    });
+    await assert.rejects(() => runtime.setAssistantFeedback(request), /Task .* is completed/i);
+  } finally {
+    engine.closeEvents(0);
+    runtime.close();
+  }
+});
+
+test("assistant feedback requires its own authorization and current Engine capability", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const withoutFeedbackScope = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: {
+        ...authorization,
+        id: "grant-without-feedback",
+        scopes: authorization.scopes.filter((scope) => scope !== "assistant.feedback"),
+      },
+    });
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      text: "produce a reply",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "feedback-scope-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const execution = runtime.getHistory(task.id)!.executions[0]!;
+    engine.emit(0, {
+      type: "message.delta",
+      text: "answer",
+      messageId: "assistant-message-2",
+      blockId: "text-2",
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "answer",
+      evidence: { source: "engine", evidenceId: "feedback-scope-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+
+    const request = {
+      taskId: withoutFeedbackScope.id,
+      participantId: withoutFeedbackScope.participant.id,
+      sessionId: withoutFeedbackScope.session.id,
+      authorizationId: withoutFeedbackScope.authorizationId,
+      executionId: execution.id,
+      messageId: "assistant-message-2",
+      feedback: "like" as const,
+    };
+    await assert.rejects(
+      () => runtime.setAssistantFeedback(request),
+      /Authorization lacks assistant\.feedback scope/i,
+    );
+
+    engine.setCapability("assistant.feedback", {
+      support: "unsupported",
+      availability: "unknown",
+      reason: "Feedback was disabled in this Engine configuration.",
+    });
+    await assert.rejects(
+      () =>
+        runtime.setAssistantFeedback({
+          ...request,
+          taskId: task.id,
+          participantId: task.participant.id,
+          sessionId: task.session.id,
+          authorizationId: task.authorizationId,
+        }),
+      /Feedback was disabled in this Engine configuration/i,
+    );
+    assert.equal(engine.feedbackCalls.length, 0);
+  } finally {
+    engine.closeEvents(0);
     runtime.close();
   }
 });
@@ -1000,6 +1955,109 @@ test("approval response is scoped to its originating Task and native option", as
       optionId: "allow",
     });
     assert.equal(response.status, "forwarded");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("user-input attempts are not persisted without accepted receipt or native response evidence", async () => {
+  for (const receiptStatus of ["expired", "unsupported", "unknown"] as const) {
+    const engine = new ManualEngine();
+    const runtime = createTaskRuntime({
+      databasePath: ":memory:",
+      engines: new Map([["manual", engine]]),
+    });
+    try {
+      const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+      const scope = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: authorization.id,
+      };
+      await runtime.submitInput({ ...scope, text: "request input" });
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "accepted" },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+      engine.emit(0, {
+        type: "user-input.requested",
+        requestId: `native-input-${receiptStatus}` as never,
+        prompt: "Question",
+        inputKind: "text",
+        expiresAt: null,
+      });
+      await until(() => runtime.getHistory(task.id)!.userInputs.length === 1);
+      engine.replyToUserInput = async () => ({ status: receiptStatus });
+
+      const [request] = runtime.getHistory(task.id)!.userInputs;
+      const reply = await runtime.replyToUserInput({
+        ...scope,
+        requestId: request!.id,
+        response: "attempt that was not accepted",
+      });
+      assert.equal(reply.status, receiptStatus);
+      assert.equal(reply.response, null);
+      assert.equal(runtime.getHistory(task.id)!.userInputs[0]!.response, null);
+    } finally {
+      runtime.close();
+    }
+  }
+});
+
+test("native user-input response evidence survives a conflicting command receipt", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const scope = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+    };
+    await runtime.submitInput({ ...scope, text: "request input" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "user-input.requested",
+      requestId: "native-race-input" as never,
+      prompt: "Question",
+      inputKind: "choice",
+      expiresAt: null,
+    });
+    await until(() => runtime.getHistory(task.id)!.userInputs.length === 1);
+    const nativeResponse = {
+      action: "accept",
+      content: { answers: { Question: "native value" } },
+    } as const;
+    engine.replyToUserInput = async () => {
+      engine.emit(0, {
+        type: "user-input.response",
+        requestId: "native-race-input" as never,
+        status: "forwarded",
+        response: nativeResponse,
+      });
+      await until(() => runtime.getHistory(task.id)!.userInputs[0]!.status === "forwarded");
+      return { status: "unsupported" };
+    };
+
+    const request = runtime.getHistory(task.id)!.userInputs[0]!;
+    const reply = await runtime.replyToUserInput({
+      ...scope,
+      requestId: request.id,
+      response: "unaccepted local attempt",
+    });
+    assert.equal(reply.status, "forwarded");
+    assert.deepEqual(reply.response, nativeResponse);
+    assert.deepEqual(runtime.getHistory(task.id)!.userInputs[0]!.response, nativeResponse);
   } finally {
     runtime.close();
   }

@@ -17,6 +17,7 @@ import {
 import {
   AsyncEventQueue,
   CAPABILITIES,
+  defaultFakeCapability,
   defaultScript,
   type EventOverrides,
   type ExecutionRecord,
@@ -63,13 +64,7 @@ export class FakeEngine implements EngineAdapter {
     for (const capability of CAPABILITIES) {
       this.#capabilities.set(
         capability,
-        options.capabilities?.[capability] ?? {
-          support: capability === "execution.reconcile" ? "unsupported" : "supported",
-          availability: capability === "execution.reconcile" ? "unknown" : "available",
-          ...(capability === "execution.reconcile"
-            ? { reason: "Fake Engine has no native reconciliation query." }
-            : {}),
-        },
+        options.capabilities?.[capability] ?? defaultFakeCapability(capability),
       );
     }
   }
@@ -100,7 +95,14 @@ export class FakeEngine implements EngineAdapter {
     return session;
   }
 
-  async run(input: { readonly session: EngineSessionRef; readonly input: string }) {
+  async run(input: Parameters<EngineAdapter["run"]>[0]) {
+    if (input.revision)
+      throw this.#error(
+        "unsupported",
+        "execution.revise",
+        "Fake Engine has no native conversation branch to revise.",
+        "none",
+      );
     this.#requireAvailable("execution.run");
     if (!this.#sessions.has(input.session)) {
       throw this.#error(
@@ -145,6 +147,7 @@ export class FakeEngine implements EngineAdapter {
     readonly session: EngineSessionRef;
     readonly approvalId: EngineApprovalRef;
     readonly optionId: string;
+    readonly feedback?: string;
   }): Promise<EngineApprovalReceipt> {
     const found = findFakeApproval(this.#executions.values(), input.session, input.approvalId);
     if (!found) return { status: "unknown" };

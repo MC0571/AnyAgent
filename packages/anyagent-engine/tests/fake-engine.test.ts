@@ -320,6 +320,7 @@ test("capability support and current availability remain independent and refresh
   const initial = fake.getCapabilities();
   assert.equal(initial.engineId, "fake");
   assert.equal(initial.configurationVersion, "fake-config-1");
+  assert.equal(initial.capabilities["execution.revise"]?.support, "unsupported");
   assert.deepEqual(initial.capabilities["execution.run"], {
     support: "supported",
     availability: "unknown",
