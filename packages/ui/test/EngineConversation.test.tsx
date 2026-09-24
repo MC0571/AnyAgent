@@ -590,8 +590,7 @@ test("EngineConversation sends through the product composer and renders ordered 
         setTextWithPluginMentions: (value: string) => void;
       };
     };
-    const structuredMentionPrompt =
-      "first request [@Review Plugin](plugin://openai.review@1.0.0)";
+    const structuredMentionPrompt = "first request [@Review Plugin](plugin://openai.review@1.0.0)";
     await act(async () =>
       firstInput.__zcodeLexicalInputE2E.setTextWithPluginMentions(structuredMentionPrompt),
     );
@@ -606,6 +605,11 @@ test("EngineConversation sends through the product composer and renders ordered 
       "a rejected submission should preserve the selected attachment",
     );
     assert.equal(submissions.length, 0);
+    assert.equal(
+      dom.window.localStorage.getItem("zcode-chat-prompt-history:/tmp/anyagent-ui"),
+      null,
+      "a rejected input must not enter native prompt history",
+    );
     await act(async () => composerSubmit()?.click());
     await waitFor(() => assert.equal(submissions.length, 1), "attachment retry was not submitted");
     assert.deepEqual(stagedAttachmentRequests, [
@@ -853,6 +857,26 @@ test("EngineConversation sends through the product composer and renders ordered 
         ),
       "successful button submission should clear the product composer",
     );
+    assert.deepEqual(
+      JSON.parse(
+        dom.window.localStorage.getItem("zcode-chat-prompt-history:/tmp/anyagent-ui") ?? "[]",
+      ),
+      [structuredMentionPrompt],
+      "an accepted Engine input should use the existing workspace prompt history",
+    );
+    const historyInput = document.querySelector('[data-testid="engine-composer-input"]') as
+      | (HTMLElement & {
+          __zcodeLexicalInputE2E: { getText: () => string; setText: (text: string) => void };
+        })
+      | null;
+    assert.ok(historyInput);
+    await act(async () => {
+      historyInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    assert.equal(historyInput.__zcodeLexicalInputE2E.getText(), structuredMentionPrompt);
+    await act(async () => historyInput.__zcodeLexicalInputE2E.setText(""));
 
     const secondAnswer = "Second round fragment one · fragment two";
     await send("second request");
@@ -1712,9 +1736,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       null,
       "the native-only compact command must not be advertised as a Harness action",
     );
-    await act(async () =>
-      input.__zcodeLexicalInputE2E!.setText("/compact instructions"),
-    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/compact instructions"));
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
@@ -1731,7 +1753,10 @@ test("an active ZCode Harness task switches models within its Session and submit
       "safe native Skill prompt command should remain available",
     );
     await waitFor(
-      () => assert.ok(skillCatalogLookups.some((lookup) => lookup.sessionId === "native-zcode-session-ui")),
+      () =>
+        assert.ok(
+          skillCatalogLookups.some((lookup) => lookup.sessionId === "native-zcode-session-ui"),
+        ),
       "native Skill catalog did not receive the verified native Session ID",
     );
 
@@ -1769,7 +1794,10 @@ test("an active ZCode Harness task switches models within its Session and submit
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
     );
-    await waitFor(() => assert.equal(submissions.length, 3), "structured mention prompt was not sent");
+    await waitFor(
+      () => assert.equal(submissions.length, 3),
+      "structured mention prompt was not sent",
+    );
     assert.equal(
       submissions[2]?.text,
       structuredMentionPrompt,

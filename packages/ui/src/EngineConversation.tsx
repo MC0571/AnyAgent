@@ -55,6 +55,11 @@ import { resolveDraftModelThoughtOption } from "@/v4/composer/draftWorkspaceDefa
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getConversationContentWidthClassName } from "@/v4/conversationLayout.js";
 import { basenameFromPath, inferAttachmentMimeType } from "@/lib/chatAttachmentMetadata.js";
+import { appendPromptHistoryEntry } from "@/lib/promptHistory.js";
+import {
+  persistPromptHistoryEntries,
+  readPromptHistoryEntries,
+} from "@/lib/promptHistoryStorage.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
@@ -426,6 +431,15 @@ export function EngineConversation({
   const composerWorkspacePath = isZCodeHarness
     ? (visibleTask?.environment.workDirectory ?? "")
     : "";
+  const promptHistoryWorkspacePath = visibleTask?.environment.workDirectory ?? "";
+  const [promptHistory, setPromptHistory] = useState<readonly string[]>(() =>
+    readPromptHistoryEntries(promptHistoryWorkspacePath),
+  );
+  const promptHistoryWorkspacePathRef = useRef(promptHistoryWorkspacePath);
+  promptHistoryWorkspacePathRef.current = promptHistoryWorkspacePath;
+  useEffect(() => {
+    setPromptHistory(readPromptHistoryEntries(promptHistoryWorkspacePath));
+  }, [promptHistoryWorkspacePath]);
   const nativeSessionId = isZCodeHarness ? (visibleTask?.session.nativeSessionId ?? null) : null;
   const nativeSlashCommands = useSlashCommands(composerWorkspacePath);
   const excludedSlashCommandNames = useMemo(
@@ -475,8 +489,7 @@ export function EngineConversation({
         ? [
             {
               value: "plan",
-              description:
-                locale === "zh-CN" ? "切换到计划模式" : "Switch to plan mode",
+              description: locale === "zh-CN" ? "切换到计划模式" : "Switch to plan mode",
               keywords: ["plan", "计划", "计划模式"],
               run: () => {
                 if (!visibleTask) return;
@@ -641,10 +654,7 @@ export function EngineConversation({
         setNotice(null);
         return true;
       } else {
-        const nativeBuiltin = nativeBuiltinForSlashCommand(
-          slashCommand.name,
-          nativeSlashCommands,
-        );
+        const nativeBuiltin = nativeBuiltinForSlashCommand(slashCommand.name, nativeSlashCommands);
         if (nativeBuiltin && !nativePromptBuiltinSlashCommands.has(nativeBuiltin)) {
           const commandName = nativeBuiltin === "compact" ? "compact" : slashCommand.name;
           setNotice({
@@ -710,6 +720,17 @@ export function EngineConversation({
       () => null,
     ).then((accepted) => {
       if (!accepted) return;
+      try {
+        const nextHistory = appendPromptHistoryEntry(
+          readPromptHistoryEntries(promptHistoryWorkspacePath),
+          cleanText,
+        );
+        persistPromptHistoryEntries(promptHistoryWorkspacePath, nextHistory);
+        if (promptHistoryWorkspacePathRef.current === promptHistoryWorkspacePath)
+          setPromptHistory(nextHistory);
+      } catch {
+        // History is optional; an unavailable browser store must not undo an accepted input.
+      }
       if (inputApiRef.current === editor) editor?.clear();
       if (selectedAttachments.length > 0) {
         setAttachmentsByTask((current) => ({
@@ -1068,6 +1089,7 @@ export function EngineConversation({
                   className="p-0"
                   workspacePath={composerWorkspacePath}
                   taskId={nativeSessionId}
+                  promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
                   attachmentAction={attachmentAction}
                   actionMenuDisabled={!platform.canSelectFilePath}
