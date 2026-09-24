@@ -4,7 +4,7 @@
 
 ## 环境与执行路径
 
-- macOS Darwin arm64；Node 24.14.0、pnpm 10.33.2、Electron 41.0.3；仓内真实 `zcode-cli 0.16.9`，ZCode Adapter `m1.1`。
+- macOS Darwin arm64；Node 24.14.0、pnpm 10.33.2、Electron 41.0.3；仓内真实 `zcode-cli 0.16.9`，ZCode Adapter `m1.2`。
 - 复用隔离 App 已有的 OpenCode Go (Responses) 配置与 `grok-4.6`、`gpt-5.6-luna`；凭据没有复制到仓库、截图或记录。数据、原生 SQLite、测试项目及启动器均在 `/tmp/anyagent-opencode-go.aBEA0z/`，正式用户数据未被修改。
 - `pnpm build:bootstrap` 后，经隔离启动器执行 `pnpm dev:desktop:prod`。M1 用 `ANYAGENT_M1_WORKBENCH=1`，M0 用 `0`，两者均运行上述相同产品代码提交。M1 路径为原 Root / Composer → Host RPC → Runtime → ZCode Adapter → `IZCodeAgentService` → 真实 CLI → OpenCode Go；M0 开关关闭后走原 Provider 对话路径。
 - 同一场景以窗口截图、只读产品 SQLite、原生 Session / `session_input`、隔离文件状态及 App 日志互相核对。以下 ID 均来自该隔离数据集。原始 App 日志在 `/tmp/anyagent-opencode-go.aBEA0z/app-pr25-eecf9c6.log` 与 `app-m0-eecf9c6.log`；未提交可能含本地路径和配置的完整日志。
