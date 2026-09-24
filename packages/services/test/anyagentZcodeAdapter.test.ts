@@ -1154,6 +1154,7 @@ test("after different models in one Harness Session only the latest canonical tu
 
 test("ZCode assistant feedback resolves and updates the exact current native row", async () => {
   const rows: NativeAssistantRow[] = [
+    { rowId: 12, entityId: "assistant-message-13", kind: "reasoning" },
     { rowId: 13, entityId: "assistant-message-13", kind: "assistantText" },
   ];
   const fixture = harness({ rows });
@@ -1198,7 +1199,7 @@ test("ZCode assistant feedback resolves and updates the exact current native row
       (await fixture.adapter.setAssistantFeedback!({ ...request, feedback: null })).status,
       "unchanged",
     );
-    assert.equal(rows[0]?.feedback, undefined);
+    assert.equal(rows[1]?.feedback, undefined);
     assert.deepEqual(
       await fixture.adapter.readAssistantFeedback(session, ["assistant-message-13"]),
       {

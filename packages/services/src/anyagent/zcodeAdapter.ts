@@ -375,8 +375,9 @@ export function createZCodeAdapter(options: {
         );
       }
       for (const row of page.rows) {
-        if (!row.entityId || !messageIds.has(row.entityId)) continue;
-        if (matches.has(row.entityId) || row.kind !== "assistantText")
+        if (row.kind !== "assistantText" || !row.entityId || !messageIds.has(row.entityId))
+          continue;
+        if (matches.has(row.entityId))
           throw new AssistantRowReadError(
             "The native assistant message has no unique text row.",
             "unsupported",
