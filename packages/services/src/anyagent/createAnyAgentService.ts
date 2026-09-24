@@ -13,6 +13,7 @@ import { Emitter } from "@zcode/rpc";
 import { getConversationWorkspaceDir, getDataBaseDir } from "../paths.js";
 import type { IPromptAttachmentTransferService } from "../prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
+import { createZCodeAgentConnectionScope } from "../zcode-agent/zcodeAgentConnectionScope.js";
 import { createZCodeAdapter } from "./zcodeAdapter.js";
 import type { IAnyAgentService } from "./anyAgentService.js";
 
@@ -27,6 +28,11 @@ export function createAnyAgentService(
   close(): void;
 } {
   const workDirectory = getConversationWorkspaceDir();
+  const agentScope = createZCodeAgentConnectionScope(agent, {
+    connectionId: `anyagent-host-${randomUUID()}`,
+    clientMode: "desktop-continuous",
+    role: "trusted-host-relay",
+  });
   const databasePath = join(getDataBaseDir(), "anyagent-m1.sqlite");
   mkdirSync(workDirectory, { recursive: true });
   mkdirSync(dirname(databasePath), { recursive: true });
@@ -71,7 +77,7 @@ export function createAnyAgentService(
             Number.isFinite(fakeStepDelayMs) && fakeStepDelayMs > 0 ? fakeStepDelayMs : 0,
         }),
         zcode: createZCodeAdapter({
-          agent,
+          agent: agentScope.service,
           workspacePath: path,
           readConfigurationVersion: readZCodeConfigurationVersion,
           validateModelSelection,
@@ -256,6 +262,7 @@ export function createAnyAgentService(
       unsubscribe();
       changes.dispose();
       for (const engines of enginesByEnvironment.values()) engines.zcode.dispose();
+      void agentScope.dispose();
       runtime.close();
     },
   };

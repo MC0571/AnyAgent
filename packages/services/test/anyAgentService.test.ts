@@ -7,6 +7,7 @@ import { createAnyAgentService } from "../src/anyagent/createAnyAgentService.js"
 import { setDataBaseDir } from "../src/paths.js";
 import type { IPromptAttachmentTransferService } from "../src/prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
+import { readTrustedZCodeAgentV4Connection } from "../src/zcode-agent/zcodeAgentConnectionScope.js";
 
 async function waitForCompleted(
   service: ReturnType<typeof createAnyAgentService>["service"],
@@ -316,6 +317,114 @@ test("Harness tasks use their selected project workspace without changing anothe
     );
     assert.equal((await host.service.getTask(projectTask.id))?.environment.workDirectory, project);
     assert.ok((await host.service.listTasks()).some((task) => task.id === projectTask.id));
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Host-owned Harness reads native assistant rows through a trusted ZCode connection", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-feedback-connection-"));
+  setDataBaseDir(directory);
+  let receiveEvent: ((event: unknown) => void) | undefined;
+  let rowReads = 0;
+  const host = createAnyAgentService(
+    {
+      initialize: async () => ({ available: true, workspaceKey: directory }),
+      onDynamicSessionEvent: () => (listener: (event: unknown) => void) => {
+        receiveEvent = listener;
+        return { dispose: () => (receiveEvent = undefined) };
+      },
+      onAgentRuntimeLifecycle: () => ({ dispose() {} }),
+      sendConversationCommandV4: async ({
+        envelope,
+      }: {
+        envelope: { type: string; commandId: string };
+      }) =>
+        envelope.type === "createSession"
+          ? {
+              status: "accepted",
+              commandId: envelope.commandId,
+              result: { type: "createSession", sessionId: "native-feedback-session" },
+            }
+          : {
+              status: "accepted",
+              commandId: envelope.commandId,
+              result: {
+                type: "inputAccepted",
+                inputId: "native-feedback-input",
+                delivery: "startNow",
+              },
+            },
+      conversationRowsRangeV4: async (params: unknown) => {
+        assert.equal(readTrustedZCodeAgentV4Connection(params)?.clientMode, "desktop-continuous");
+        rowReads++;
+        return {
+          rows: [
+            {
+              rowId: 1,
+              entityId: "native-feedback-message",
+              kind: "assistantText",
+              feedback: "like",
+            },
+          ],
+          atSeq: 1,
+          atRevision: 1,
+          atLogEpoch: "native-log",
+          hasMore: false,
+        };
+      },
+    } as unknown as IZCodeAgentService,
+    undefined,
+    async () => undefined,
+  );
+  try {
+    const task = await host.service.createTask({ engineId: "zcode" });
+    await host.service.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "reply",
+      submissionConfig: { modelSelection: { providerId: "provider-a", modelId: "model-a" } },
+    });
+    const emit = (eventId: string, seq: number, type: string, payload: unknown) =>
+      receiveEvent?.({
+        type: "session.event",
+        event: {
+          eventId,
+          seq,
+          sessionId: "native-feedback-session",
+          turnId: "native-feedback-turn",
+          timestamp: seq,
+          type,
+          payload,
+        },
+      });
+    emit("start", 1, "turn.started", {
+      inputId: "native-feedback-input",
+      foregroundExecutionId: "native-feedback-work",
+    });
+    emit("delta", 2, "model.streaming", {
+      kind: "text_delta",
+      delta: "done",
+      assistantMessageId: "native-feedback-message",
+    });
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (
+        (await host.service.getHistory(task.id))?.events.some(
+          (event) => event.type === "message.delta",
+        )
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    assert.deepEqual(await host.service.getAssistantFeedback(task.id), {
+      state: "current",
+      values: { "native-feedback-message": "like" },
+    });
+    assert.equal(rowReads, 1);
   } finally {
     host.close();
     setDataBaseDir(null);
