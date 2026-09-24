@@ -2098,7 +2098,8 @@ test("an active ZCode Harness task switches models within its Session and submit
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
   const feedbackRequests: Array<Record<string, unknown>> = [];
   let nativeFeedback: "like" | "dislike" | null = null;
-  const history = emptyHistory();
+  const changes = new Set<(change: Record<string, unknown>) => void>();
+  let history = emptyHistory();
   const historyB = emptyHistory(zcodeTaskB.id);
   history.inputs.push({
     id: "input-initial",
@@ -2131,7 +2132,10 @@ test("an active ZCode Harness task switches models within its Session and submit
       values: id === zcodeTaskB.id ? {} : { "native-feedback-message": nativeFeedback },
     }),
     listEngines: async () => [zcodeEngine],
-    onDidChange: () => ({ dispose: () => {} }),
+    onDidChange: (listener: (change: Record<string, unknown>) => void) => {
+      changes.add(listener);
+      return { dispose: () => changes.delete(listener) };
+    },
     submitInput: async (input: Record<string, unknown>) => {
       submissions.push(input);
     },
@@ -2421,22 +2425,28 @@ test("an active ZCode Harness task switches models within its Session and submit
       },
       duplicateOf: null,
     });
-    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    history = { ...history };
+    await act(async () => {
+      for (const listener of changes) listener({ taskId, task: zcodeTask, history });
+    });
     await waitFor(
       () =>
-        assert.equal(container.querySelector('[data-testid="engine-input-input-initial"]'), null),
-      "Task B must not show Task A's native message",
-    );
-    await act(async () => root.render(appFor(taskId)));
-    await waitFor(
-      () => assert.ok(container.querySelector('button[aria-label="赞"]')),
-      "Task A must read its native feedback row",
+        assert.equal(
+          container.querySelector<HTMLButtonElement>('button[aria-label="赞"]')?.disabled,
+          false,
+        ),
+      "a terminal native message should enable feedback without leaving the Task",
     );
     await act(async () =>
       container.querySelector<HTMLButtonElement>('button[aria-label="赞"]')!.click(),
     );
     await waitFor(() => assert.equal(nativeFeedback, "like"));
     await act(async () => root.render(appFor(zcodeTaskB.id)));
+    await waitFor(
+      () =>
+        assert.equal(container.querySelector('[data-testid="engine-input-input-initial"]'), null),
+      "Task B must not show Task A's native message",
+    );
     await act(async () => root.render(appFor(taskId)));
     await waitFor(
       () =>

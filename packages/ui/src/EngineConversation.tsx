@@ -325,21 +325,6 @@ export function EngineConversation({
         setTask(nextTask);
         setHistory(nextHistory);
       }
-      if (nextTask?.engine.engineId === "zcode") {
-        void service.getAssistantFeedback(targetTaskId).then(
-          (read) => {
-            if (requestVersion === requestVersionRef.current)
-              setFeedbackSnapshot({ taskId: targetTaskId, read });
-          },
-          (error: unknown) => {
-            if (requestVersion === requestVersionRef.current)
-              setFeedbackSnapshot({
-                taskId: targetTaskId,
-                read: { state: "unknown", reason: errorText(error) },
-              });
-          },
-        );
-      } else if (requestVersion === requestVersionRef.current) setFeedbackSnapshot(null);
       if (nextTask) {
         try {
           const sources = await loadInheritedSources(service, nextTask);
@@ -427,6 +412,43 @@ export function EngineConversation({
     visibleTask?.engine.engineId === "zcode" && feedbackSnapshot?.taskId === visibleTask.id
       ? feedbackSnapshot.read
       : null;
+  const feedbackReadKey = visibleHistory
+    ? [
+        ...visibleHistory.executions
+          .filter((execution) => isTerminal(execution.status))
+          .map((execution) => execution.id),
+        ...new Set(
+          visibleHistory.events
+            .filter(
+              (event) =>
+                event.type === "message.delta" &&
+                visibleHistory.executions.some(
+                  (execution) => execution.id === event.executionId && isTerminal(execution.status),
+                ),
+            )
+            .map((event) => String(event.payload.messageId ?? "")),
+        ),
+      ].join("|")
+    : "";
+  useEffect(() => {
+    if (!visibleTask || visibleTask.engine.engineId !== "zcode" || !visibleHistory) return;
+    let cancelled = false;
+    void service.getAssistantFeedback(visibleTask.id).then(
+      (read) => {
+        if (!cancelled) setFeedbackSnapshot({ taskId: visibleTask.id, read });
+      },
+      (error: unknown) => {
+        if (!cancelled)
+          setFeedbackSnapshot({
+            taskId: visibleTask.id,
+            read: { state: "unknown", reason: errorText(error) },
+          });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [feedbackReadKey, revision, service, visibleTask?.id]);
   const visibleTitle = visibleTask
     ? visibleHistory?.inputs[0]?.text.trim().replace(/\s+/g, " ").slice(0, 80) ||
       `Task ${shortId(visibleTask.id)}`
