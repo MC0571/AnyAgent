@@ -5,7 +5,7 @@ import type {
   RequestStop,
   RuntimeChange,
   RuntimeCredentialSource,
-  RuntimeEngineProjection,
+  RuntimeCurrentEngineProjection,
   RuntimeEnvironment,
   RuntimeTask,
   SubmitInput,
@@ -20,7 +20,7 @@ export interface IAnyAgentService {
     environment: RuntimeEnvironment;
     credentialSource: RuntimeCredentialSource;
   }>;
-  listEngines(): Promise<readonly RuntimeEngineProjection[]>;
+  listEngines(): Promise<readonly RuntimeCurrentEngineProjection[]>;
   listTasks(): Promise<readonly RuntimeTask[]>;
   getTask(taskId: string): Promise<RuntimeTask | null>;
   getHistory(taskId: string): Promise<TaskHistory | null>;

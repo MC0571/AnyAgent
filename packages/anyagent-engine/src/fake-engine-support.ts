@@ -14,7 +14,12 @@ import type {
 export type FakeEngineStep =
   | { readonly type: "input.accepted" }
   | { readonly type: "execution.started" }
-  | { readonly type: "message.delta"; readonly text: string }
+  | {
+      readonly type: "message.delta";
+      readonly text: string;
+      readonly messageId?: string;
+      readonly blockId?: string;
+    }
   | {
       readonly type: "tool.started";
       readonly name: string;
@@ -57,6 +62,7 @@ export type FakeEngineStep =
 
 export interface FakeEngineOptions {
   readonly autoAdvance?: boolean;
+  readonly stepDelayMs?: number;
   readonly now?: () => number;
   readonly script?: readonly FakeEngineStep[];
   readonly capabilities?: Partial<Record<EngineCapability, CapabilityStatus>>;
@@ -153,28 +159,32 @@ export const CAPABILITIES: readonly EngineCapability[] = [
   "user-input.respond",
 ];
 
-export const DEFAULT_SCRIPT: readonly FakeEngineStep[] = [
-  { type: "input.accepted" },
-  { type: "execution.started" },
-  { type: "message.delta", text: "I will inspect the file. " },
-  {
-    type: "tool.started",
-    toolCallId: "fake-tool-1",
-    name: "read_file",
-    input: { path: "README.md" },
-  },
-  {
-    type: "file.changed",
-    path: "README.md",
-    operation: "modified",
-    diff: "@@ -1 +1 @@\n-old\n+new",
-  },
-  {
-    type: "tool.completed",
-    toolCallId: "fake-tool-1",
-    result: { path: "README.md" },
-    sideEffects: "known",
-  },
-  { type: "message.delta", text: "The file has been updated." },
-  { type: "execution.completed", result: "done" },
-];
+export function defaultScript(round: number): readonly FakeEngineStep[] {
+  const opening = `Fake round ${round}: I will inspect the file. `;
+  const closing = `The file has been updated (round ${round}).`;
+  return [
+    { type: "input.accepted" },
+    { type: "execution.started" },
+    { type: "message.delta", text: opening, messageId: `fake-message-${round}`, blockId: "text" },
+    {
+      type: "tool.started",
+      toolCallId: "fake-tool-1",
+      name: "read_file",
+      input: { path: "README.md" },
+    },
+    {
+      type: "file.changed",
+      path: "README.md",
+      operation: "modified",
+      diff: "@@ -1 +1 @@\n-old\n+new",
+    },
+    {
+      type: "tool.completed",
+      toolCallId: "fake-tool-1",
+      result: { path: "README.md" },
+      sideEffects: "known",
+    },
+    { type: "message.delta", text: closing, messageId: `fake-message-${round}`, blockId: "text" },
+    { type: "execution.completed", result: opening + closing },
+  ];
+}

@@ -41,6 +41,8 @@ interface PendingRun {
   readonly userInputIds: Set<string>;
   turnId: string | null;
   nativeForegroundExecutionId: string | null;
+  textBlockSequence: number;
+  currentTextBlock: { messageId: string; blockId: string } | null;
   lastSequence: number | null;
   deliverySequence: number;
   finished: boolean;
@@ -50,7 +52,7 @@ interface PendingRun {
 
 const ENGINE_ID = "zcode";
 const SOURCE_VERSION = "zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521";
-const ADAPTER_VERSION = "m1.0";
+const ADAPTER_VERSION = "m1.1";
 const CLIENT_ID = "anyagent-m1-host";
 
 function command(
@@ -127,7 +129,7 @@ export function createZCodeAdapter(options: {
   agent: AgentPort;
   workspacePath: string;
   workspaceIdentity?: string;
-  configurationVersion?: string;
+  readConfigurationVersion?: () => Promise<string>;
 }): EngineAdapter & { dispose(): void } {
   const workspace = {
     workspacePath: options.workspacePath,
@@ -142,6 +144,7 @@ export function createZCodeAdapter(options: {
   let availability: "unknown" | "available" | "temporarily-unavailable" | "authorization-required" =
     "unknown";
   let availabilityReason = "运行条件尚未探测";
+  let configurationVersion: string | null = null;
   let nativeWorkspaceId = options.workspaceIdentity ?? options.workspacePath;
 
   function capabilities(): EngineCapabilitySnapshot {
@@ -169,7 +172,7 @@ export function createZCodeAdapter(options: {
       engineId: ENGINE_ID,
       engineVersion: SOURCE_VERSION,
       adapterVersion: ADAPTER_VERSION,
-      configurationVersion: options.configurationVersion ?? null,
+      configurationVersion,
       environment: options.workspaceIdentity ?? `local:${options.workspacePath}`,
       capabilities: items,
     };
@@ -178,6 +181,7 @@ export function createZCodeAdapter(options: {
   async function refreshCapabilities(): Promise<EngineCapabilitySnapshot> {
     try {
       const result = await options.agent.initialize(workspace);
+      configurationVersion = (await options.readConfigurationVersion?.()) ?? null;
       if (result.available) nativeWorkspaceId = result.workspaceKey;
       availability = result.available
         ? "available"
@@ -188,6 +192,7 @@ export function createZCodeAdapter(options: {
         ? ""
         : (result.reason ?? result.reasonCode ?? "ZCode Runtime 不可用");
     } catch (error) {
+      configurationVersion = null;
       availability = "temporarily-unavailable";
       availabilityReason = error instanceof Error ? error.message : String(error);
     }
@@ -248,13 +253,14 @@ export function createZCodeAdapter(options: {
     if (incoming.type === "permission.request") {
       const request = incoming.request;
       if (request.sessionId !== run.session) return;
+      // Without a native turn ID, a late request from the previous turn is
+      // indistinguishable from one for the current run. Never make it actionable.
+      if (!request.turnId) return;
       if (request.turnId && !run.turnId) {
         run.pendingTurnControls.push(incoming);
         return;
       }
-      if (request.turnId) {
-        if (request.turnId !== run.turnId) return;
-      } else if (runs.get(run.session) !== run) return;
+      if (request.turnId !== run.turnId) return;
       if (run.approvals.has(request.requestId)) return;
       const allowed = approvalOptions(request.options);
       run.approvals.set(request.requestId, allowed);
@@ -279,16 +285,12 @@ export function createZCodeAdapter(options: {
     }
     if (incoming.type === "userInput.request") {
       if (incoming.request.sessionId !== run.session) return;
+      if (!incoming.request.turnId) return;
       if (incoming.request.turnId && !run.turnId) {
         run.pendingTurnControls.push(incoming);
         return;
       }
-      if (incoming.request.turnId) {
-        if (incoming.request.turnId !== run.turnId) return;
-      } else if (runs.get(run.session) !== run) {
-        // A request without turn provenance cannot be assigned to a prior run.
-        return;
-      }
+      if (incoming.request.turnId !== run.turnId) return;
       run.userInputIds.add(incoming.request.requestId);
       publish(run, {
         type: "user-input.requested",
@@ -326,9 +328,47 @@ export function createZCodeAdapter(options: {
     }
     if (!run.turnId || event.turnId !== run.turnId) return;
     switch (event.type) {
+      case "model.streaming": {
+        const messageId = text(data.assistantMessageId);
+        if (data.kind === "text_start") {
+          if (run.seen.has(event.eventId)) break;
+          run.seen.add(event.eventId);
+          run.currentTextBlock = messageId
+            ? { messageId, blockId: `zcode-text-${++run.textBlockSequence}` }
+            : null;
+        } else if (data.kind === "text_end") {
+          if (run.seen.has(event.eventId)) break;
+          run.seen.add(event.eventId);
+          if (run.currentTextBlock?.messageId === messageId) run.currentTextBlock = null;
+        } else if (data.kind === "text_delta" && typeof data.delta === "string")
+          publish(
+            run,
+            {
+              type: "message.delta",
+              text: data.delta,
+              ...(messageId ? { messageId } : {}),
+              ...(text(data.partId)
+                ? { blockId: text(data.partId) }
+                : run.currentTextBlock?.messageId === messageId && run.currentTextBlock
+                  ? { blockId: run.currentTextBlock.blockId }
+                  : {}),
+            },
+            event,
+          );
+        break;
+      }
       case "part.delta":
         if (data.field === "text" && typeof data.delta === "string")
-          publish(run, { type: "message.delta", text: data.delta }, event);
+          publish(
+            run,
+            {
+              type: "message.delta",
+              text: data.delta,
+              ...(text(data.messageId) ? { messageId: text(data.messageId) } : {}),
+              ...(text(data.partId) ? { blockId: text(data.partId) } : {}),
+            },
+            event,
+          );
         break;
       case "tool.updated": {
         const toolCallId = text(data.toolCallId);
@@ -544,6 +584,8 @@ export function createZCodeAdapter(options: {
         userInputIds: new Set(),
         turnId: null,
         nativeForegroundExecutionId: null,
+        textBlockSequence: 0,
+        currentTextBlock: null,
         lastSequence: sessionSequence.get(session) ?? null,
         deliverySequence: 0,
         finished: false,

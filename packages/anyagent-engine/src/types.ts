@@ -131,6 +131,9 @@ export type EngineEventPayload =
   | {
       readonly type: "message.delta";
       readonly text: string;
+      /** Source identities, when the Engine exposes them; absent identities stay unknown. */
+      readonly messageId?: string;
+      readonly blockId?: string;
     }
   | {
       readonly type: "tool.started";

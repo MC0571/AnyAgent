@@ -18,10 +18,16 @@ import type {
   DragStartEvent,
   DropAnimation,
 } from "@dnd-kit/core";
-import type { ZCodeGroupedTaskView, ZCodeTaskGroupColor } from "@zcode/services";
+import type { IAnyAgentService, ZCodeGroupedTaskView, ZCodeTaskGroupColor } from "@zcode/services";
 import { OFF_PEAK_DEFAULT_GROUP_ID, type ZCodeTaskMeta } from "@zcode/shared";
 import { createPortal } from "react-dom";
 import { cn } from "@/components/lib/utils.js";
+import {
+  EngineGroupedTaskRow,
+  useEngineTaskSidebarData,
+  type EngineTask,
+} from "@/EngineTaskSidebar.js";
+import { shortId } from "@/EngineUiParts.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TaskRenameDialog } from "@/TaskRenameDialog.js";
 import { shouldHideGroupedTaskContent, useGroupedTaskView } from "@/hooks/useGroupedTaskView.js";
@@ -40,7 +46,10 @@ import { useRemoteTimelineTaskStore } from "@/store/remoteTimelineTaskStore.js";
 import { bumpTaskListMembershipVersion } from "@/v4/taskListMembershipVersion.js";
 import { GroupItem, GroupedTaskItem } from "@/workspace-grouped-tasks/items.js";
 import { GroupDragOverlay } from "@/workspace-grouped-tasks/group-drag-overlay.js";
-import { VirtualizedGroupedTopLevelList } from "@/workspace-grouped-tasks/virtualized-top-level-list.js";
+import {
+  VirtualizedGroupedTopLevelList,
+  type GroupedTopLevelDisplayNode,
+} from "@/workspace-grouped-tasks/virtualized-top-level-list.js";
 import { GroupedDraftTaskRow } from "@/workspace-grouped-tasks/draft-task-row.js";
 import { StickyGroupHeader } from "@/workspace-grouped-tasks/sticky-group-header.js";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
@@ -102,6 +111,27 @@ function areTaskGroupMenuItemsEqual(
 
 function areStringArraysEqual(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+/** 仅合并展示位置；原分组顺序与 DnD 持久化仍只处理 ZCode 节点。 */
+export function mergeEngineGroupedTopLevelNodes(
+  nativeNodes: ZCodeGroupedTaskView["nodes"],
+  engineTasks: readonly EngineTask[],
+): GroupedTopLevelDisplayNode[] {
+  const nodes: GroupedTopLevelDisplayNode[] = [...nativeNodes];
+  for (const task of [...engineTasks].sort((left, right) => right.updatedAt - left.updatedAt)) {
+    const beforeOlderTask = nodes.findIndex(
+      (node) => node.type === "task" && node.task.updatedAt < task.updatedAt,
+    );
+    const lastUngroupedTask = nodes.findLastIndex(
+      (node) => node.type === "task" || node.type === "engine",
+    );
+    nodes.splice(beforeOlderTask >= 0 ? beforeOlderTask : lastUngroupedTask + 1, 0, {
+      type: "engine",
+      task,
+    });
+  }
+  return nodes;
 }
 
 function getGroupedTaskDragTaskKey(value: unknown): string | null {
@@ -533,6 +563,12 @@ export function WorkspaceGroupedTasksSection({
   onCollapsedGroupIdsChange,
   onStickyGroupHeaderChange,
   onOpenAutomations,
+  hiddenNativeTaskIds,
+  engineService,
+  engineSelectedTaskId,
+  onSelectEngineTask,
+  onRefreshEngineState,
+  onNativeSessionIdsChange,
 }: {
   workspaceTabs: WorkspaceTabState[];
   activeWorkspacePath: string;
@@ -554,8 +590,34 @@ export function WorkspaceGroupedTasksSection({
   onStickyGroupHeaderChange?: (node: ReactNode | null) => void;
   /** 闲时系统分组的「+」/右键新建路由到 Automations 主视图。 */
   onOpenAutomations?: () => void;
+  hiddenNativeTaskIds?: ReadonlySet<string>;
+  engineService?: IAnyAgentService | null;
+  engineSelectedTaskId?: string | null;
+  onSelectEngineTask?: (taskId: string) => void;
+  onRefreshEngineState?: () => void;
+  onNativeSessionIdsChange?: (ids: ReadonlySet<string>) => void;
 }) {
   const { intl } = useZCodeIntl();
+  const {
+    tasks: engineTasks,
+    titles: engineTitles,
+    error: engineError,
+  } = useEngineTaskSidebarData({
+    service: engineService && onSelectEngineTask ? engineService : null,
+    onRefresh: onRefreshEngineState,
+    onNativeSessionIdsChange,
+  });
+  const engineNativeSessionIds = useMemo(
+    () =>
+      new Set(
+        engineTasks.flatMap((task) =>
+          task.engine.engineId === "zcode" && task.session.nativeSessionId
+            ? [task.session.nativeSessionId]
+            : [],
+        ),
+      ),
+    [engineTasks],
+  );
   const baseServices = useBaseWorkspaceServices();
   const sessionsById = useRemoteWorkspaceSessionStore((state) => state.sessionsById);
   const sessionIdByWorkspaceIdentity = useRemoteWorkspaceSessionStore(
@@ -607,9 +669,21 @@ export function WorkspaceGroupedTasksSection({
     workspaceTabs,
   });
   const [archivingTaskKeys, setArchivingTaskKeys] = useState<ReadonlySet<string>>(() => new Set());
-  const view = useMemo(
-    () => filterGroupedViewByTaskKeys(authoritativeView, archivingTaskKeys),
-    [archivingTaskKeys, authoritativeView],
+  const view = useMemo(() => {
+    const hiddenKeys = new Set(archivingTaskKeys);
+    if (hiddenNativeTaskIds?.size || engineNativeSessionIds.size) {
+      for (const node of authoritativeView.nodes) {
+        const tasks = node.type === "task" ? [node.task] : node.tasks;
+        for (const task of tasks)
+          if (hiddenNativeTaskIds?.has(task.taskId) || engineNativeSessionIds.has(task.taskId))
+            hiddenKeys.add(taskKey(task));
+      }
+    }
+    return filterGroupedViewByTaskKeys(authoritativeView, hiddenKeys);
+  }, [archivingTaskKeys, authoritativeView, engineNativeSessionIds, hiddenNativeTaskIds]);
+  const displayNodes = useMemo(
+    () => mergeEngineGroupedTopLevelNodes(view.nodes, engineTasks),
+    [engineTasks, view.nodes],
   );
 
   useEffect(() => {
@@ -1518,8 +1592,16 @@ export function WorkspaceGroupedTasksSection({
   ]);
 
   const renderTopLevelNode = useCallback(
-    (node: ZCodeGroupedTaskView["nodes"][number]) =>
-      node.type === "group" ? (
+    (node: GroupedTopLevelDisplayNode) =>
+      node.type === "engine" ? (
+        <EngineGroupedTaskRow
+          key={`engine:${node.task.id}`}
+          task={node.task}
+          title={engineTitles[node.task.id] ?? shortId(node.task.id)}
+          active={node.task.id === engineSelectedTaskId}
+          onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
+        />
+      ) : node.type === "group" ? (
         <div key={node.group.id} data-grouped-layout-key={`group:${node.group.id}`}>
           <GroupItem
             node={node}
@@ -1587,6 +1669,9 @@ export function WorkspaceGroupedTasksSection({
       ),
     [
       activeTaskId,
+      engineSelectedTaskId,
+      engineTitles,
+      onSelectEngineTask,
       activeWorkspaceIdentity,
       activeWorkspacePath,
       activeDragTaskKey,
@@ -1629,13 +1714,13 @@ export function WorkspaceGroupedTasksSection({
     shouldHideGroupedTaskContent({
       initialized,
       loading,
-      hasNodes: view.nodes.length > 0,
+      hasNodes: displayNodes.length > 0,
       hasPaintedOnce: hasPaintedGroupedListRef.current,
     })
   ) {
     return null;
   }
-  if (view.nodes.length > 0) {
+  if (displayNodes.length > 0) {
     // 渲染期写 ref 的前提（禁止照搬到非单调状态）：本 ref 是单调闩锁（false→true，永不回落），
     // 新值只由本次渲染的 view 内容推导。concurrent 下被丢弃的渲染也会执行这次赋值，最坏结果是
     // 门禁提前开门一帧、显示空态文案而不是隐藏；对可回落状态用同样写法则会产生不可复现的漏帧。
@@ -1714,6 +1799,11 @@ export function WorkspaceGroupedTasksSection({
           onPointerDownCapture={handleGroupedPointerDownCapture}
           className={cn("pb-4", saving && "opacity-90")}
         >
+          {engineError ? (
+            <p role="alert" className="px-3 py-2 text-ui-base text-destructive">
+              {engineError}
+            </p>
+          ) : null}
           {groupedDraftTask?.placement.type === "top" ? (
             <GroupedDraftTaskRow
               active={isGroupedDraftActive}
@@ -1723,11 +1813,11 @@ export function WorkspaceGroupedTasksSection({
             />
           ) : null}
           <VirtualizedGroupedTopLevelList
-            nodes={view.nodes}
+            nodes={displayNodes}
             isGroupCollapsed={isGroupCollapsed}
             renderNode={renderTopLevelNode}
           />
-          {view.nodes.length === 0 && !groupedDraftTask && !loading ? (
+          {displayNodes.length === 0 && !groupedDraftTask && !loading ? (
             <div className="px-3 py-2 text-ui-base text-foreground-subtle">
               {intl.formatMessage({ id: "taskList.noTasks" })}
             </div>

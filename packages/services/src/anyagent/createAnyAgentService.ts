@@ -10,7 +10,10 @@ import { createZCodeAdapter } from "./zcodeAdapter.js";
 import type { IAnyAgentService } from "./anyAgentService.js";
 
 /** One Host-owned Runtime behind the desktop product channel. */
-export function createAnyAgentService(agent: IZCodeAgentService): {
+export function createAnyAgentService(
+  agent: IZCodeAgentService,
+  readZCodeConfigurationVersion?: () => Promise<string>,
+): {
   service: IAnyAgentService;
   close(): void;
 } {
@@ -25,22 +28,47 @@ export function createAnyAgentService(agent: IZCodeAgentService): {
     workDirectory,
     provenance: { source: "desktop-local-host" },
   };
-  const zcodeAdapter = createZCodeAdapter({ agent, workspacePath: workDirectory });
+  const zcodeAdapter = createZCodeAdapter({
+    agent,
+    workspacePath: workDirectory,
+    readConfigurationVersion: readZCodeConfigurationVersion,
+  });
+  const fakeStepDelayMs = Number(process.env.ANYAGENT_FAKE_STEP_DELAY_MS ?? 0);
   const runtime = createTaskRuntime({
     databasePath,
     engines: new Map<string, EngineAdapter>([
-      ["fake", new FakeEngine({ environment: environment.id, now: Date.now, autoAdvance: true })],
+      [
+        "fake",
+        new FakeEngine({
+          environment: environment.id,
+          now: Date.now,
+          autoAdvance: true,
+          stepDelayMs:
+            Number.isFinite(fakeStepDelayMs) && fakeStepDelayMs > 0 ? fakeStepDelayMs : 0,
+        }),
+      ],
       ["zcode", zcodeAdapter],
     ]),
   });
   const changes = new Emitter<Parameters<Parameters<typeof runtime.subscribe>[0]>[0]>();
   const unsubscribe = runtime.subscribe((change) => changes.fire(change));
+  let engineRefreshInFlight: ReturnType<IAnyAgentService["listEngines"]> | null = null;
+  function listEngines(): ReturnType<IAnyAgentService["listEngines"]> {
+    if (engineRefreshInFlight) return engineRefreshInFlight;
+    const refresh = runtime.refreshEngines();
+    let shared: typeof refresh;
+    shared = refresh.finally(() => {
+      if (engineRefreshInFlight === shared) engineRefreshInFlight = null;
+    });
+    engineRefreshInFlight = shared;
+    return shared;
+  }
   const service: IAnyAgentService = {
     onDidChange: changes.event,
     async getCreateTaskContext() {
       return { environment, credentialSource: { kind: "unknown", label: "Selected Engine" } };
     },
-    listEngines: () => runtime.refreshEngines(),
+    listEngines,
     async listTasks() {
       return runtime.listTasks();
     },

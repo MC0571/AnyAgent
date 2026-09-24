@@ -98,6 +98,27 @@ test("CLI loss before sendText ACK leaves the command outcome unknown", async ()
   fixture.adapter.dispose();
 });
 
+test("ZCode capability refresh reads the existing provider configuration revision", async () => {
+  let revision = "provider-config-1";
+  const agent = {
+    initialize: async () => ({ available: true, workspaceKey: "/tmp/workspace" }),
+    onDynamicSessionEvent: () => () => ({ dispose() {} }),
+    onAgentRuntimeLifecycle: () => ({ dispose() {} }),
+    sendConversationCommandV4: async () => ({ status: "accepted" }),
+  } as unknown as AgentPort;
+  const adapter = createZCodeAdapter({
+    agent,
+    workspacePath: "/tmp/workspace",
+    readConfigurationVersion: async () => revision,
+  });
+  const first = await adapter.refreshCapabilities();
+  revision = "provider-config-2";
+  const second = await adapter.refreshCapabilities();
+  assert.equal(first.configurationVersion, "provider-config-1");
+  assert.equal(second.configurationVersion, "provider-config-2");
+  adapter.dispose();
+});
+
 test("late native event stays with its completed run until CLI loss", async () => {
   const fixture = harness();
   const session = await fixture.adapter.createSession();
@@ -159,6 +180,45 @@ test("late native event stays with its completed run until CLI loss", async () =
       payload: { kind: "started", toolCallId: "late-tool-1", toolName: "read" },
     },
   });
+  fixture.emit({
+    type: "permission.request",
+    request: {
+      sessionId: "native-session",
+      requestId: "late-unscoped-approval",
+      toolCallId: "tool-late",
+      toolName: "write",
+      reason: "late request from an unknown turn",
+      options: [{ optionId: "allow", kind: "allowOnce", name: "Allow" }],
+    },
+  });
+  fixture.emit({
+    type: "userInput.request",
+    request: {
+      sessionId: "native-session",
+      requestId: "late-unscoped-input",
+      prompt: "late request from an unknown turn",
+    },
+  });
+  assert.equal(
+    (
+      await fixture.adapter.replyToApproval({
+        session,
+        approvalId: "late-unscoped-approval" as never,
+        optionId: "allow",
+      })
+    ).status,
+    "unsupported",
+  );
+  assert.equal(
+    (
+      await fixture.adapter.replyToUserInput({
+        session,
+        requestId: "late-unscoped-input" as never,
+        response: "yes",
+      })
+    ).status,
+    "unsupported",
+  );
   fixture.disconnect();
   await reading;
   await nextReading;
@@ -220,6 +280,107 @@ test("native start before sendText ACK uses the acknowledged input ID", async ()
     events.map((event) => event.type),
     ["input.accepted", "execution.started"],
   );
+});
+
+test("native model text streams before completion without duplicate or reasoning content", async () => {
+  const fixture = harness();
+  const session = await fixture.adapter.createSession();
+  const run = await fixture.adapter.run({ session, input: "work" });
+  const events = [];
+  const reading = (async () => {
+    for await (const event of run.events) events.push(event);
+  })();
+  const emit = (eventId: string, seq: number, type: string, payload: unknown) =>
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId,
+        seq,
+        sessionId: "native-session",
+        turnId: "turn-stream",
+        timestamp: seq,
+        type,
+        payload,
+      },
+    });
+  emit("start-stream", 1, "turn.started", {
+    inputId: "native-input",
+    foregroundExecutionId: "native-work",
+  });
+  emit("reasoning-stream", 2, "model.streaming", {
+    kind: "reasoning_delta",
+    delta: "private reasoning",
+  });
+  emit("text-start-1", 3, "model.streaming", {
+    kind: "text_start",
+    delta: "",
+    assistantMessageId: "native-message",
+  });
+  emit("text-start-1", 3, "model.streaming", {
+    kind: "text_start",
+    delta: "",
+    assistantMessageId: "native-message",
+  });
+  emit("text-stream-1", 4, "model.streaming", {
+    kind: "text_delta",
+    delta: "Hello ",
+    assistantMessageId: "native-message",
+  });
+  emit("text-stream-1", 4, "model.streaming", {
+    kind: "text_delta",
+    delta: "Hello ",
+    assistantMessageId: "native-message",
+  });
+  emit("text-stream-2", 5, "model.streaming", {
+    kind: "text_delta",
+    delta: "world",
+    assistantMessageId: "native-message",
+  });
+  emit("text-end-1", 6, "model.streaming", {
+    kind: "text_end",
+    delta: "",
+    assistantMessageId: "native-message",
+  });
+  emit("text-start-2", 7, "model.streaming", {
+    kind: "text_start",
+    delta: "",
+    assistantMessageId: "native-message",
+  });
+  emit("text-stream-3", 8, "model.streaming", {
+    kind: "text_delta",
+    delta: "!",
+    assistantMessageId: "native-message",
+  });
+  emit("text-end-2", 9, "model.streaming", {
+    kind: "text_end",
+    delta: "",
+    assistantMessageId: "native-message",
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    events.filter((event) => event.type === "message.delta").map((event) => event.text),
+    ["Hello ", "world", "!"],
+  );
+  assert.deepEqual(
+    events
+      .filter((event) => event.type === "message.delta")
+      .map((event) => ({
+        messageId: event.messageId,
+        blockId: event.blockId,
+      })),
+    [
+      { messageId: "native-message", blockId: "zcode-text-1" },
+      { messageId: "native-message", blockId: "zcode-text-1" },
+      { messageId: "native-message", blockId: "zcode-text-2" },
+    ],
+  );
+  emit("end-stream", 10, "turn.completed", {
+    inputId: "native-input",
+    resultType: "success",
+    response: "Hello world!",
+  });
+  fixture.adapter.dispose();
+  await reading;
 });
 
 test("ZCode ACK, native start, approval, stop request and terminal remain distinct", async () => {
@@ -311,7 +472,7 @@ test("ZCode ACK, native start, approval, stop request and terminal remain distin
       turnId: "turn-1",
       timestamp: 4,
       type: "part.delta",
-      payload: { field: "text", delta: "done" },
+      payload: { messageId: "native-message", partId: "native-part", field: "text", delta: "done" },
     },
   });
   fixture.emit({
@@ -355,6 +516,12 @@ test("ZCode ACK, native start, approval, stop request and terminal remain distin
   );
   assert.equal(events[3]?.type === "approval.response" && events[3].decision, "reject");
   assert.equal(events[3]?.type === "approval.response" && events[3].status, "rejected");
+  assert.deepEqual(
+    events[4]?.type === "message.delta"
+      ? { messageId: events[4].messageId, blockId: events[4].blockId }
+      : null,
+    { messageId: "native-message", blockId: "native-part" },
+  );
   assert.equal(
     events.some((event) => event.type === "execution.stopped"),
     false,

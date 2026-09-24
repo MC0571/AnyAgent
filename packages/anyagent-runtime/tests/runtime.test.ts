@@ -16,6 +16,7 @@ import type {
   EngineRun,
   EngineSessionRef,
   EngineUserInputReceipt,
+  CapabilityStatus,
 } from "@anyagent/engine-contract";
 import {
   createTaskRuntime,
@@ -79,16 +80,12 @@ class ManualEngine implements EngineAdapter {
         availability: "available",
       },
     ]),
-  ) as Record<
-    EngineCapability,
-    {
-      support: "supported" | "unsupported";
-      availability: "available" | "unknown" | "temporarily-unavailable" | "authorization-required";
-      reason?: string;
-    }
-  >;
+  ) as Record<EngineCapability, CapabilityStatus>;
   #nextSession = 0;
   #nextExecution = 0;
+  adapterVersion = "test";
+  configurationVersion = "test";
+  refreshHandler: (() => Promise<EngineCapabilitySnapshot>) | null = null;
   approvalReplies = 0;
   userInputReplies = 0;
   interrupts = 0;
@@ -97,26 +94,19 @@ class ManualEngine implements EngineAdapter {
   getCapabilities(): EngineCapabilitySnapshot {
     return {
       engineId: "manual",
-      adapterVersion: "test",
+      adapterVersion: this.adapterVersion,
       engineVersion: "test",
-      configurationVersion: "test",
+      configurationVersion: this.configurationVersion,
       environment: "workspace-a",
-      capabilities: this.capabilities,
+      capabilities: { ...this.capabilities },
     };
   }
 
   async refreshCapabilities(): Promise<EngineCapabilitySnapshot> {
-    return this.getCapabilities();
+    return this.refreshHandler ? this.refreshHandler() : this.getCapabilities();
   }
 
-  setCapability(
-    capability: EngineCapability,
-    status: {
-      support: "supported" | "unsupported";
-      availability: "available" | "unknown" | "temporarily-unavailable" | "authorization-required";
-      reason?: string;
-    },
-  ): void {
+  setCapability(capability: EngineCapability, status: CapabilityStatus): void {
     this.capabilities[capability] = status;
   }
 
@@ -222,6 +212,7 @@ test("creates distinct Task ownership and persists serializable projections", as
   };
   try {
     const firstRuntime = createTaskRuntime(options);
+    assert.equal(firstRuntime.listEngines()[0]?.state, "unknown");
     const first = await firstRuntime.createTask({
       engineId: "manual",
       environment,
@@ -236,6 +227,8 @@ test("creates distinct Task ownership and persists serializable projections", as
     });
     assert.notEqual(first.participant.id, second.participant.id);
     assert.notEqual(first.session.id, second.session.id);
+    assert.equal(first.session.nativeSessionId, engine.sessions[0]);
+    assert.notEqual(first.session.id, first.session.nativeSessionId);
     assert.equal(first.session.status, "active");
     assert.doesNotThrow(() => JSON.stringify(first));
     firstRuntime.close();
@@ -247,11 +240,16 @@ test("creates distinct Task ownership and persists serializable projections", as
     assert.equal(JSON.parse(storedSession.data).nativeSessionId, engine.sessions[0]);
     database.close();
 
-    const restored = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    const restored = createTaskRuntime({ databasePath, engines: new Map() });
     assert.equal(restored.listTasks().length, 2);
     assert.equal(restored.getTask(first.id)?.session.status, "unknown");
     assert.equal(restored.getTask(first.id)?.environment.workDirectory, "/work/project-a");
     assert.equal(restored.getTask(first.id)?.credentialSource.label, "Desktop keychain");
+    assert.equal(restored.getTask(first.id)?.currentEngine.state, "unknown");
+    assert.equal(
+      restored.getTask(first.id)?.engine.capabilities["execution.run"].availability,
+      "available",
+    );
     restored.close();
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -289,6 +287,25 @@ test("only native input.accepted evidence creates a product Execution", async ()
       type: "execution.started",
       evidence: { source: "engine", evidenceId: "started-1" },
     });
+    const delta = engine.emit(0, {
+      type: "message.delta",
+      text: "streamed answer",
+      messageId: "native-message-1",
+      blockId: "native-block-1",
+    });
+    await until(() =>
+      runtime.getHistory(task.id)!.events.some((event) => event.nativeEventId === delta.eventId),
+    );
+    assert.deepEqual(
+      runtime.getHistory(task.id)!.events.find((event) => event.nativeEventId === delta.eventId)
+        ?.payload,
+      {
+        type: "message.delta",
+        text: "streamed answer",
+        messageId: "native-message-1",
+        blockId: "native-block-1",
+      },
+    );
     assert.throws(
       () =>
         runtime.closeTask({
@@ -678,6 +695,243 @@ test("rechecks current capability availability before dispatch", async () => {
         error.kind === "temporarily-unavailable",
     );
     assert.equal(engine.runs.length, 0);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Task keeps its historical capability snapshot while current state changes and recovers", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-capabilities-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    assert.equal(task.currentEngine.state, "current");
+    assert.equal(task.currentEngine.source, "active-probe");
+    assert.equal(task.currentEngine.capabilities["execution.run"].availability, "available");
+    const historicalSnapshot = task.engine;
+
+    const changes: {
+      status: CapabilityStatus;
+      expectedKind: string;
+    }[] = [
+      {
+        status: {
+          support: "supported",
+          availability: "temporarily-unavailable",
+          reason: "provider is offline",
+        },
+        expectedKind: "temporarily-unavailable",
+      },
+      {
+        status: {
+          support: "supported",
+          availability: "authorization-required",
+          reason: "Engine credentials are missing",
+        },
+        expectedKind: "authorization-required",
+      },
+      {
+        status: {
+          support: "unknown",
+          availability: "unknown",
+          reason: "Engine probe did not identify execution support",
+        },
+        expectedKind: "result-unknown",
+      },
+      {
+        status: {
+          support: "unsupported",
+          availability: "available",
+          reason: "Engine does not implement execution.run",
+        },
+        expectedKind: "unsupported",
+      },
+    ];
+
+    for (const { status, expectedKind } of changes) {
+      Object.assign(engine.capabilities["execution.run"], status);
+      const unprobedTask = runtime.getTask(task.id)!;
+      assert.equal(unprobedTask.currentEngine.state, "unknown");
+      assert.equal(unprobedTask.currentEngine.capabilities["execution.run"].support, "unknown");
+      assert.equal(runtime.listEngines()[0]?.state, "unknown");
+      assert.deepEqual(unprobedTask.engine, historicalSnapshot);
+      const listed = await runtime.refreshEngines();
+      assert.deepEqual(listed[0]?.capabilities["execution.run"], status);
+      const refreshedTask = runtime.getTask(task.id)!;
+      assert.deepEqual(refreshedTask.engine, historicalSnapshot);
+      assert.deepEqual(refreshedTask.currentEngine, listed[0]);
+      assert.equal(refreshedTask.currentEngine.state, "current");
+      assert.notEqual(refreshedTask.currentEngine.observedAt, null);
+      await assert.rejects(
+        runtime.submitInput({
+          taskId: task.id,
+          participantId: task.participant.id,
+          sessionId: task.session.id,
+          authorizationId: authorization.id,
+          text: "must remain gated",
+        }),
+        (error: unknown) =>
+          error instanceof Error && "kind" in error && error.kind === expectedKind,
+      );
+      assert.equal(engine.runs.length, 0);
+    }
+
+    engine.configurationVersion = "test-v2";
+    engine.setCapability("execution.run", { support: "supported", availability: "available" });
+    assert.equal(runtime.getTask(task.id)!.currentEngine.state, "unknown");
+    const changedConfiguration = (await runtime.refreshEngines())[0]!;
+    assert.equal(changedConfiguration.configurationVersion, "test-v2");
+    assert.equal(runtime.getTask(task.id)!.engine.configurationVersion, "test");
+    await assert.rejects(
+      runtime.submitInput({
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: authorization.id,
+        text: "stale authorization snapshot",
+      }),
+      (error: unknown) =>
+        error instanceof Error && "kind" in error && error.kind === "authorization-required",
+    );
+    assert.equal(engine.runs.length, 0);
+
+    engine.configurationVersion = "test";
+    engine.adapterVersion = "test-v2";
+    const changedAdapter = (await runtime.refreshEngines())[0]!;
+    assert.equal(changedAdapter.adapterVersion, "test-v2");
+    assert.equal(runtime.getTask(task.id)!.engine.adapterVersion, "test");
+    await assert.rejects(
+      runtime.submitInput({
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: authorization.id,
+        text: "stale adapter snapshot",
+      }),
+      (error: unknown) =>
+        error instanceof Error && "kind" in error && error.kind === "authorization-required",
+    );
+    assert.equal(engine.runs.length, 0);
+
+    engine.adapterVersion = "test";
+    assert.equal(runtime.getTask(task.id)!.currentEngine.state, "unknown");
+    const restored = (await runtime.refreshEngines())[0]!;
+    assert.equal(restored.capabilities["execution.run"].availability, "available");
+    assert.deepEqual(runtime.getTask(task.id)!.engine, historicalSnapshot);
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: authorization.id,
+      text: "available again",
+    });
+    assert.equal(engine.runs.length, 1);
+
+    const database = new DatabaseSync(databasePath);
+    try {
+      const stored = database
+        .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+        .get("task", task.id) as { data: string };
+      const taskData = JSON.parse(stored.data) as { engine: unknown; currentEngine?: unknown };
+      assert.deepEqual(taskData.engine, historicalSnapshot);
+      assert.equal("currentEngine" in taskData, false);
+    } finally {
+      database.close();
+    }
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("an Adapter without an active capability probe is never reported as current", async () => {
+  const engine = new ManualEngine();
+  Object.defineProperty(engine, "refreshCapabilities", { value: undefined });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    assert.equal(runtime.listEngines()[0]?.state, "unknown");
+    const refreshed = await runtime.refreshEngines();
+    assert.equal(refreshed[0]?.state, "unknown");
+    assert.equal(refreshed[0]?.capabilities["execution.run"].availability, "unknown");
+    await assert.rejects(
+      runtime.createTask({ engineId: "manual", environment, authorization }),
+      (error: unknown) =>
+        error instanceof Error && "kind" in error && error.kind === "temporarily-unavailable",
+    );
+    assert.equal(engine.sessions.length, 0);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("failed newer capability refresh stays unknown when an older refresh completes late", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const olderSnapshot = engine.getCapabilities();
+    let resolveOlder!: (snapshot: EngineCapabilitySnapshot) => void;
+    const olderResult = new Promise<EngineCapabilitySnapshot>((resolve) => {
+      resolveOlder = resolve;
+    });
+    engine.refreshHandler = () => olderResult;
+    const olderRefresh = runtime.refreshEngines();
+    assert.equal(runtime.listEngines()[0]?.state, "unknown");
+    engine.setCapability("execution.run", {
+      support: "supported",
+      availability: "temporarily-unavailable",
+      reason: "provider is offline",
+    });
+    assert.equal(runtime.getTask(task.id)?.currentEngine.state, "unknown");
+
+    engine.refreshHandler = async () => {
+      throw new Error("probe transport failed");
+    };
+    const newerRefresh = await runtime.refreshEngines();
+    assert.equal(newerRefresh[0]?.state, "unknown");
+    assert.equal(newerRefresh[0]?.source, "unknown");
+    assert.notEqual(newerRefresh[0]?.observedAt, null);
+    assert.equal(newerRefresh[0]?.capabilities["execution.run"].support, "unknown");
+    await assert.rejects(
+      runtime.submitInput({
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: authorization.id,
+        text: "refresh failure must not use the historical snapshot",
+      }),
+      (error: unknown) =>
+        error instanceof Error && "kind" in error && error.kind === "temporarily-unavailable",
+    );
+    assert.equal(engine.runs.length, 0);
+
+    resolveOlder(olderSnapshot);
+    const lateRefresh = await olderRefresh;
+    assert.equal(lateRefresh[0]?.state, "unknown");
+    assert.equal(runtime.getTask(task.id)?.currentEngine.state, "unknown");
+    assert.equal(
+      runtime.getTask(task.id)?.engine.capabilities["execution.run"].availability,
+      "available",
+    );
+
+    engine.refreshHandler = null;
+    engine.setCapability("execution.run", { support: "supported", availability: "available" });
+    assert.equal(runtime.getTask(task.id)?.currentEngine.state, "unknown");
+    const recovered = (await runtime.refreshEngines())[0]!;
+    assert.equal(recovered.state, "current");
+    assert.equal(recovered.capabilities["execution.run"].availability, "available");
+    assert.equal(runtime.getTask(task.id)?.currentEngine.state, "current");
   } finally {
     runtime.close();
   }

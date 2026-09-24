@@ -2426,7 +2426,10 @@ export function createLocalServices(options: {
   const sqliteReposToClose: Array<{ close(): void }> = [];
   const anyAgentService =
     options.serviceAuthorityMode === "desktop-local" && process.env.ANYAGENT_M1_WORKBENCH === "1"
-      ? createAnyAgentService(zcodeAgentService)
+      ? createAnyAgentService(
+          zcodeAgentService,
+          async () => (await providerConfigRuntime.configService.read()).revision,
+        )
       : null;
   if (anyAgentService) sqliteReposToClose.push(anyAgentService);
   const services = new ServiceCollection()

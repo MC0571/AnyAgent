@@ -81,6 +81,7 @@ interface V4WorkspaceChatAreaProps {
   provider?: ZCodeProvider;
   /** primary pane createSession/fork 后接入既有选择路径（handleSelectTask）。 */
   onSessionCreated?: (sessionId: string) => void;
+  onHarnessTaskCreated?: (taskId: string) => void;
   /** primary pane 会话删除后回 draft（shell 起新草稿）。 */
   onSessionDeleted?: () => void;
   /**
@@ -150,6 +151,7 @@ export function V4WorkspaceChatArea({
   activeSelectionSideChatSessionId = null,
   provider,
   onSessionCreated,
+  onHarnessTaskCreated,
   onSessionDeleted,
   draftComposerHeader,
   onPrimaryDraftDropTargetControllerChange,
@@ -276,6 +278,7 @@ export function V4WorkspaceChatArea({
       activeSelectionSideChatSessionId,
       provider,
       onSessionCreated,
+      onHarnessTaskCreated,
       onSessionDeleted,
       draftComposerHeader,
       onPrimaryDraftDropTargetControllerChange,
@@ -321,6 +324,7 @@ export function V4WorkspaceChatArea({
       activeSelectionSideChatSessionId,
       provider,
       onSessionCreated,
+      onHarnessTaskCreated,
       onSessionDeleted,
       draftComposerHeader,
       onPrimaryDraftDropTargetControllerChange,

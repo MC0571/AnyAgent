@@ -15,33 +15,33 @@ export function NewTaskButtonGroup({
   const { intl } = useZCodeIntl();
   const newTaskShortcutLabel = useShortcutCommandLabel("newTask");
   return (
-    <div
-      role="group"
-      aria-disabled={disabled}
-      data-testid={TID_TASK_NEW_BUTTON}
-      onClick={() => {
-        if (!disabled) {
+    <div role="group" aria-disabled={disabled}>
+      <button
+        type="button"
+        disabled={disabled}
+        data-testid={TID_TASK_NEW_BUTTON}
+        onClick={() =>
           runUserAction({
             input: { featureId: "task.lifecycle", action: "create", trigger: "button" },
             operation: onCreateTask,
             completed: { resultSource: "optimistic_projection" },
             failureStage: "task_create",
-          });
+          })
         }
-      }}
-      className={cn(
-        "group w-full h-8 rounded-lg inline-flex shrink-0 items-center justify-stretch gap-2 overflow-hidden pl-2.5 pr-2.5 hover:bg-surface-hover hover:text-foreground active:translate-y-0 cursor-pointer",
-        disabled &&
-          "cursor-not-allowed text-foreground-subtlest hover:bg-transparent hover:text-foreground-subtlest",
-      )}
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2 text-ui-base">
-        <MessageCirclePlus className="h-4 w-4 shrink-0" />
-        <span className="truncate">{intl.formatMessage({ id: "taskList.newThread" })}</span>
-        <span className="ml-auto shrink-0 text-ui-xs font-normal text-foreground-subtlest">
-          {newTaskShortcutLabel}
+        className={cn(
+          "group w-full h-8 rounded-lg inline-flex shrink-0 items-center justify-stretch gap-2 overflow-hidden pl-2.5 pr-2.5 hover:bg-surface-hover hover:text-foreground active:translate-y-0 cursor-pointer",
+          disabled &&
+            "cursor-not-allowed text-foreground-subtlest hover:bg-transparent hover:text-foreground-subtlest",
+        )}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2 text-ui-base">
+          <MessageCirclePlus className="h-4 w-4 shrink-0" />
+          <span className="truncate">{intl.formatMessage({ id: "taskList.newThread" })}</span>
+          <span className="ml-auto shrink-0 text-ui-xs font-normal text-foreground-subtlest">
+            {newTaskShortcutLabel}
+          </span>
         </span>
-      </div>
+      </button>
     </div>
   );
 }

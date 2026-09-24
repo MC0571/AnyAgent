@@ -17,7 +17,7 @@ import {
 import {
   AsyncEventQueue,
   CAPABILITIES,
-  DEFAULT_SCRIPT,
+  defaultScript,
   type EventOverrides,
   type ExecutionRecord,
   type FakeEngineOptions,
@@ -37,8 +37,9 @@ export type { FakeEngineOptions, FakeEngineStep } from "./fake-engine-support.js
 
 export class FakeEngine implements EngineAdapter {
   readonly #autoAdvance: boolean;
+  readonly #stepDelayMs: number;
   readonly #now: () => number;
-  readonly #script: readonly FakeEngineStep[];
+  readonly #script: readonly FakeEngineStep[] | undefined;
   readonly #sessions = new Set<EngineSessionRef>();
   readonly #executions = new Map<EngineExecutionRef, ExecutionRecord>();
   readonly #capabilities = new Map<EngineCapability, CapabilityStatus>();
@@ -48,8 +49,9 @@ export class FakeEngine implements EngineAdapter {
 
   constructor(options: FakeEngineOptions = {}) {
     this.#autoAdvance = options.autoAdvance ?? false;
+    this.#stepDelayMs = options.stepDelayMs ?? 0;
     this.#now = options.now ?? (() => 0);
-    this.#script = options.script ?? DEFAULT_SCRIPT;
+    this.#script = options.script;
     this.#snapshot = {
       engineId: options.engineId ?? "fake",
       adapterVersion: options.adapterVersion ?? "0.1.0",
@@ -115,7 +117,7 @@ export class FakeEngine implements EngineAdapter {
       session: input.session,
       executionId,
       events: new AsyncEventQueue(),
-      script: this.#script,
+      script: this.#script ?? defaultScript(this.#executionSequence),
       emitted: [],
       approvals: new Map(),
       userInputs: new Map(),
@@ -396,10 +398,12 @@ export class FakeEngine implements EngineAdapter {
   #scheduleAutoAdvance(record: ExecutionRecord): void {
     if (!this.#autoAdvance || record.autoAdvanceQueued || record.closed || record.terminal) return;
     record.autoAdvanceQueued = true;
-    queueMicrotask(() => {
+    const advance = () => {
       record.autoAdvanceQueued = false;
       if (this.advance(record.executionId)) this.#scheduleAutoAdvance(record);
-    });
+    };
+    if (this.#stepDelayMs > 0) setTimeout(advance, this.#stepDelayMs);
+    else queueMicrotask(advance);
   }
 
   #record(executionId: EngineExecutionRef): ExecutionRecord {

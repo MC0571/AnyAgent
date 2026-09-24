@@ -79,6 +79,19 @@ export interface RuntimeEngineProjection {
   readonly capabilities: Readonly<Record<EngineCapability, CapabilityStatus>>;
 }
 
+/** Latest in-memory observation; never persisted over a Task's historical snapshot. */
+export interface RuntimeCurrentEngineProjection {
+  readonly engineId: string;
+  readonly adapterVersion: string | null;
+  readonly engineVersion: string | null;
+  readonly configurationVersion: string | null;
+  readonly environment: string | null;
+  readonly capabilities: Readonly<Record<EngineCapability, CapabilityStatus>>;
+  readonly state: "current" | "unknown";
+  readonly observedAt: number | null;
+  readonly source: "active-probe" | "unknown";
+}
+
 export interface RuntimeParticipant {
   readonly id: string;
   readonly status: "active" | "closed";
@@ -87,6 +100,8 @@ export interface RuntimeParticipant {
 
 export interface RuntimeSession {
   readonly id: string;
+  /** Native handle for diagnostics and hiding a duplicate adapter-owned sidebar row. */
+  readonly nativeSessionId?: string | null;
   readonly status: RuntimeSessionStatus;
   readonly createdAt: number;
   readonly updatedAt: number;
@@ -102,7 +117,10 @@ export interface RuntimeTask {
   readonly updatedAt: number;
   readonly closedAt: number | null;
   readonly closeReason: string | null;
+  /** Immutable Engine/configuration/capability evidence captured when this Task was created. */
   readonly engine: RuntimeEngineProjection;
+  /** Latest Host probe for this Engine; unknown until the current Host has checked it. */
+  readonly currentEngine: RuntimeCurrentEngineProjection;
   readonly environment: RuntimeEnvironment;
   readonly credentialSource: RuntimeCredentialSource;
   readonly participant: RuntimeParticipant;

@@ -17,7 +17,6 @@ import {
   CalendarClock,
   Clock3,
   Cloud,
-  Cpu,
   Folder,
   FolderOpen,
   Hash,
@@ -48,7 +47,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { Locale, RemoteTarget, UserInfo, ZCodeTaskMeta } from "@zcode/shared";
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
+import type { IAnyAgentService } from "@zcode/services";
 import {
   TID_CONVERSATION_NEW_TASK,
   TID_CONVERSATION_SECTION,
@@ -91,7 +90,6 @@ import {
   reorderSidebarPurposeSections,
 } from "@/lib/sidebarPurposeSectionPreferences.js";
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
-import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import {
   increaseWorkspaceTaskVisibleLimit,
@@ -259,10 +257,14 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel: _goForwardShortcutLabel,
   onOpenCommandCenter,
   onOpenAutomations,
-  onOpenEngine,
+  onOpenEngine: _onOpenEngine,
   onOpenPluginStore,
   automationsActive = false,
   engineActive = false,
+  engineService,
+  engineSelectedTaskId,
+  onSelectEngineTask,
+  onRefreshEngineState,
   pluginStoreActive = false,
   onFileTreeOpenChange,
 }: {
@@ -317,10 +319,22 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   onOpenPluginStore?: () => void;
   automationsActive?: boolean;
   engineActive?: boolean;
+  engineService?: IAnyAgentService;
+  engineSelectedTaskId?: string | null;
+  onSelectEngineTask?: (taskId: string) => void;
+  onRefreshEngineState?: () => void;
   pluginStoreActive?: boolean;
   onFileTreeOpenChange?: (open: boolean) => void;
 }) {
   const { intl, localePreference, setLocalePreference } = useZCodeIntl();
+  const [hiddenNativeTaskIds, setHiddenNativeTaskIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const handleNativeSessionIdsChange = useCallback((ids: ReadonlySet<string>) => {
+    setHiddenNativeTaskIds((current) =>
+      current.size === ids.size && [...current].every((id) => ids.has(id)) ? current : ids,
+    );
+  }, []);
   const handleTaskRowSelect = useCallback(
     (
       targetWorkspacePath: string,
@@ -341,7 +355,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     [onSelectTask],
   );
   const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
-  const bumpTaskListVersion = useZCodeSessionStore((state) => state.bumpTaskListVersion);
   const workspaceIdentity = useTabStore((state) => {
     if (!state.activeTabId) {
       return undefined;
@@ -1336,22 +1349,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
               <CalendarClock className="size-4" />
               {intl.formatMessage({ id: "workspace.openScheduledSettings" })}
             </Button>
-            {onOpenEngine ? (
-              <Button
-                variant="ghost"
-                onClick={onOpenEngine}
-                data-testid="engine-sidebar-open"
-                size="lg"
-                aria-pressed={engineActive}
-                className={cn(
-                  "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
-                  engineActive && "bg-selected text-foreground",
-                )}
-              >
-                <Cpu className="size-4" />
-                Engine
-              </Button>
-            ) : null}
             <Button
               variant="ghost"
               onClick={handleOpenPluginStoreMain}
@@ -1426,6 +1423,12 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                     onCollapsedGroupIdsChange={handleCollapsedGroupedTaskGroupIdsChange}
                     onStickyGroupHeaderChange={setGroupedStickyHeader}
                     onOpenAutomations={handleOpenAutomationsMain}
+                    hiddenNativeTaskIds={hiddenNativeTaskIds}
+                    engineService={engineService}
+                    engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
+                    onSelectEngineTask={onSelectEngineTask}
+                    onRefreshEngineState={onRefreshEngineState}
+                    onNativeSessionIdsChange={handleNativeSessionIdsChange}
                   />
                 ) : taskViewMode === "timeline" ? (
                   <WorkspaceTimelineTasksSection
@@ -1434,7 +1437,13 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                     activeWorkspaceIdentity={workspaceIdentity}
                     activeTaskId={activeTaskId}
                     taskSortBy={taskSortBy}
+                    hiddenTaskIds={hiddenNativeTaskIds}
                     onSelectTask={handleTaskRowSelect}
+                    engineService={engineService}
+                    engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
+                    onSelectEngineTask={onSelectEngineTask}
+                    onRefreshEngineState={onRefreshEngineState}
+                    onNativeSessionIdsChange={handleNativeSessionIdsChange}
                   />
                 ) : (
                   <DndContext
@@ -1650,7 +1659,14 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                                 emptyMessage={intl.formatMessage({
                                   id: "workspaceSidebar.noConversations",
                                 })}
+                                hideEmptyMessage={Boolean(engineService && onSelectEngineTask)}
+                                hiddenTaskIds={hiddenNativeTaskIds}
                                 onSelectTask={handleTaskRowSelect}
+                                engineService={engineService}
+                                engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
+                                onSelectEngineTask={onSelectEngineTask}
+                                onRefreshEngineState={onRefreshEngineState}
+                                onNativeSessionIdsChange={handleNativeSessionIdsChange}
                               />
                             </WorkspacePurposeSection>
                           ),

@@ -385,6 +385,8 @@ export function shouldExposeSessionEventToProtocol(event: SessionEvent): boolean
     return Boolean(delta);
   }
   return (
+    kind === "text_start" ||
+    kind === "text_end" ||
     kind === "tool_input_start" ||
     kind === "tool_input_delta" ||
     kind === "tool_input_end" ||

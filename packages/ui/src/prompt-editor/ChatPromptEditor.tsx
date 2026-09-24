@@ -62,6 +62,7 @@ export function ChatPromptEditor({
   dragAttachmentHint,
   topContent,
   leadingActions,
+  trailingActions,
   attachmentAction,
   betweenCancelAndSubmitAction,
   submitControl,
@@ -113,6 +114,7 @@ export function ChatPromptEditor({
   dragAttachmentHint?: string;
   topContent?: ReactNode;
   leadingActions?: ReactNode;
+  trailingActions?: ReactNode;
   attachmentAction?: {
     label: string;
     onSelect: () => void;
@@ -414,6 +416,7 @@ export function ChatPromptEditor({
             className="ml-auto flex shrink-0 items-center justify-end gap-1.5"
             data-composer-trailing-actions
           >
+            {trailingActions}
             {onCancel && cancelLabel ? (
               <ControlHintTooltip title={cancelLabel} shortcut="Esc">
                 <Button

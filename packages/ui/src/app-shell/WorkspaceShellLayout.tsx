@@ -6,6 +6,7 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
+import { Info, RefreshCw } from "lucide-react";
 
 import { TID_APP_HEADER } from "@zcode/shared";
 // 保活：workspace tab 真正关闭时，按 workspaceKey 回收 side pane terminal 的常驻 PTY/xterm。
@@ -46,7 +47,7 @@ import type {
 } from "@/settings/saved-workflows/SavedWorkflowsSection.js";
 import { AutomationsMainBreadcrumbFrame } from "@/settings/AutomationsMainBreadcrumbFrame.js";
 import { PluginStorePage } from "@/settings/PluginStorePage.js";
-import { AnyAgentEngineWorkbench } from "@/AnyAgentEngineWorkbench.js";
+import { EngineConversation } from "@/EngineConversation.js";
 import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WorkspaceHeader } from "@/WorkspaceHeader.js";
 import { WorkspaceSidebar, type SidebarFileTreeOpenRequest } from "@/WorkspaceSidebar.js";
@@ -344,6 +345,30 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     isDesktop && !workspaceRemoteSessionId && !workspaceIdentity
       ? baseServices.anyAgentService
       : undefined;
+  const [engineRefreshVersion, setEngineRefreshVersion] = useState(0);
+  const [engineInspectorOpen, setEngineInspectorOpen] = useState(false);
+  const [engineHeader, setEngineHeader] = useState<{ taskId: string; title: string } | null>(null);
+  const engineHeaderTitle =
+    engineHeader?.taskId === engineSelectedTaskId ? engineHeader.title : "任务";
+  const handleEngineTitleChange = useCallback((taskId: string, title: string) => {
+    setEngineHeader((current) =>
+      current?.taskId === taskId && current.title === title ? current : { taskId, title },
+    );
+  }, []);
+  const notifyEngineRefresh = useCallback(
+    () => setEngineRefreshVersion((version) => version + 1),
+    [],
+  );
+  useEffect(() => {
+    if (workspaceMainView !== "engine") setEngineInspectorOpen(false);
+  }, [workspaceMainView]);
+  const handleSelectEngineTask = useCallback(
+    (taskId: string) => {
+      onEngineSelectedTaskIdChange(taskId);
+      handleOpenEngine();
+    },
+    [handleOpenEngine, onEngineSelectedTaskIdChange],
+  );
   const tabStoreApi = useTabStoreApi();
   const isLinuxDesktop = Boolean(isDesktop && !isMacDesktop && !isWindowsDesktop);
   // Windows/Linux 也需要外层留白，避免独立面板贴住窗口边缘；桌面统一使用 4px 间距。
@@ -1499,7 +1524,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   // Draft 之前维护一套独立轻量 header，导致 side pane、caption 安全区和拖拽入口
   // 与 Task Header 分叉。桌面端统一复用 WorkspaceHeader，只由 variant 裁剪 task 专属内容；
   // 手机远控无 active task 时仍不渲染桌面 chrome，继续遵守 replayable overlay 边界。
-  const shouldRenderMainViewHeader = workspaceMainView === "chat";
+  const shouldRenderMainViewHeader = workspaceMainView === "chat" || workspaceMainView === "engine";
   const shouldRenderWorkspaceHeader =
     shouldRenderMainViewHeader && (activeTaskId !== null || isDesktop);
   // ErrorBoundary resetKeys 的数组如果每次 render 都重新创建，
@@ -1609,6 +1634,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     pluginStoreActive={workspaceMainView === "plugin-store"}
                     onOpenEngine={engineService ? handleOpenEngine : undefined}
                     engineActive={workspaceMainView === "engine"}
+                    engineService={engineService}
+                    engineSelectedTaskId={engineSelectedTaskId}
+                    onSelectEngineTask={handleSelectEngineTask}
+                    onRefreshEngineState={notifyEngineRefresh}
                     onFileTreeOpenChange={setIsSidebarFileTreeOpen}
                   />
                 </WorkflowRunOpenProvider>
@@ -1702,7 +1731,40 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                       >
                         <WorkspaceHeader
                           reserveWindowControls={!isSidePaneVisible}
-                          variant={activeTaskId === null ? "draft" : "task"}
+                          variant={
+                            workspaceMainView === "engine" || activeTaskId !== null
+                              ? "task"
+                              : "draft"
+                          }
+                          externalTaskTitle={
+                            workspaceMainView === "engine" ? engineHeaderTitle : undefined
+                          }
+                          externalAction={
+                            workspaceMainView === "engine" ? (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-md"
+                                  aria-label="诊断信息"
+                                  title="诊断信息"
+                                  onClick={() => setEngineInspectorOpen(true)}
+                                >
+                                  <Info className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-md"
+                                  aria-label="刷新 Engine 状态"
+                                  title="刷新 Engine 状态"
+                                  onClick={notifyEngineRefresh}
+                                >
+                                  <RefreshCw className="size-4" />
+                                </Button>
+                              </div>
+                            ) : undefined
+                          }
                           draftDropTargetController={
                             activeTaskId === null ? draftHeaderDropTargetController : undefined
                           }
@@ -1716,7 +1778,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                           activeTaskTitle={activeTaskTitle}
                           activeTaskChangeSummary={activeTaskChangeSummary}
                           hasUpdateReady={hasUpdateStatusButton}
-                          activeTaskId={activeTaskId}
+                          activeTaskId={workspaceMainView === "engine" ? null : activeTaskId}
                           user={user}
                           activeTraceId={activeTraceId}
                           activeSessionId={activeSessionId}
@@ -1832,24 +1894,22 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                         </main>
                       ) : workspaceMainView === "engine" && engineService ? (
                         <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
-                          <AutomationsMainBreadcrumbFrame
-                            isDesktop={Boolean(isDesktop)}
-                            sectionLabel="Engine"
-                            ariaLabel="Engine"
+                          <ScopedErrorBoundary
+                            scope="engine-main"
+                            resetKeys={workspaceOnlyResetKeys}
+                            variant="panel"
+                            className="min-h-0 flex-1"
                           >
-                            <ScopedErrorBoundary
-                              scope="engine-main"
-                              resetKeys={workspaceOnlyResetKeys}
-                              variant="panel"
-                              className="min-h-0 flex-1"
-                            >
-                              <AnyAgentEngineWorkbench
-                                service={engineService}
-                                selectedTaskId={engineSelectedTaskId}
-                                onSelectTask={onEngineSelectedTaskIdChange}
-                              />
-                            </ScopedErrorBoundary>
-                          </AutomationsMainBreadcrumbFrame>
+                            <EngineConversation
+                              service={engineService}
+                              selectedTaskId={engineSelectedTaskId}
+                              onSelectTask={onEngineSelectedTaskIdChange}
+                              onTitleChange={handleEngineTitleChange}
+                              refreshVersion={engineRefreshVersion}
+                              inspectorOpen={engineInspectorOpen}
+                              onInspectorOpenChange={setEngineInspectorOpen}
+                            />
+                          </ScopedErrorBoundary>
                         </main>
                       ) : (
                         <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -1877,6 +1937,9 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                               activeSelectionSideChatSessionId={activeSelectionSideChatSessionId}
                               provider={activeTaskProvider ?? undefined}
                               onSessionCreated={handleV4SessionCreated}
+                              onHarnessTaskCreated={
+                                engineService ? handleSelectEngineTask : undefined
+                              }
                               onSessionDeleted={handleV4SessionDeleted}
                               draftComposerHeader={draftComposerHeader}
                               onPrimaryDraftDropTargetControllerChange={

@@ -264,6 +264,7 @@ export interface WorkbenchShellBinding {
   activeSelectionSideChatSessionId?: string | null;
   provider?: ZCodeProvider;
   onSessionCreated?: (sessionId: string) => void;
+  onHarnessTaskCreated?: (taskId: string) => void;
   onSessionDeleted?: () => void;
   draftComposerHeader?: ReactNode;
   onPrimaryDraftDropTargetControllerChange?: (
@@ -561,6 +562,9 @@ export function WorkbenchLeafPane({
           isDesktop={shell.isDesktop}
           provider={isPrimary && isShellWorkspace ? shell.provider : undefined}
           onSessionCreated={handleSessionCreated}
+          onHarnessTaskCreated={
+            isPrimary && isShellWorkspace ? shell.onHarnessTaskCreated : undefined
+          }
           onSessionDeleted={handleSessionDeleted}
           focused={focused}
           onSplitRight={canSplit && onSplit ? handleSplitRight : undefined}

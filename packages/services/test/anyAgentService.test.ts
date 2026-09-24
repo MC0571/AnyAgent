@@ -39,10 +39,10 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
   const subscription = host.service.onDidChange(() => changes++);
   try {
     const engines = await host.service.listEngines();
-    assert.equal(
-      engines.find((item) => item.engineId === "fake")?.capabilities["execution.run"].availability,
-      "available",
-    );
+    const fakeEngine = engines.find((item) => item.engineId === "fake")!;
+    assert.equal(fakeEngine.capabilities["execution.run"].availability, "available");
+    assert.equal(fakeEngine.state, "current");
+    assert.notEqual(fakeEngine.observedAt, null);
     assert.equal(
       engines.find((item) => item.engineId === "zcode")?.capabilities["execution.run"].availability,
       "temporarily-unavailable",
@@ -50,6 +50,11 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
     await assert.rejects(host.service.createTask({ engineId: "zcode" }));
 
     const task = await host.service.createTask({ engineId: "fake" });
+    assert.equal(task.engine.capabilities["execution.run"].availability, "available");
+    assert.equal(task.currentEngine.state, "current");
+    assert.equal(task.currentEngine.capabilities["execution.run"].availability, "available");
+    assert.deepEqual((await host.service.getTask(task.id))?.engine, task.engine);
+    assert.deepEqual((await host.service.getTask(task.id))?.currentEngine, task.currentEngine);
     assert.equal(task.environment.workDirectory, join(directory, ".zcode", "workspace", "default"));
     assert.equal(task.credentialSource.kind, "none");
     const input = {
@@ -76,6 +81,56 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
     );
   } finally {
     subscription.dispose();
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("concurrent engine list refreshes share only the in-flight probe", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-engine-refresh-"));
+  setDataBaseDir(directory);
+  let initializeCalls = 0;
+  let rejectInitialProbe!: (error: Error) => void;
+  const host = createAnyAgentService({
+    initialize: () => {
+      initializeCalls++;
+      if (initializeCalls === 1) {
+        return new Promise((_, reject) => {
+          rejectInitialProbe = reject;
+        });
+      }
+      return Promise.resolve({ available: true, workspaceKey: "test-workspace" });
+    },
+  } as unknown as IZCodeAgentService);
+  try {
+    const first = host.service.listEngines();
+    const joined = host.service.listEngines();
+    assert.strictEqual(joined, first);
+    assert.equal(initializeCalls, 1);
+
+    rejectInitialProbe(new Error("probe transport failed"));
+    const [firstResult, joinedResult] = await Promise.all([first, joined]);
+    assert.strictEqual(joinedResult, firstResult);
+    assert.equal(firstResult.find((engine) => engine.engineId === "zcode")?.state, "current");
+    assert.equal(
+      firstResult.find((engine) => engine.engineId === "zcode")?.capabilities["execution.run"]
+        .availability,
+      "temporarily-unavailable",
+    );
+
+    const recovered = await host.service.listEngines();
+    assert.equal(initializeCalls, 2);
+    assert.equal(recovered.find((engine) => engine.engineId === "zcode")?.state, "current");
+    assert.equal(
+      recovered.find((engine) => engine.engineId === "zcode")?.capabilities["execution.run"]
+        .availability,
+      "available",
+    );
+
+    await host.service.listEngines();
+    assert.equal(initializeCalls, 3);
+  } finally {
     host.close();
     setDataBaseDir(null);
     await rm(directory, { recursive: true, force: true });

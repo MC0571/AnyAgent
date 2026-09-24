@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ZCodeGroupedTaskViewNode } from "@zcode/services";
+import type { EngineTask } from "@/EngineTaskSidebar.js";
 import { taskKey } from "@/workspace-grouped-tasks/ids.js";
 import {
   isPotentialVerticalScrollContainer,
@@ -13,22 +14,30 @@ const GROUPED_TOP_LEVEL_GROUP_HEADER_ESTIMATE_PX = 40;
 const GROUPED_TOP_LEVEL_VIRTUALIZATION_THRESHOLD = 80;
 const GROUPED_TOP_LEVEL_VIRTUALIZATION_OVERSCAN = 12;
 
+export type GroupedTopLevelDisplayNode =
+  | ZCodeGroupedTaskViewNode
+  | { type: "engine"; task: EngineTask };
+
 function shouldVirtualizeGroupedTopLevelNodes(nodeCount: number): boolean {
   return nodeCount > GROUPED_TOP_LEVEL_VIRTUALIZATION_THRESHOLD;
 }
 
-function getTopLevelNodeKey(node: ZCodeGroupedTaskViewNode | undefined, index: number): string {
+function getTopLevelNodeKey(node: GroupedTopLevelDisplayNode | undefined, index: number): string {
   if (!node) {
     return `missing:${index}`;
   }
-  return node.type === "group" ? `group:${node.group.id}` : `task:${taskKey(node.task)}`;
+  return node.type === "group"
+    ? `group:${node.group.id}`
+    : node.type === "engine"
+      ? `engine:${node.task.id}`
+      : `task:${taskKey(node.task)}`;
 }
 
 function estimateTopLevelNodeSize(
-  node: ZCodeGroupedTaskViewNode | undefined,
+  node: GroupedTopLevelDisplayNode | undefined,
   isGroupCollapsed: (groupId: string) => boolean,
 ): number {
-  if (!node || node.type === "task") {
+  if (!node || node.type === "task" || node.type === "engine") {
     return GROUPED_TOP_LEVEL_TASK_ROW_ESTIMATE_PX;
   }
   if (isGroupCollapsed(node.group.id)) {
@@ -67,9 +76,9 @@ function VirtualizedGroupedTopLevelList({
   isGroupCollapsed,
   renderNode,
 }: {
-  nodes: ZCodeGroupedTaskViewNode[];
+  nodes: GroupedTopLevelDisplayNode[];
   isGroupCollapsed: (groupId: string) => boolean;
-  renderNode: (node: ZCodeGroupedTaskViewNode, index: number) => ReactNode;
+  renderNode: (node: GroupedTopLevelDisplayNode, index: number) => ReactNode;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);

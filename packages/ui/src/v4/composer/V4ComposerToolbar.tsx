@@ -81,7 +81,15 @@ import { logger } from "@/logger.js";
 import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { useCodingPlanEntitlements } from "@/settings/model-provider-section/useCodingPlanEntitlements.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
-import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
+import {
+  buildHarnessModelSelectGroups,
+  buildRegistryModelSelectGroups,
+  decodeHarnessModelSelectValue,
+  dispatchComposerModelSelectValue,
+  encodeHarnessModelSelectValue,
+  isHarnessModelSelectValue,
+  type HarnessModelSelectOption,
+} from "@/lib/modelSelectionGroups.js";
 import {
   buildCodingPlanUsageSources,
   type CodingPlanUsageSource,
@@ -98,6 +106,8 @@ import {
   resolveDraftModelThoughtOption,
   resolveDraftThoughtCurrentValue,
 } from "@/v4/composer/draftWorkspaceDefaults.js";
+
+export type { HarnessModelSelectOption } from "@/lib/modelSelectionGroups.js";
 
 // 拆分件再导出（模式选择移居 V4ComposerModeControls，超行数拆分）：
 // 既有消费方（ConversationComposer）继续从本模块入口 import，接口面不变。
@@ -323,6 +333,10 @@ function resolveContextCodingPlanUsageSource(params: {
 export interface V4ComposerToolbarProps {
   workspacePath: string;
   workspaceIdentity?: string;
+  harnesses?: readonly HarnessModelSelectOption[];
+  selectedHarnessId?: string | null;
+  onSelectHarness?: (engineId: string | null) => void;
+  onRefreshHarnesses?: () => void;
   modelSelectionView?: ModelSelectionView | null;
   modelSelectionState?: ModelSelectionState;
   modelSelectionReload?: () => void;
@@ -365,10 +379,15 @@ export interface V4ComposerToolbarProps {
 function V4ComposerModelControlsImpl({
   workspacePath,
   workspaceIdentity,
+  harnesses = [],
+  selectedHarnessId = null,
+  onSelectHarness = () => {},
+  onRefreshHarnesses,
   modelSelectionView = null,
   modelSelectionState = MODEL_SELECTION_LOADING_STATE,
   modelSelectionReload,
   provider,
+  sessionId,
   isMobileViewport = false,
   draftMode = false,
   draftConfig,
@@ -417,9 +436,10 @@ function V4ComposerModelControlsImpl({
   }, []);
   const handleModelPickerOpenChange = useCallback(
     (open: boolean) => {
+      if (open) onRefreshHarnesses?.();
       onConfigPickerOpenChange("model", open);
     },
-    [onConfigPickerOpenChange],
+    [onConfigPickerOpenChange, onRefreshHarnesses],
   );
   const handleThoughtPickerOpenChange = useCallback(
     (open: boolean) => {
@@ -428,16 +448,18 @@ function V4ComposerModelControlsImpl({
     [onConfigPickerOpenChange],
   );
 
-  const modelOption = modelSelectionView?.providers.some((provider) => provider.models.length > 0)
-    ? ({
-        id: "model",
-        name: "Model",
-        category: "model",
-        type: "select",
-        currentValue: "",
-        options: [],
-      } satisfies ZCodeConfigOption)
-    : undefined;
+  const modelOption =
+    harnesses.length > 0 ||
+    (modelSelectionView?.providers.some((provider) => provider.models.length > 0) ?? false)
+      ? ({
+          id: "model",
+          name: "Model",
+          category: "model",
+          type: "select",
+          currentValue: "",
+          options: [],
+        } satisfies ZCodeConfigOption)
+      : undefined;
 
   // 空模型/档位曾被 Session 旧值补回，界面显示与实际不可提交状态矛盾。
   // 初始化已经由 Composer owner 完成；显示层只消费它，不能再次补值。
@@ -730,32 +752,36 @@ function V4ComposerModelControlsImpl({
   }, [draftMode, effectiveConfig, modelSelectionView?.revision]);
 
   const modelSelectGroups = useMemo<ModelSelectGroup[]>(() => {
-    if (!modelSelectionView) return [];
-    return buildRegistryModelSelectGroups(displayProvider, modelSelectionView, {
-      apiKeyLabel: intl.formatMessage({ id: "settings.modelProvider.apiKey" }),
-      apiKeyBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.apiKeyBadge",
+    const harnessGroups = buildHarnessModelSelectGroups(harnesses);
+    if (!modelSelectionView) return harnessGroups;
+    return [
+      ...harnessGroups,
+      ...buildRegistryModelSelectGroups(displayProvider, modelSelectionView, {
+        apiKeyLabel: intl.formatMessage({ id: "settings.modelProvider.apiKey" }),
+        apiKeyBadgeLabel: intl.formatMessage({
+          id: "settings.modelProvider.connectionMode.apiKeyBadge",
+        }),
+        codingPlanLabel: intl.formatMessage({
+          id: "settings.modelProvider.connectionMode.codingPlan",
+        }),
+        codingPlanBadgeLabel: intl.formatMessage({
+          id: "settings.modelProvider.connectionMode.codingPlanBadge",
+        }),
+        startPlanLabel: intl.formatMessage({
+          id: "settings.modelProvider.connectionMode.startPlan",
+        }),
+        startPlanBadgeLabel: intl.formatMessage({
+          id: "settings.modelProvider.connectionMode.startPlanBadge",
+        }),
+        teamPlanBadgeLabel: intl.formatMessage({
+          id: "settings.modelProvider.connectionMode.teamPlanBadge",
+        }),
+        teamPlanFallbackLabel: intl.formatMessage({
+          id: "settings.modelProvider.connectionMode.teamPlan",
+        }),
       }),
-      codingPlanLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.codingPlan",
-      }),
-      codingPlanBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.codingPlanBadge",
-      }),
-      startPlanLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.startPlan",
-      }),
-      startPlanBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.startPlanBadge",
-      }),
-      teamPlanBadgeLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.teamPlanBadge",
-      }),
-      teamPlanFallbackLabel: intl.formatMessage({
-        id: "settings.modelProvider.connectionMode.teamPlan",
-      }),
-    });
-  }, [displayProvider, intl, modelSelectionView]);
+    ];
+  }, [displayProvider, harnesses, intl, modelSelectionView]);
 
   // 修复：恢复「管理模型」入口（老版 onManageModels = 打开设置页并定位模型供应商区）。
   const handleOpenModelProviderSettings = useCallback(() => {
@@ -792,9 +818,20 @@ function V4ComposerModelControlsImpl({
       ),
     [manageModelsLabel, modelSelectGroups, rawModelValue, showManageModelsAction],
   );
-  const normalizedModelValue = triggerDisplay.value ?? "";
+  const selectedHarness = harnesses.find((harness) => harness.engineId === selectedHarnessId);
+  const selectedHarnessValue = selectedHarness
+    ? encodeHarnessModelSelectValue(selectedHarness.engineId)
+    : null;
+  const normalizedModelValue = selectedHarnessValue ?? triggerDisplay.value ?? "";
 
   const modelTriggerDisplay = useMemo(() => {
+    if (selectedHarness) {
+      return {
+        fullLabel: `Harness · ${selectedHarness.label}`,
+        providerPrefix: "Harness · ",
+        modelLabel: selectedHarness.label,
+      };
+    }
     // 非可选值（未选 / synthetic / 不可用）：占位文案或默认「选择模型」。
     const fallbackLabel =
       triggerDisplay.placeholder ?? intl.formatMessage({ id: "chat.toolbar.model.label" });
@@ -811,13 +848,14 @@ function V4ComposerModelControlsImpl({
     });
   }, [
     effectiveConfig?.provider,
+    selectedHarness,
     intl,
     modelSelectionView,
     modelSelectGroups,
     normalizedModelValue,
     triggerDisplay.placeholder,
   ]);
-  const handleModelValueChange = useCallback(
+  const handleProviderModelValueChange = useCallback(
     (value: string) => {
       const decoded = decodeCustomModelValue(value);
       // 草稿的点击时可见模型可能只存在于 catalog，或已经被最新 draft
@@ -885,6 +923,19 @@ function V4ComposerModelControlsImpl({
       workspaceIdentity,
       workspacePath,
     ],
+  );
+
+  const handleModelValueChange = useCallback(
+    (value: string) => {
+      dispatchComposerModelSelectValue({
+        value,
+        harnesses,
+        sessionId,
+        onSelectHarness,
+        onSelectProvider: handleProviderModelValueChange,
+      });
+    },
+    [handleProviderModelValueChange, harnesses, onSelectHarness, sessionId],
   );
 
   const draftModelThoughtOption = useMemo(
@@ -962,20 +1013,31 @@ function V4ComposerModelControlsImpl({
   // 改绑后按钮提示即时跟随（不能用硬编码文案）。
   const modelShortcutLabel = useShortcutCommandLabel("openModelMenu");
   const thoughtShortcutLabel = useShortcutCommandLabel("cycleThoughtLevel");
-  const isModelOptionLocked = useCallback(() => false, []);
+  const isModelOptionLocked = useCallback(
+    (candidateValue: string) => {
+      if (!isHarnessModelSelectValue(candidateValue)) return false;
+      const engineId = decodeHarnessModelSelectValue(candidateValue);
+      const harness = harnesses.find((candidate) => candidate.engineId === engineId);
+      return sessionId !== null || !harness?.selectable;
+    },
+    [harnesses, sessionId],
+  );
 
   // 键盘热键（旧 useToolbarShortcutBindings）：Ctrl+M 打开模型菜单、Ctrl+T 循环思考深度。
   // 模式循环（Ctrl+Shift+M）由 V4ComposerModeSwitch 单独绑定（modeOption 在彼处）。
   // 模型留空是正常的待选择状态，包括已有会话；不能因为没有已选模型隐藏重选入口。
   // 有可选组时正常显示；无组但有「管理模型」入口时也显示，避免用户零模型入口。
+  const hasHarnessPicker = buildHarnessModelSelectGroups(harnesses).length > 0;
   const modelMenuVisible = modelSelectGroups.length > 0 || showManageModelsAction;
+  const modelPickerDisabled =
+    disabled || recoveryPending || (modelSelectionState.status !== "ready" && !hasHarnessPicker);
   const providerSubmenuClassName = undefined;
   useToolbarShortcutBindings({
-    hasAnyOption: Boolean(modelOption) || Boolean(thoughtOption),
+    hasAnyOption: Boolean(modelOption) || (Boolean(thoughtOption) && !selectedHarnessId),
     toolbarDisabled: disabled || recoveryPending,
-    modelMenuDisabled: disabled || recoveryPending || !modelMenuVisible,
+    modelMenuDisabled: modelPickerDisabled || !modelMenuVisible,
     modelOption,
-    thoughtOption: thoughtOption ?? undefined,
+    thoughtOption: selectedHarnessId ? undefined : (thoughtOption ?? undefined),
     onOpenModelMenu: handleOpenModelMenuShortcut,
     onCycleThoughtLevel: handleCycleThoughtLevel,
     onCycleSessionMode: noop,
@@ -1010,17 +1072,19 @@ function V4ComposerModelControlsImpl({
         data-usage-max={usage?.contextWindow?.maxTokens ?? ""}
         className="hidden"
       />
-      <ChatContextUsage
-        codingPlanUsageRemaining={codingPlanUsageRemaining}
-        taskUsage={taskUsage}
-        startPlanBalance={contextStartPlanBalance}
-        selectedProvider={displayProvider}
-        intl={intl}
-        locale={locale}
-        onSendCompressionCommand={onSendCompressionCommand}
-        compressionDisabled={disabled || recoveryPending}
-      />
-      {modelSelectionState.status === "error" && modelSelectionReload ? (
+      {!selectedHarnessId ? (
+        <ChatContextUsage
+          codingPlanUsageRemaining={codingPlanUsageRemaining}
+          taskUsage={taskUsage}
+          startPlanBalance={contextStartPlanBalance}
+          selectedProvider={displayProvider}
+          intl={intl}
+          locale={locale}
+          onSendCompressionCommand={onSendCompressionCommand}
+          compressionDisabled={disabled || recoveryPending}
+        />
+      ) : null}
+      {!selectedHarnessId && modelSelectionState.status === "error" && modelSelectionReload ? (
         <Button
           type="button"
           variant="ghost"
@@ -1030,7 +1094,8 @@ function V4ComposerModelControlsImpl({
         >
           {intl.formatMessage({ id: "chat.toolbar.model.loadFailedRetry" })}
         </Button>
-      ) : modelSelectionState.status === "unavailable" ? (
+      ) : null}
+      {!selectedHarnessId && modelSelectionState.status === "unavailable" ? (
         <span className="px-2 text-ui-sm text-foreground-subtle">
           {intl.formatMessage({
             id:
@@ -1039,7 +1104,8 @@ function V4ComposerModelControlsImpl({
                 : "chat.toolbar.model.targetMissing",
           })}
         </span>
-      ) : modelMenuVisible ? (
+      ) : null}
+      {modelMenuVisible && (modelSelectionState.status === "ready" || hasHarnessPicker) ? (
         <ModelConfigSelect
           modelGroups={modelSelectGroups}
           normalizedValue={normalizedModelValue}
@@ -1055,7 +1121,7 @@ function V4ComposerModelControlsImpl({
           })}
           isItemLocked={isModelOptionLocked}
           onValueChange={handleModelValueChange}
-          disabled={disabled || recoveryPending || modelSelectionState.status !== "ready"}
+          disabled={modelPickerDisabled}
           tooltipTitle={modelTriggerDisplay.fullLabel}
           shortcutLabel={modelShortcutLabel}
           triggerRef={modelTriggerRef}
@@ -1071,7 +1137,7 @@ function V4ComposerModelControlsImpl({
           providerSubmenuClassName={providerSubmenuClassName}
         />
       ) : null}
-      {thoughtOption ? (
+      {!selectedHarnessId && thoughtOption ? (
         <ThoughtLevelCycleControl
           indicatorClassName="hidden @xl/composer:block"
           triggerClassName="@max-sm/composer:size-7 @max-sm/composer:justify-center @max-sm/composer:p-0"

@@ -5,6 +5,7 @@ import {
   type EngineAdapter,
   type EngineApprovalRef,
   type EngineCapability,
+  type EngineCapabilitySnapshot,
   type EngineEvent,
   type EngineExecutionRef,
   type EngineSessionRef,
@@ -21,6 +22,7 @@ import type {
   RuntimeAuthorizationScope,
   RuntimeChange,
   RuntimeCredentialSource,
+  RuntimeCurrentEngineProjection,
   RuntimeEngineProjection,
   RuntimeEnvironment,
   RuntimeEvent,
@@ -42,6 +44,15 @@ import type {
 export * from "./types.js";
 
 type EngineMap = ReadonlyMap<string, EngineAdapter>;
+
+interface CurrentEngineRecord {
+  readonly revision: number;
+  /** Null until the current Adapter snapshot has been verified by this Host. */
+  readonly snapshot: EngineCapabilitySnapshot | null;
+  /** Last synchronous Adapter view, used to invalidate concurrent probes on drift. */
+  readonly observedSnapshot: EngineCapabilitySnapshot;
+  readonly projection: RuntimeCurrentEngineProjection;
+}
 
 export interface CreateTaskRuntimeOptions {
   readonly databasePath: string;
@@ -122,6 +133,8 @@ export class TaskRuntime {
   readonly #runs = new Map<string, RunTarget>();
   readonly #liveSessions = new Map<string, EngineSessionRef>();
   readonly #commandLocks = new Set<string>();
+  readonly #capabilityRevisions = new Map<string, number>();
+  readonly #currentEngines = new Map<string, CurrentEngineRecord>();
   #pendingChanges: { kind: RuntimeChange["kind"]; taskId: string; entityId: string }[] | null =
     null;
   #closed = false;
@@ -134,23 +147,21 @@ export class TaskRuntime {
     this.#markRecoveredStateUnknown();
   }
 
-  listEngines(): RuntimeEngineProjection[] {
+  listEngines(): RuntimeCurrentEngineProjection[] {
     this.#assertOpen();
     return [...this.#engines.values()].map((engine) =>
-      this.#toEngineProjection(engine.getCapabilities()),
+      this.#clone(this.#currentEngineProjection(engine)),
     );
   }
 
-  async refreshEngines(): Promise<RuntimeEngineProjection[]> {
+  async refreshEngines(): Promise<RuntimeCurrentEngineProjection[]> {
     this.#assertOpen();
-    return Promise.all(
-      [...this.#engines.values()].map(async (engine) => {
-        const snapshot = engine.refreshCapabilities
-          ? await engine.refreshCapabilities()
-          : engine.getCapabilities();
-        return this.#toEngineProjection(snapshot);
-      }),
+    await Promise.all(
+      [...this.#engines.values()].map((engine) =>
+        this.#capabilities(engine).catch(() => undefined),
+      ),
     );
+    return this.listEngines();
   }
 
   listTasks(): RuntimeTask[] {
@@ -255,6 +266,7 @@ export class TaskRuntime {
         environment.id,
         "session.create",
         snapshot.configurationVersion,
+        snapshot.adapterVersion,
       );
       const nativeSessionId = await engine.createSession();
       this.#liveSessions.set(sessionId, nativeSessionId);
@@ -354,6 +366,7 @@ export class TaskRuntime {
       task.data.environment.id,
       "execution.run",
       task.data.engine.configurationVersion,
+      task.data.engine.adapterVersion,
     );
 
     const pending = this.#store
@@ -412,6 +425,7 @@ export class TaskRuntime {
         task.data.environment.id,
         "execution.run",
         task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
       );
       this.#qualify(
         input.taskId,
@@ -502,6 +516,7 @@ export class TaskRuntime {
         task.data.environment.id,
         "approval.respond",
         task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
       );
       this.#qualify(
         input.taskId,
@@ -609,6 +624,7 @@ export class TaskRuntime {
         task.data.environment.id,
         "user-input.respond",
         task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
       );
       this.#qualify(
         input.taskId,
@@ -760,6 +776,7 @@ export class TaskRuntime {
         task.data.environment.id,
         "execution.interrupt",
         task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
       );
       this.#qualify(
         input.taskId,
@@ -1718,10 +1735,109 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError("Authorization has expired.");
   }
 
-  async #capabilities(engine: EngineAdapter) {
-    return engine.refreshCapabilities
-      ? await engine.refreshCapabilities()
-      : engine.getCapabilities();
+  async #capabilities(engine: EngineAdapter): Promise<EngineCapabilitySnapshot> {
+    const baseline = this.#clone(engine.getCapabilities());
+    const engineId = baseline.engineId;
+    const revision = (this.#capabilityRevisions.get(engineId) ?? 0) + 1;
+    this.#capabilityRevisions.set(engineId, revision);
+    this.#currentEngines.set(engineId, {
+      revision,
+      snapshot: null,
+      observedSnapshot: baseline,
+      projection: this.#unknownEngineProjection(
+        engineId,
+        Object.keys(baseline.capabilities) as EngineCapability[],
+        "Capability state is being checked.",
+        null,
+      ),
+    });
+
+    if (!engine.refreshCapabilities) {
+      if (this.#capabilityRevisions.get(engineId) === revision) {
+        this.#currentEngines.set(engineId, {
+          revision,
+          snapshot: null,
+          observedSnapshot: baseline,
+          projection: this.#unknownEngineProjection(
+            engineId,
+            Object.keys(baseline.capabilities) as EngineCapability[],
+            "Adapter does not provide an active capability probe; current status is unknown.",
+            this.#now(),
+          ),
+        });
+      }
+      throw new RuntimeEligibilityError(
+        "Engine capability status cannot be verified without an active probe.",
+        "temporarily-unavailable",
+      );
+    }
+
+    let snapshot: EngineCapabilitySnapshot;
+    try {
+      snapshot = this.#clone(await engine.refreshCapabilities());
+    } catch {
+      if (this.#capabilityRevisions.get(engineId) === revision) {
+        this.#currentEngines.set(engineId, {
+          revision,
+          snapshot: null,
+          observedSnapshot: baseline,
+          projection: this.#unknownEngineProjection(
+            engineId,
+            Object.keys(baseline.capabilities) as EngineCapability[],
+            "Capability refresh failed; current support and availability are unknown.",
+            this.#now(),
+          ),
+        });
+      }
+      const latest = this.#currentEngines.get(engineId);
+      if (latest?.snapshot && this.#currentEngineProjection(engine).state === "current") {
+        const confirmed = this.#currentEngines.get(engineId);
+        if (confirmed?.snapshot) return confirmed.snapshot;
+      }
+      throw new RuntimeEligibilityError(
+        "Engine capability status could not be verified.",
+        "temporarily-unavailable",
+      );
+    }
+
+    if (this.#capabilityRevisions.get(engineId) !== revision) {
+      const latest = this.#currentEngines.get(engineId);
+      if (latest?.snapshot && this.#currentEngineProjection(engine).state === "current") {
+        const confirmed = this.#currentEngines.get(engineId);
+        if (confirmed?.snapshot) return confirmed.snapshot;
+      }
+      throw new RuntimeEligibilityError(
+        "A newer Engine capability check is still unresolved.",
+        "temporarily-unavailable",
+      );
+    }
+
+    const observedSnapshot = this.#clone(engine.getCapabilities());
+    if (!sameCapabilitySnapshot(snapshot, observedSnapshot)) {
+      this.#currentEngines.set(engineId, {
+        revision,
+        snapshot: null,
+        observedSnapshot,
+        projection: this.#unknownEngineProjection(
+          engineId,
+          Object.keys(observedSnapshot.capabilities) as EngineCapability[],
+          "Adapter state changed during capability refresh; a new probe is required.",
+          this.#now(),
+        ),
+      });
+      throw new RuntimeEligibilityError(
+        "Engine capability state changed during refresh; retry after a new probe.",
+        "temporarily-unavailable",
+      );
+    }
+
+    this.#currentEngines.set(engineId, {
+      revision,
+      snapshot,
+      observedSnapshot,
+      projection: this.#toCurrentEngineProjection(snapshot),
+    });
+    return snapshot;
   }
 
   #assertCapability(
@@ -1730,6 +1846,7 @@ export class TaskRuntime {
     environmentId: string,
     capability: EngineCapability,
     expectedConfigurationVersion?: string | null,
+    expectedAdapterVersion?: string,
   ): void {
     if (snapshot.engineId !== expectedEngineId || snapshot.environment !== environmentId) {
       throw new RuntimeEligibilityError(
@@ -1738,11 +1855,20 @@ export class TaskRuntime {
       );
     }
     if (
-      expectedConfigurationVersion &&
+      expectedConfigurationVersion !== undefined &&
       snapshot.configurationVersion !== expectedConfigurationVersion
     ) {
       throw new RuntimeEligibilityError(
         "Engine configuration changed; the Task authorization snapshot is stale.",
+        "authorization-required",
+      );
+    }
+    if (
+      expectedAdapterVersion !== undefined &&
+      snapshot.adapterVersion !== expectedAdapterVersion
+    ) {
+      throw new RuntimeEligibilityError(
+        "Engine adapter changed; the Task authorization snapshot is stale.",
         "authorization-required",
       );
     }
@@ -1862,10 +1988,18 @@ export class TaskRuntime {
       closedAt: record.data.closedAt,
       closeReason: record.data.closeReason,
       engine: record.data.engine,
+      currentEngine: this.#engines.has(record.data.engineId)
+        ? this.#currentEngineProjection(this.#engines.get(record.data.engineId)!)
+        : this.#unknownEngineProjection(
+            record.data.engineId,
+            Object.keys(record.data.engine.capabilities) as EngineCapability[],
+            "Engine adapter is not loaded in this Host.",
+            null,
+          ),
       environment: record.data.environment,
       credentialSource: record.data.credentialSource,
       participant: participant.data,
-      session: session.data.projection,
+      session: { ...session.data.projection, nativeSessionId: session.data.nativeSessionId },
     });
   }
 
@@ -1941,6 +2075,73 @@ export class TaskRuntime {
       environment: snapshot.environment,
       capabilities: snapshot.capabilities,
     });
+  }
+
+  #toCurrentEngineProjection(snapshot: EngineCapabilitySnapshot): RuntimeCurrentEngineProjection {
+    return this.#clone({
+      ...this.#toEngineProjection(snapshot),
+      state: "current" as const,
+      observedAt: this.#now(),
+      source: "active-probe" as const,
+    });
+  }
+
+  #unknownEngineProjection(
+    engineId: string,
+    capabilityNames: readonly EngineCapability[],
+    reason: string,
+    observedAt: number | null,
+  ): RuntimeCurrentEngineProjection {
+    const capabilities = Object.fromEntries(
+      capabilityNames.map((name) => [
+        name,
+        { support: "unknown", availability: "unknown", reason },
+      ]),
+    ) as RuntimeCurrentEngineProjection["capabilities"];
+    return {
+      engineId,
+      adapterVersion: null,
+      engineVersion: null,
+      configurationVersion: null,
+      environment: null,
+      capabilities,
+      state: "unknown",
+      observedAt,
+      source: "unknown",
+    };
+  }
+
+  #currentEngineProjection(engine: EngineAdapter): RuntimeCurrentEngineProjection {
+    const current = this.#clone(engine.getCapabilities());
+    const record = this.#currentEngines.get(current.engineId);
+    if (!record) {
+      return this.#unknownEngineProjection(
+        current.engineId,
+        Object.keys(current.capabilities) as EngineCapability[],
+        "Capability state has not been checked in this Host.",
+        null,
+      );
+    }
+
+    if (!sameCapabilitySnapshot(current, record.snapshot ?? record.observedSnapshot)) {
+      const revision = (this.#capabilityRevisions.get(current.engineId) ?? record.revision) + 1;
+      this.#capabilityRevisions.set(current.engineId, revision);
+      const projection = this.#unknownEngineProjection(
+        current.engineId,
+        Object.keys(current.capabilities) as EngineCapability[],
+        "Adapter state changed since its last probe; a new probe is required.",
+        this.#now(),
+      );
+      this.#currentEngines.set(current.engineId, {
+        revision,
+        snapshot: null,
+        observedSnapshot: current,
+        projection,
+      });
+      return projection;
+    }
+
+    return record.projection;
   }
 
   #requireTaskProjection(taskId: string): RuntimeTask {
@@ -2117,6 +2318,35 @@ export class TaskRuntime {
 
 export function createTaskRuntime(options: CreateTaskRuntimeOptions): TaskRuntime {
   return new TaskRuntime(options);
+}
+
+function sameCapabilitySnapshot(
+  left: EngineCapabilitySnapshot,
+  right: EngineCapabilitySnapshot,
+): boolean {
+  if (
+    left.engineId !== right.engineId ||
+    left.adapterVersion !== right.adapterVersion ||
+    left.engineVersion !== right.engineVersion ||
+    left.configurationVersion !== right.configurationVersion ||
+    left.environment !== right.environment
+  ) {
+    return false;
+  }
+  const names = Object.keys(left.capabilities) as EngineCapability[];
+  return (
+    names.length === Object.keys(right.capabilities).length &&
+    names.every((name) => {
+      const first = left.capabilities[name];
+      const second = right.capabilities[name];
+      if (!second) return false;
+      return (
+        first.support === second.support &&
+        first.availability === second.availability &&
+        first.reason === second.reason
+      );
+    })
+  );
 }
 
 function runKey(sessionId: string, executionId: EngineExecutionRef): string {
