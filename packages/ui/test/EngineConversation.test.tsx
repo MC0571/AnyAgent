@@ -3037,6 +3037,7 @@ test("unknown native Session and Execution require explicit identity-bound recov
   const restoreRequests: Array<Record<string, unknown>> = [];
   const reconcileRequests: Array<Record<string, unknown>> = [];
   const submittedInputs: Array<Record<string, unknown>> = [];
+  const feedbackReads: string[] = [];
   const listeners = new Set<(change: Record<string, unknown>) => void>();
   let rejectRestore = true;
   let releaseRestore: (() => void) | null = null;
@@ -3074,7 +3075,12 @@ test("unknown native Session and Execution require explicit identity-bound recov
     getHistory: async (id: string) => (id === taskId ? activeHistory : null),
     listEngines: async () => [zcodeEngine],
     getExecutionFileChanges: async () => null,
-    getAssistantFeedback: async () => ({ state: "current", values: {} }),
+    getAssistantFeedback: async () => {
+      feedbackReads.push(activeTask.session.status);
+      return activeTask.session.status === "active"
+        ? { state: "current", values: {} }
+        : { state: "unknown", reason: "Native Session is not attached yet." };
+    },
     onDidChange: (listener: (change: Record<string, unknown>) => void) => {
       listeners.add(listener);
       return { dispose: () => listeners.delete(listener) };
@@ -3265,6 +3271,10 @@ test("unknown native Session and Execution require explicit identity-bound recov
           false,
         ),
       "the composer should become available only after explicit successful recovery",
+    );
+    await waitFor(
+      () => assert.ok(feedbackReads.includes("active")),
+      "native feedback should be reread after the original Session is attached",
     );
     assert.equal(restoreRequests.length, 2);
     assert.deepEqual(restoreRequests[1], restoreRequests[0]);

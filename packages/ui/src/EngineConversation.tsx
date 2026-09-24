@@ -521,7 +521,7 @@ export function EngineConversation({
     return () => {
       cancelled = true;
     };
-  }, [feedbackReadKey, revision, service, visibleTask?.id]);
+  }, [feedbackReadKey, revision, service, visibleTask?.id, visibleTask?.session.status]);
   const visibleTitle = visibleTask
     ? parsePromptWebElementContexts(visibleHistory?.inputs[0]?.text ?? "", {
         workspacePath: visibleTask.environment.workDirectory ?? "",
