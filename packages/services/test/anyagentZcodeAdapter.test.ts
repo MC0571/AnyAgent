@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { EngineContractError } from "@anyagent/engine-contract";
 import { createTaskRuntime } from "@anyagent/runtime";
@@ -61,6 +64,10 @@ function harness({
   resumeSessionId = "native-session",
   validateModelSelection,
   beforeRows,
+  onSendText,
+  readConfigurationVersion,
+  beforeResume,
+  createSessionId,
 }: {
   earlyStart?: boolean;
   delayedAck?: boolean;
@@ -87,11 +94,16 @@ function harness({
     Parameters<typeof createZCodeAdapter>[0]["validateModelSelection"]
   >;
   beforeRows?: () => Promise<void>;
+  onSendText?: () => Promise<void>;
+  readConfigurationVersion?: () => Promise<string>;
+  beforeResume?: () => Promise<void>;
+  createSessionId?: (index: number) => string;
 } = {}) {
   const listeners = new Set<(event: unknown) => void>();
   let lifecycleListener: ((event: unknown) => void) | undefined;
   let releaseSendText: (() => void) | undefined;
   let inputNumber = 0;
+  let sessionNumber = 0;
   const commands: Array<{
     type: string;
     commandId: string;
@@ -127,6 +139,7 @@ function harness({
     }),
     resumeSession: async ({ sessionId }: { sessionId: string }) => {
       resumeCalls.push(sessionId);
+      await beforeResume?.();
       return {
         session: { sessionId: resumeSessionId },
         settings: { model: { current: { providerId: "provider-a" } } },
@@ -160,10 +173,14 @@ function harness({
         return {
           status: "accepted",
           commandId: envelope.commandId,
-          result: { type: "createSession", sessionId: "native-session" },
+          result: {
+            type: "createSession",
+            sessionId: createSessionId?.(++sessionNumber) ?? "native-session",
+          },
         };
       }
       if (envelope.type === "sendText") {
+        await onSendText?.();
         const inputId = ++inputNumber === 1 ? "native-input" : `native-input-${inputNumber}`;
         if (delayedAck)
           await new Promise<void>((resolve) => {
@@ -389,6 +406,7 @@ function harness({
     agent,
     workspacePath: "/tmp/workspace",
     validateModelSelection: validateModelSelection ?? (() => undefined),
+    readConfigurationVersion,
   });
   const adapter = useDefaultModelSelection
     ? {
@@ -413,6 +431,7 @@ function harness({
         agent,
         workspacePath: "/tmp/workspace",
         validateModelSelection: validateModelSelection ?? (() => undefined),
+        readConfigurationVersion,
       }),
     emit(event: unknown) {
       for (const listener of listeners) listener(event);
@@ -1632,6 +1651,155 @@ test("ZCode edit and retry resolve only their native source turn and preserve a 
   }
 });
 
+test("failed ZCode retry records a new attempt while a completed tool effect cannot be replayed", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-retry-"));
+  const effectPath = join(directory, "completed-tool-effect.txt");
+  const rows: NativeAssistantRow[] = [];
+  const fixture = harness({ rows });
+  const runtime = createTaskRuntime({
+    databasePath: join(directory, "runtime.sqlite"),
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const emit = (eventId: string, seq: number, turnId: string, type: string, payload: unknown) =>
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId,
+        seq,
+        sessionId: "native-session",
+        turnId,
+        timestamp: seq,
+        type,
+        payload,
+      },
+    });
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment: {
+        id: "local:/tmp/workspace",
+        kind: "workspace",
+        workDirectory: "/tmp/workspace",
+      },
+      authorization: {
+        id: "retry-host-grant",
+        environmentId: "local:/tmp/workspace",
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run", "execution.revise"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const completedInput = await runtime.submitInput({
+      ...identity,
+      text: "perform one tool action",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    emit("completed-start", 1, "completed-turn", "turn.started", { inputId: "native-input" });
+    emit("tool-start", 2, "completed-turn", "tool.updated", {
+      kind: "started",
+      toolCallId: "write-once",
+      toolName: "Write",
+      startedAt: 2,
+    });
+    await appendFile(effectPath, "written-once\n");
+    emit("tool-finish", 3, "completed-turn", "tool.updated", {
+      kind: "result",
+      toolCallId: "write-once",
+      result: { success: true },
+    });
+    emit("completed-terminal", 4, "completed-turn", "turn.completed", {
+      inputId: "native-input",
+      resultType: "success",
+      response: "tool complete",
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "completed");
+    const completedExecution = runtime.getHistory(task.id)!.executions[0]!;
+    assert.equal(completedExecution.inputId, completedInput.id);
+    assert.ok(runtime.getHistory(task.id)?.events.some((event) => event.type === "tool.completed"));
+    await assert.rejects(
+      runtime.reviseTurn({ ...identity, kind: "retry", sourceExecutionId: completedExecution.id }),
+      /may have run tools/i,
+    );
+    assert.equal(fixture.commands.filter((command) => command.type === "retryTurn").length, 0);
+    assert.equal(await readFile(effectPath, "utf8"), "written-once\n");
+
+    const failedInput = await runtime.submitInput({
+      ...identity,
+      text: "fail before any tool action",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    emit("failed-start", 5, "failed-turn", "turn.started", { inputId: "native-input-2" });
+    emit("failed-terminal", 6, "failed-turn", "turn.completed", {
+      inputId: "native-input-2",
+      resultType: "error",
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[1]?.status === "failed");
+    const failedExecution = runtime.getHistory(task.id)!.executions[1]!;
+    assert.equal(failedExecution.inputId, failedInput.id);
+    const failedCommandId = fixture.commands.filter((command) => command.type === "sendText")[1]!
+      .commandId;
+    rows.push(
+      {
+        rowId: 10,
+        kind: "turnHeader",
+        turnId: "failed-turn",
+        sourceCommandId: failedCommandId,
+        state: "failed",
+      },
+      {
+        rowId: 11,
+        kind: "assistantText",
+        turnId: "failed-turn",
+        entityId: "failed-answer",
+        actions: { canRetry: true },
+      },
+    );
+    const attempt = await runtime.reviseTurn({
+      ...identity,
+      kind: "retry",
+      sourceExecutionId: failedExecution.id,
+    });
+    assert.deepEqual(attempt.revisionOf, {
+      kind: "retry",
+      inputId: failedInput.id,
+      executionId: failedExecution.id,
+    });
+    assert.equal(attempt.text, failedInput.text);
+    const retryCommands = fixture.commands.filter((command) => command.type === "retryTurn");
+    assert.equal(retryCommands.length, 1);
+    assert.deepEqual(retryCommands[0]?.payload, {
+      target: { rowId: 11, entityId: "failed-answer" },
+    });
+    emit("retry-start", 7, "retry-turn", "turn.started", {
+      inputId: retryCommands[0]!.commandId,
+    });
+    emit("retry-terminal", 8, "retry-turn", "turn.completed", {
+      inputId: retryCommands[0]!.commandId,
+      resultType: "success",
+      response: "recovered on the new attempt",
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[2]?.status === "completed");
+    const retriedExecution = runtime.getHistory(task.id)!.executions[2]!;
+    assert.equal(retriedExecution.inputId, attempt.id);
+    assert.deepEqual(retriedExecution.revisionOf, attempt.revisionOf);
+    assert.equal(retriedExecution.result, "recovered on the new attempt");
+    assert.equal(fixture.commands.filter((command) => command.type === "sendText").length, 2);
+    assert.equal(runtime.getHistory(task.id)?.executions[1]?.status, "failed");
+    assert.equal(runtime.getHistory(task.id)?.inputs[1]?.status, "failed");
+    assert.equal(await readFile(effectPath, "utf8"), "written-once\n");
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("ZCode edit sends the selected native attachments and refuses a mismatched source", async () => {
   const rows: NativeAssistantRow[] = [];
   const fixture = harness({ rows });
@@ -2647,6 +2815,355 @@ test("CLI lifecycle loss ends an acknowledged run with unknown evidence", async 
   fixture.adapter.dispose();
 });
 
+test("disconnected ZCode work stays unknown until its original native terminal is reconciled", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-disconnect-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const effectPath = join(directory, "native-tool-effect.txt");
+  const fixture = harness({
+    onSendText: () => appendFile(effectPath, "native-command-dispatched\n"),
+  });
+  let adapter = fixture.adapter;
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["zcode", adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "disconnect-host-grant",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const original = await runtime.submitInput({
+      ...identity,
+      text: "write an isolated test file once",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "disconnect-original-start",
+        seq: 1,
+        sessionId: "native-session",
+        turnId: "disconnect-original-turn",
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+      },
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "started");
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    const nativeCommandId = fixture.commands.find((entry) => entry.type === "sendText")!.commandId;
+    fixture.disconnect();
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "unknown");
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === original.id)?.status,
+      "unknown",
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-command-dispatched\n");
+
+    runtime.close();
+    adapter.dispose();
+    adapter = fixture.createFreshAdapter();
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["zcode", adapter]]) });
+    await assert.rejects(runtime.restoreTaskSession(identity), /unresolved native work/i);
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "must not replay while native outcome is unknown",
+        submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+      }),
+      /unknown|unresolved/i,
+    );
+    const unresolved = await runtime.reconcileExecution({ ...identity, executionId });
+    assert.equal(unresolved.status, "unknown");
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-command-dispatched\n");
+    assert.deepEqual(fixture.resumeCalls, []);
+
+    fixture.rows.push(
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "hydrated-disconnect-turn",
+        sourceCommandId: nativeCommandId,
+        state: "completedSuccess",
+        nativeTerminalEvidence: {
+          eventId: "native-disconnect-terminal",
+          eventType: "turn_complete",
+          sourceCommandId: nativeCommandId,
+          turnId: "disconnect-original-turn",
+          resultType: "success",
+        },
+      },
+      {
+        rowId: 2,
+        kind: "assistantText",
+        turnId: "hydrated-disconnect-turn",
+        text: "one write finished",
+      },
+    );
+    const reconciled = await runtime.reconcileExecution({ ...identity, executionId });
+    assert.equal(reconciled.status, "completed");
+    assert.equal(reconciled.result, "one write finished");
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === original.id)?.status,
+      "completed",
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-command-dispatched\n");
+    assert.deepEqual(
+      fixture.rowQueries.map((query) => query.nativeTerminalSourceCommandId),
+      [nativeCommandId, nativeCommandId],
+    );
+
+    await runtime.restoreTaskSession(identity);
+    assert.deepEqual(fixture.resumeCalls, ["native-session"]);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "createSession").length, 1);
+    await runtime.submitInput({
+      ...identity,
+      text: "a distinct next business turn",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 2);
+    assert.equal(
+      await readFile(effectPath, "utf8"),
+      "native-command-dispatched\nnative-command-dispatched\n",
+    );
+  } finally {
+    runtime.close();
+    adapter.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("cold ZCode recovery refuses changed configuration and an expired grant before native resume", async () => {
+  for (const condition of ["configuration", "authorization"] as const) {
+    const directory = await mkdtemp(join(tmpdir(), `anyagent-zcode-restore-${condition}-`));
+    let configurationVersion = "provider-config-before-restart";
+    let now = 10;
+    const fixture = harness({ readConfigurationVersion: async () => configurationVersion });
+    let adapter = fixture.adapter;
+    let runtime = createTaskRuntime({
+      databasePath: join(directory, "runtime.sqlite"),
+      engines: new Map([["zcode", adapter]]),
+      now: () => now,
+    });
+    try {
+      const task = await runtime.createTask({
+        engineId: "zcode",
+        environment: {
+          id: "local:/tmp/workspace",
+          kind: "workspace",
+          workDirectory: "/tmp/workspace",
+        },
+        authorization: {
+          id: "recovery-grant",
+          environmentId: "local:/tmp/workspace",
+          issuer: "host",
+          expiresAt: 20,
+          scopes: ["session.create", "execution.run"],
+        },
+      });
+      const identity = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: task.authorizationId,
+      };
+      runtime.close();
+      adapter.dispose();
+      if (condition === "configuration") configurationVersion = "provider-config-after-restart";
+      else now = 21;
+      adapter = fixture.createFreshAdapter();
+      runtime = createTaskRuntime({
+        databasePath: join(directory, "runtime.sqlite"),
+        engines: new Map([["zcode", adapter]]),
+        now: () => now,
+      });
+      const historyBefore = runtime.getHistory(task.id);
+      await assert.rejects(
+        runtime.restoreTaskSession(identity),
+        condition === "configuration" ? /configuration changed/i : /Authorization has expired/i,
+      );
+      assert.equal(runtime.getTask(task.id)?.session.status, "unknown");
+      assert.equal(runtime.getTask(task.id)?.session.nativeSessionId, task.session.nativeSessionId);
+      assert.deepEqual(runtime.getHistory(task.id), historyBefore);
+      assert.deepEqual(fixture.resumeCalls, []);
+      assert.equal(
+        fixture.commands.filter((command) => command.type === "createSession").length,
+        1,
+      );
+      assert.equal(fixture.commands.filter((command) => command.type === "sendText").length, 0);
+      if (condition === "configuration") {
+        configurationVersion = "provider-config-before-restart";
+        const restored = await runtime.restoreTaskSession(identity);
+        assert.equal(restored.session.nativeSessionId, task.session.nativeSessionId);
+        assert.deepEqual(fixture.resumeCalls, ["native-session"]);
+        assert.equal(
+          fixture.commands.filter((command) => command.type === "createSession").length,
+          1,
+        );
+        await runtime.submitInput({
+          ...identity,
+          text: "continue only after compatible configuration returns",
+          submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+        });
+        assert.equal(fixture.commands.filter((command) => command.type === "sendText").length, 1);
+      }
+    } finally {
+      runtime.close();
+      adapter.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+test("cold ZCode recovery refuses terminal Tasks and cross-Task Session identity", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-restore-ownership-"));
+  const fixture = harness({ createSessionId: (index) => `native-session-${index}` });
+  let adapter = fixture.adapter;
+  let runtime = createTaskRuntime({
+    databasePath: join(directory, "runtime.sqlite"),
+    engines: new Map([["zcode", adapter]]),
+  });
+  try {
+    const environment = {
+      id: "local:/tmp/workspace",
+      kind: "workspace" as const,
+      workDirectory: "/tmp/workspace",
+    };
+    const authorization = {
+      id: "recovery-grant",
+      environmentId: environment.id,
+      issuer: "host",
+      expiresAt: null,
+      scopes: ["session.create", "execution.run", "task.close"] as const,
+    };
+    const first = await runtime.createTask({ engineId: "zcode", environment, authorization });
+    const second = await runtime.createTask({ engineId: "zcode", environment, authorization });
+    assert.notEqual(first.session.nativeSessionId, second.session.nativeSessionId);
+    const firstIdentity = {
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+      authorizationId: first.authorizationId,
+    };
+    const secondIdentity = {
+      taskId: second.id,
+      participantId: second.participant.id,
+      sessionId: second.session.id,
+      authorizationId: second.authorizationId,
+    };
+    runtime.closeTask({ ...firstIdentity, outcome: "completed" });
+    runtime.close();
+    adapter.dispose();
+    adapter = fixture.createFreshAdapter();
+    runtime = createTaskRuntime({
+      databasePath: join(directory, "runtime.sqlite"),
+      engines: new Map([["zcode", adapter]]),
+    });
+    await assert.rejects(runtime.restoreTaskSession(firstIdentity), /completed|active task/i);
+    await assert.rejects(
+      runtime.restoreTaskSession({ ...secondIdentity, sessionId: first.session.id }),
+      /Session ownership|participant/i,
+    );
+    assert.deepEqual(fixture.resumeCalls, []);
+    assert.equal(runtime.getTask(first.id)?.session.nativeSessionId, first.session.nativeSessionId);
+    assert.equal(
+      runtime.getTask(second.id)?.session.nativeSessionId,
+      second.session.nativeSessionId,
+    );
+    assert.equal(runtime.getTask(second.id)?.session.status, "unknown");
+    assert.equal(fixture.commands.filter((command) => command.type === "createSession").length, 2);
+  } finally {
+    runtime.close();
+    adapter.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a grant expiring during native ZCode resume cannot publish an active product Session", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-restore-race-"));
+  let now = 10;
+  const fixture = harness({
+    beforeResume: async () => {
+      now = 21;
+    },
+  });
+  let adapter = fixture.adapter;
+  let runtime = createTaskRuntime({
+    databasePath: join(directory, "runtime.sqlite"),
+    engines: new Map([["zcode", adapter]]),
+    now: () => now,
+  });
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment: {
+        id: "local:/tmp/workspace",
+        kind: "workspace",
+        workDirectory: "/tmp/workspace",
+      },
+      authorization: {
+        id: "expiring-during-resume",
+        environmentId: "local:/tmp/workspace",
+        issuer: "host",
+        expiresAt: 20,
+        scopes: ["session.create", "execution.run"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    runtime.close();
+    adapter.dispose();
+    adapter = fixture.createFreshAdapter();
+    runtime = createTaskRuntime({
+      databasePath: join(directory, "runtime.sqlite"),
+      engines: new Map([["zcode", adapter]]),
+      now: () => now,
+    });
+    await assert.rejects(runtime.restoreTaskSession(identity), /Authorization has expired/i);
+    assert.deepEqual(fixture.resumeCalls, ["native-session"]);
+    assert.equal(runtime.getTask(task.id)?.session.status, "unknown");
+    assert.equal(runtime.getTask(task.id)?.session.nativeSessionId, task.session.nativeSessionId);
+    assert.equal(fixture.commands.filter((command) => command.type === "sendText").length, 0);
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "must not run on the expired grant",
+        submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+      }),
+      /Authorization has expired/i,
+    );
+  } finally {
+    runtime.close();
+    adapter.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("native start before sendText ACK uses the acknowledged input ID", async () => {
   const fixture = harness({ earlyStart: true });
   const session = await fixture.adapter.createSession();
@@ -3067,9 +3584,10 @@ test("approval is forwarded only when the native ACK proves delivery", async () 
     const receipt = await fixture.adapter.replyToApproval({
       session,
       approvalId: `approval-${index}` as never,
-      optionId: "deny",
+      optionId: "allow",
     });
     assert.equal(receipt.status, scenario.expected);
+    assert.notEqual(receipt.status, "forwarded");
     fixture.adapter.dispose();
     await reading;
   }
@@ -3094,7 +3612,7 @@ test("an approval from a prior execution cannot be answered by the next executio
       sessionId: "native-session",
       turnId: "turn-old",
       toolName: "write",
-      options: [{ optionId: "deny", kind: "deny", name: "Deny" }],
+      options: [{ optionId: "allow", kind: "allowOnce", name: "Allow" }],
     },
   });
   fixture.emit({
@@ -3148,7 +3666,7 @@ test("an approval from a prior execution cannot be answered by the next executio
       await fixture.adapter.replyToApproval({
         session,
         approvalId: "old-approval" as never,
-        optionId: "deny",
+        optionId: "allow",
       })
     ).status,
     "unsupported",
@@ -3156,6 +3674,120 @@ test("an approval from a prior execution cannot be answered by the next executio
   assert.equal(fixture.commands.filter((item) => item.type === "resolveInteraction").length, 0);
   fixture.adapter.dispose();
   await secondReading;
+});
+
+test("a native-invalidated allow answer remains unknown and cannot authorize another Task or turn", async () => {
+  const fixture = harness({
+    interactionAck: "not-found",
+    createSessionId: (index) => `native-session-${index}`,
+  });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  try {
+    const environment = {
+      id: "local:/tmp/workspace",
+      kind: "workspace" as const,
+      workDirectory: "/tmp/workspace",
+    };
+    const authorization = {
+      id: "approval-host-grant",
+      environmentId: environment.id,
+      issuer: "host",
+      expiresAt: null,
+      scopes: ["session.create", "execution.run", "approval.respond"] as const,
+    };
+    const first = await runtime.createTask({ engineId: "zcode", environment, authorization });
+    const second = await runtime.createTask({ engineId: "zcode", environment, authorization });
+    const firstIdentity = {
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+      authorizationId: first.authorizationId,
+    };
+    const secondIdentity = {
+      taskId: second.id,
+      participantId: second.participant.id,
+      sessionId: second.session.id,
+      authorizationId: second.authorizationId,
+    };
+    await runtime.submitInput({
+      ...firstIdentity,
+      text: "request permission in first turn",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    fixture.emit({
+      type: "permission.request",
+      request: {
+        requestId: "expired-native-request",
+        sessionId: "native-session-1",
+        turnId: "first-turn",
+        toolName: "Write",
+        options: [{ optionId: "allow", kind: "allowOnce", name: "Allow" }],
+      },
+    });
+    const emit = (eventId: string, seq: number, turnId: string, type: string, payload: unknown) =>
+      fixture.emit({
+        type: "session.event",
+        event: {
+          eventId,
+          seq,
+          sessionId: "native-session-1",
+          turnId,
+          timestamp: seq,
+          type,
+          payload,
+        },
+      });
+    emit("approval-turn-start", 1, "first-turn", "turn.started", {
+      inputId: "native-input",
+    });
+    await waitUntil(() => runtime.getHistory(first.id)?.approvals.length === 1);
+    const approval = runtime.getHistory(first.id)!.approvals[0]!;
+    const invalidated = await runtime.replyToApproval({
+      ...firstIdentity,
+      approvalId: approval.id,
+      optionId: "allow",
+    });
+    assert.equal(invalidated.status, "unknown");
+    assert.equal(
+      fixture.commands.filter((command) => command.type === "resolveInteraction").length,
+      1,
+    );
+    assert.equal(runtime.getHistory(first.id)?.approvals[0]?.status, "unknown");
+
+    emit("approval-first-complete", 2, "first-turn", "turn.completed", {
+      inputId: "native-input",
+      resultType: "success",
+      response: "permission did not arrive",
+    });
+    await waitUntil(() => runtime.getHistory(first.id)?.executions[0]?.status === "completed");
+    await runtime.submitInput({
+      ...firstIdentity,
+      text: "a separate next turn",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    emit("approval-next-start", 3, "next-turn", "turn.started", {
+      inputId: "native-input-2",
+    });
+    await assert.rejects(
+      runtime.replyToApproval({ ...secondIdentity, approvalId: approval.id, optionId: "allow" }),
+      /different Task|participant|Session|ownership/i,
+    );
+    await assert.rejects(
+      runtime.replyToApproval({ ...firstIdentity, approvalId: approval.id, optionId: "allow" }),
+      /unknown/i,
+    );
+    assert.equal(
+      fixture.commands.filter((command) => command.type === "resolveInteraction").length,
+      1,
+    );
+    assert.equal(runtime.getHistory(second.id)?.approvals.length, 0);
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+  }
 });
 
 test("native permission denial wins over local answer and user-input marker is not a request", async () => {

@@ -102,6 +102,103 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
   }
 });
 
+test("Host cold ZCode recovery keeps Task ownership and waits for compatible configuration", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-host-zcode-restore-"));
+  setDataBaseDir(directory);
+  let configurationVersion = "provider-config-original";
+  let nextNativeSession = 0;
+  let nativeResumeCalls = 0;
+  const commands: string[] = [];
+  const agent = {
+    initialize: async ({ workspacePath }: { workspacePath: string }) => ({
+      available: true,
+      workspaceKey: workspacePath,
+    }),
+    onDynamicSessionEvent: () => (_listener: (event: unknown) => void) => ({ dispose() {} }),
+    onAgentRuntimeLifecycle: () => ({ dispose() {} }),
+    resumeSession: async ({ sessionId }: { sessionId: string }) => {
+      nativeResumeCalls++;
+      return {
+        session: { sessionId },
+        settings: { model: { current: { providerId: "provider-a" } } },
+      };
+    },
+    sendConversationCommandV4: async ({
+      envelope,
+    }: {
+      envelope: { type: string; commandId: string };
+    }) => {
+      commands.push(envelope.type);
+      if (envelope.type === "createSession")
+        return {
+          status: "accepted",
+          commandId: envelope.commandId,
+          result: { type: "createSession", sessionId: `native-session-${++nextNativeSession}` },
+        };
+      return {
+        status: "accepted",
+        commandId: envelope.commandId,
+        result: { type: "inputAccepted", inputId: "native-input", delivery: "startNow" },
+      };
+    },
+  } as unknown as IZCodeAgentService;
+  const createHost = () =>
+    createAnyAgentService(
+      agent,
+      async () => configurationVersion,
+      async () => undefined,
+    );
+  let host = createHost();
+  try {
+    const first = await host.service.createTask({ engineId: "zcode" });
+    const second = await host.service.createTask({ engineId: "zcode" });
+    assert.notEqual(first.session.nativeSessionId, second.session.nativeSessionId);
+    const identity = {
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+      authorizationId: first.authorizationId,
+    };
+    host.close();
+    configurationVersion = "provider-config-changed";
+    host = createHost();
+    assert.equal((await host.service.getTask(first.id))?.session.status, "unknown");
+    await assert.rejects(host.service.restoreTaskSession(identity), /configuration changed/i);
+    await assert.rejects(
+      host.service.restoreTaskSession({ ...identity, taskId: second.id }),
+      /Task|participant|Session/i,
+    );
+    assert.equal(nativeResumeCalls, 0);
+    assert.deepEqual(commands, ["createSession", "createSession"]);
+    assert.equal(
+      (await host.service.getTask(first.id))?.session.nativeSessionId,
+      first.session.nativeSessionId,
+    );
+    assert.equal(
+      (await host.service.getTask(second.id))?.session.nativeSessionId,
+      second.session.nativeSessionId,
+    );
+
+    configurationVersion = "provider-config-original";
+    const restored = await host.service.restoreTaskSession(identity);
+    assert.equal(restored.session.nativeSessionId, first.session.nativeSessionId);
+    assert.equal(restored.participant.id, first.participant.id);
+    assert.equal(nativeResumeCalls, 1);
+    await host.service.submitInput({
+      ...identity,
+      text: "a newly authorized turn after explicit recovery",
+      submissionConfig: { modelSelection: { providerId: "provider-a", modelId: "model-a" } },
+    });
+    assert.deepEqual(commands, ["createSession", "createSession", "sendText"]);
+    assert.equal((await host.service.getHistory(first.id))?.inputs.length, 1);
+    assert.equal((await host.service.getHistory(second.id))?.inputs.length, 0);
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("Host service forwards text queue intent and cancellation to persisted Runtime inputs", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-host-queue-"));
   setDataBaseDir(directory);
