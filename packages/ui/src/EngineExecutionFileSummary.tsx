@@ -24,7 +24,6 @@ export function EngineExecutionFileSummary({
   ) => Promise<{ status: "requested" | "applied" | "rejected" | "unknown"; reason: string | null }>;
 }) {
   const [changes, setChanges] = useState<EngineFileChanges | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let current = true;
@@ -32,11 +31,10 @@ export function EngineExecutionFileSummary({
       (result) => {
         if (current) {
           setChanges(result);
-          setError(null);
         }
       },
-      (cause: unknown) => {
-        if (current) setError(cause instanceof Error ? cause.message : String(cause));
+      () => {
+        if (current) setChanges(null);
       },
     );
     return () => {
@@ -50,10 +48,7 @@ export function EngineExecutionFileSummary({
     return current;
   }, [executionId, loadChanges]);
 
-  if (!changes)
-    return error ? (
-      <p className="text-xs text-foreground-subtle">文件变化状态未知：{error}</p>
-    ) : null;
+  if (!changes) return null;
 
   return (
     <ConversationFileSummaryPanel

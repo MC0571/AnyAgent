@@ -2626,6 +2626,28 @@ test("Engine file rewind uses the native summary and preview dialog through moun
       "the summary should refresh after the native action",
     );
     assert.equal(rewind.disabled, true);
+    await act(async () =>
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(EngineExecutionFileSummary, {
+              ...props,
+              loadChanges: async () => {
+                throw new Error("native Session unavailable");
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+    await waitFor(
+      () => assert.equal(container.textContent, ""),
+      "a failed native lookup must not leak diagnostics into the conversation",
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();
