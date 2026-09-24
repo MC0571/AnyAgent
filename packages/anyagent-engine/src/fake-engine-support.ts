@@ -179,6 +179,7 @@ export class AsyncEventQueue implements AsyncIterable<EngineEvent>, AsyncIterato
 
 export const CAPABILITIES: readonly EngineCapability[] = [
   "session.create",
+  "session.resume",
   "session.fork",
   "session.compact",
   "session.close",

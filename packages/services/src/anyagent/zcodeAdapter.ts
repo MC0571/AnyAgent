@@ -38,6 +38,7 @@ import type { IZCodeAgentService, ZCodeAgentServiceEvent } from "../zcode-agent/
 type AgentPort = Pick<
   IZCodeAgentService,
   | "readSession"
+  | "resumeSession"
   | "initialize"
   | "sendConversationCommandV4"
   | "conversationRowsRangeV4"
@@ -191,10 +192,12 @@ function command(
 function operationError(
   operation:
     | "session.create"
+    | "session.resume"
     | "session.fork"
     | "session.compact"
     | "execution.run"
     | "execution.revise"
+    | "execution.reconcile"
     | "approval.respond"
     | "execution.interrupt"
     | "workspace.file-rewind",
@@ -216,6 +219,21 @@ function payloadRecord(value: unknown): Record<string, unknown> {
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function interactionWasDelivered(
+  ack: Awaited<ReturnType<AgentPort["sendConversationCommandV4"]>>,
+  commandId: string,
+  expectedOptionId?: string,
+): boolean {
+  if (
+    ack.commandId !== commandId ||
+    ack.status !== "accepted" ||
+    ack.result?.type !== "resolveInteraction" ||
+    ack.result.resolvedBy.clientId !== CLIENT_ID
+  )
+    return false;
+  return expectedOptionId === undefined || ack.result.resolvedBy.optionId === expectedOptionId;
 }
 
 function approvalPresentation(raw: unknown): EngineApprovalPresentation | undefined {
@@ -422,6 +440,7 @@ export function createZCodeAdapter(options: {
     });
     const items: Record<EngineCapability, ReturnType<typeof status>> = {
       "session.create": status("supported"),
+      "session.resume": status("supported"),
       "session.fork": status("supported"),
       "session.compact": status("supported"),
       "session.close": status(
@@ -431,7 +450,7 @@ export function createZCodeAdapter(options: {
       "execution.run": status("supported"),
       "execution.revise": status("supported"),
       "execution.interrupt": status("supported"),
-      "execution.reconcile": status("unknown", "尚未验证断线后命令与执行对账"),
+      "execution.reconcile": status("supported"),
       "events.stream": status("supported"),
       "events.tool": status("supported"),
       "events.file": status("unknown", "公开文件差异需结合 v4 行查询，当前未完成映射"),
@@ -1101,6 +1120,119 @@ export function createZCodeAdapter(options: {
       sessions.add(session);
       return session;
     },
+    async resumeSession({ session, beforeDispatch }): Promise<EngineSessionRef> {
+      if (!session || !session.trim())
+        throw operationError(
+          "session.resume",
+          "The native Session identity is missing.",
+          "protocol-error",
+          "none",
+        );
+      beforeDispatch?.();
+      let snapshot;
+      try {
+        snapshot = await options.agent.resumeSession({ ...workspace, sessionId: session });
+      } catch (error) {
+        throw operationError(
+          "session.resume",
+          error instanceof Error ? error.message : String(error),
+          "result-unknown",
+        );
+      }
+      if (snapshot.session.sessionId !== session)
+        throw operationError(
+          "session.resume",
+          "Native resume returned a different Session identity.",
+          "protocol-error",
+          "none",
+        );
+      sessions.add(session);
+      const providerId = snapshot.settings.model.current?.providerId;
+      if (providerId) providerIdBySession.set(session, providerId);
+      return session;
+    },
+    async reconcileExecution({ session, executionId, beforeDispatch }) {
+      const unknown = (reason: string) => ({
+        status: "unknown" as const,
+        reason,
+        evidence: {
+          source: "adapter" as const,
+          evidenceId: `${executionId}:reconciliation-unknown`,
+        },
+      });
+      if (!executionId || !executionId.trim())
+        return unknown("The native Execution identity is missing.");
+
+      // Reconciliation is a read-only lookup by the persisted native identity. Runtime runs
+      // beforeDispatch only after checking current Task, Participant, Session and authorization;
+      // requiring a live stream here would deadlock cold recovery of an unknown Execution.
+      beforeDispatch?.();
+      let beforeRowId: number | undefined;
+      let baseRevision: number | undefined;
+      let baseLogEpoch: string | undefined;
+      const headers: Array<{ turnId: string; state: string }> = [];
+      const assistantRows: Array<{ turnId: string; rowId: number; text: string }> = [];
+      try {
+        while (true) {
+          const page = await options.agent.conversationRowsRangeV4({
+            ...workspace,
+            sessionId: session,
+            ...(beforeRowId === undefined ? {} : { beforeRowId }),
+            limit: 200,
+          });
+          if (baseRevision === undefined) {
+            baseRevision = page.atRevision;
+            baseLogEpoch = page.atLogEpoch;
+          } else if (baseRevision !== page.atRevision || baseLogEpoch !== page.atLogEpoch) {
+            return unknown("The native conversation changed during execution reconciliation.");
+          }
+          for (const row of page.rows) {
+            if (row.kind === "turnHeader" && row.sourceCommandId === executionId)
+              headers.push({ turnId: row.turnId, state: row.state });
+            if (row.kind === "assistantText")
+              assistantRows.push({ turnId: row.turnId, rowId: row.rowId, text: row.text });
+          }
+          if (!page.hasMore) break;
+          const nextBeforeRowId = page.rows[0]?.rowId;
+          if (
+            nextBeforeRowId === undefined ||
+            !Number.isSafeInteger(nextBeforeRowId) ||
+            (beforeRowId !== undefined && nextBeforeRowId >= beforeRowId)
+          )
+            return unknown("The native conversation row cursor did not advance.");
+          beforeRowId = nextBeforeRowId;
+        }
+      } catch (error) {
+        return unknown(
+          error instanceof Error ? error.message : "The native Session could not be reconciled.",
+        );
+      }
+
+      if (headers.length !== 1)
+        return unknown(
+          headers.length === 0
+            ? "No native turn header matches this Execution."
+            : "Multiple native turn headers match this Execution.",
+        );
+      const header = headers[0]!;
+      const evidence = {
+        source: "engine" as const,
+        evidenceId: `${executionId}:${header.turnId}:${baseRevision ?? "unknown"}`,
+        detail: `Native turn state is ${header.state}.`,
+      };
+      if (header.state === "running") return { status: "running" as const, evidence };
+      if (header.state === "completedInterrupted") return { status: "stopped" as const, evidence };
+      if (header.state === "failed")
+        return { status: "failed" as const, error: "Native turn failed.", evidence };
+      if (header.state !== "completedSuccess")
+        return unknown(`Unrecognized native turn state: ${header.state}.`);
+      const result = assistantRows
+        .filter((row) => row.turnId === header.turnId)
+        .sort((left, right) => left.rowId - right.rowId)
+        .map((row) => row.text)
+        .join("");
+      return { status: "completed" as const, result: result || null, evidence };
+    },
     async forkSession({
       session,
       sourceExecutionId,
@@ -1765,7 +1897,7 @@ export function createZCodeAdapter(options: {
       run?.approvalAnswers.set(approvalId, optionId);
       try {
         const ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
-        if (ack.status === "accepted") {
+        if (interactionWasDelivered(ack, envelope.commandId, optionId)) {
           return { status: "forwarded", evidence: { source: "engine", evidenceId: ack.commandId } };
         }
         if (ack.reasonCode === "proto.alreadyResolved") {
@@ -1831,7 +1963,7 @@ export function createZCodeAdapter(options: {
       });
       try {
         const ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
-        if (ack.status === "accepted")
+        if (interactionWasDelivered(ack, envelope.commandId))
           return { status: "forwarded", evidence: { source: "engine", evidenceId: ack.commandId } };
         if (ack.reasonCode === "proto.alreadyResolved") return { status: "already-answered" };
         return { status: "unknown" };

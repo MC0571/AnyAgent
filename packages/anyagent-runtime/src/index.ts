@@ -7,7 +7,9 @@ import {
   type EngineApprovalRef,
   type EngineCapability,
   type EngineCapabilitySnapshot,
+  type EngineCommandReceipt,
   type EngineEvent,
+  type EngineEvidence,
   type EngineExecutionRef,
   type EngineFileChanges,
   type EngineFileRewindPreview,
@@ -25,6 +27,7 @@ import type {
   ForkTaskInput,
   ReplyToApproval,
   ReplyToUserInput,
+  ReconcileExecution,
   RequestStop,
   ReviseTurn,
   RuntimeApproval,
@@ -431,6 +434,351 @@ export class TaskRuntime {
     this.#assertOpen();
     if (!this.#store.get<TaskData>("task", taskId)) return null;
     return this.#history(taskId);
+  }
+
+  /** Reattach the same native Session for an explicitly selected, active Task. */
+  restoreTaskSession(input: TaskLifecycleRequest): Promise<RuntimeTask> {
+    this.#assertOpen();
+    return this.#withCommandLock(`session.resume:${input.sessionId}`, async () => {
+      const identity = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "execution.run",
+        false,
+        true,
+      );
+      const { task, session } = identity;
+      if (task.data.status !== "active")
+        throw new RuntimeEligibilityError(
+          `Task ${task.id} is ${task.data.status}; its Session cannot be resumed for new work.`,
+          "terminal",
+        );
+      const nativeSessionId = session.data.nativeSessionId;
+      if (!nativeSessionId)
+        throw new RuntimeEligibilityError(
+          "The saved Task has no verified native Session identity; creating a replacement would not be recovery.",
+          "ownership",
+        );
+      if (
+        session.data.projection.status === "active" &&
+        this.#liveSessions.get(session.id) === nativeSessionId
+      )
+        return this.#requireTaskProjection(task.id);
+      if (
+        session.data.projection.status !== "unknown" &&
+        session.data.projection.status !== "active"
+      )
+        throw new RuntimeEligibilityError(
+          `Session ${session.id} is ${session.data.projection.status}; it cannot be resumed.`,
+          "terminal",
+        );
+      this.#assertNoUnresolvedSessionWork(task.id, session.id);
+
+      const engine = this.#engineFor(task.data);
+      if (!engine.resumeSession)
+        throw new RuntimeEligibilityError(
+          "This Engine cannot reattach to an existing native Session.",
+          "unsupported",
+        );
+      const snapshot = await this.#capabilities(engine);
+      this.#assertCapability(
+        snapshot,
+        task.data.engineId,
+        task.data.environment.id,
+        "session.resume",
+        task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
+      );
+
+      const beforeResume = () => {
+        const latest = this.#qualify(
+          input.taskId,
+          input.participantId,
+          input.sessionId,
+          input.authorizationId,
+          "execution.run",
+          false,
+          true,
+        );
+        if (
+          latest.task.data.status !== "active" ||
+          latest.session.data.nativeSessionId !== nativeSessionId ||
+          (latest.session.data.projection.status !== "unknown" &&
+            latest.session.data.projection.status !== "active")
+        )
+          throw new RuntimeEligibilityError(
+            "Task or Session eligibility changed before native recovery.",
+            "ownership",
+          );
+        this.#assertNoUnresolvedSessionWork(task.id, session.id);
+        this.#assertCapability(
+          this.#clone(engine.getCapabilities()),
+          task.data.engineId,
+          task.data.environment.id,
+          "session.resume",
+          task.data.engine.configurationVersion,
+          task.data.engine.adapterVersion,
+        );
+      };
+      beforeResume();
+      const resumedNativeSession = await engine.resumeSession({
+        session: nativeSessionId as EngineSessionRef,
+        beforeDispatch: beforeResume,
+      });
+      if (resumedNativeSession !== nativeSessionId)
+        throw new RuntimeEligibilityError(
+          "Engine recovery returned a different native Session; the saved Task remains unattached.",
+          "ownership",
+        );
+
+      const current = await this.#capabilities(engine);
+      this.#assertCapability(
+        current,
+        task.data.engineId,
+        task.data.environment.id,
+        "session.resume",
+        task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
+      );
+      const latest = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "execution.run",
+        false,
+        true,
+      );
+      if (
+        latest.task.data.status !== "active" ||
+        latest.session.data.nativeSessionId !== nativeSessionId
+      )
+        throw new RuntimeEligibilityError(
+          "Task or native Session ownership changed during recovery.",
+          "ownership",
+        );
+      this.#assertNoUnresolvedSessionWork(task.id, session.id);
+      this.#liveSessions.set(session.id, nativeSessionId as EngineSessionRef);
+      const restoredAt = this.#now();
+      session.data.projection = {
+        ...session.data.projection,
+        status: "active",
+        updatedAt: restoredAt,
+      };
+      this.#save(
+        "session",
+        session.id,
+        task.id,
+        session.id,
+        null,
+        session.data,
+        "active",
+        session.createdAt,
+        restoredAt,
+      );
+      this.#publish(task.id, "task", task.id);
+      return this.#requireTaskProjection(task.id);
+    });
+  }
+
+  /** Reconcile one persisted unknown Execution using its original ownership and native handle. */
+  reconcileExecution(input: ReconcileExecution): Promise<RuntimeExecution> {
+    this.#assertOpen();
+    return this.#withCommandLock(`execution.reconcile:${input.executionId}`, async () => {
+      const { task, session } = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "execution.run",
+        true,
+        true,
+      );
+      const execution = this.#require<ExecutionData>("execution", input.executionId);
+      if (
+        execution.taskId !== task.id ||
+        execution.sessionId !== session.id ||
+        execution.data.participantId !== input.participantId ||
+        execution.data.status !== "unknown"
+      )
+        throw new RuntimeEligibilityError(
+          "Reconciliation requires an unknown Execution owned by this Task, participant, and Session.",
+          "ownership",
+        );
+      const sourceInput = this.#require<InputData>("input", execution.data.inputId);
+      if (
+        sourceInput.taskId !== task.id ||
+        sourceInput.sessionId !== session.id ||
+        sourceInput.data.participantId !== input.participantId ||
+        sourceInput.data.status !== "unknown" ||
+        !execution.data.nativeExecutionId
+      )
+        throw new RuntimeEligibilityError(
+          "The source Input or native Execution identity cannot be safely reconciled.",
+          "ownership",
+        );
+      const nativeSessionId = session.data.nativeSessionId;
+      if (!nativeSessionId)
+        throw new RuntimeEligibilityError(
+          "The native Session identity is unavailable.",
+          "ownership",
+        );
+
+      const engine = this.#engineFor(task.data);
+      if (!engine.reconcileExecution)
+        throw new RuntimeEligibilityError(
+          "This Engine does not provide native Execution reconciliation.",
+          "unsupported",
+        );
+      const snapshot = await this.#capabilities(engine);
+      this.#assertCapability(
+        snapshot,
+        task.data.engineId,
+        task.data.environment.id,
+        "execution.reconcile",
+        task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
+      );
+      const beforeReconcile = () => {
+        const latest = this.#qualify(
+          input.taskId,
+          input.participantId,
+          input.sessionId,
+          input.authorizationId,
+          "execution.run",
+          true,
+          true,
+        );
+        const currentExecution = this.#require<ExecutionData>("execution", input.executionId);
+        const currentInput = this.#require<InputData>("input", execution.data.inputId);
+        if (
+          latest.task.id !== execution.taskId ||
+          latest.session.data.nativeSessionId !== nativeSessionId ||
+          currentExecution.data.status !== "unknown" ||
+          currentExecution.data.nativeExecutionId !== execution.data.nativeExecutionId ||
+          currentInput.data.status !== "unknown"
+        )
+          throw new RuntimeEligibilityError(
+            "Execution ownership or state changed before native reconciliation.",
+            "ownership",
+          );
+        this.#assertCapability(
+          this.#clone(engine.getCapabilities()),
+          task.data.engineId,
+          task.data.environment.id,
+          "execution.reconcile",
+          task.data.engine.configurationVersion,
+          task.data.engine.adapterVersion,
+        );
+      };
+      beforeReconcile();
+      const result = await engine.reconcileExecution({
+        session: nativeSessionId as EngineSessionRef,
+        executionId: execution.data.nativeExecutionId as EngineExecutionRef,
+        beforeDispatch: beforeReconcile,
+      });
+      if (result.status !== "unknown" && result.evidence.source !== "engine")
+        throw new RuntimeEligibilityError(
+          "Execution reconciliation did not include native Engine evidence.",
+          "result-unknown",
+        );
+
+      const observedAt = this.#now();
+      const executionData = this.#clone(execution.data);
+      const inputData = this.#clone(sourceInput.data);
+      executionData.reconciledAt = observedAt;
+      if (result.status === "unknown") {
+        executionData.reconciliationEvidence = result.evidence;
+        executionData.reconciliationReason = result.reason;
+        executionData.error = result.reason;
+        inputData.error = result.reason;
+      } else {
+        executionData.reconciliationEvidence = result.evidence;
+        if (result.status === "running") {
+          const reason = "Native evidence confirms the Execution is still running.";
+          executionData.reconciliationReason = reason;
+          executionData.error = reason;
+          inputData.error = reason;
+        } else {
+          executionData.reconciliationReason = undefined;
+          inputData.error = null;
+          executionData.status = result.status;
+          executionData.terminalAt = observedAt;
+          inputData.status = result.status;
+          inputData.terminalAt = observedAt;
+          if (result.status === "completed") {
+            executionData.result = result.result;
+            executionData.error = null;
+          } else if (result.status === "failed") {
+            executionData.result = null;
+            executionData.error = result.error;
+            inputData.error = result.error;
+          } else {
+            executionData.result = null;
+            executionData.error = null;
+          }
+        }
+      }
+
+      this.#pendingChanges = [];
+      try {
+        this.#store.transaction(() => {
+          this.#save(
+            "execution",
+            execution.id,
+            task.id,
+            session.id,
+            sourceInput.id,
+            executionData,
+            executionData.status,
+            execution.createdAt,
+            observedAt,
+            execution.nativeKey,
+            execution.id,
+          );
+          this.#save(
+            "input",
+            sourceInput.id,
+            task.id,
+            session.id,
+            sourceInput.id,
+            inputData,
+            inputData.status,
+            sourceInput.createdAt,
+            observedAt,
+          );
+          if (result.status === "stopped")
+            this.#confirmStopRequests(task.id, execution.id, observedAt, result.evidence);
+          else if (result.status === "completed" || result.status === "failed")
+            this.#markStopRequestsUnconfirmed(
+              task.id,
+              execution.id,
+              observedAt,
+              `Execution was reconciled as ${result.status} before native stop confirmation.`,
+            );
+          this.#publish(task.id, "execution", execution.id);
+          this.#publish(task.id, "input", sourceInput.id);
+        });
+      } catch (error) {
+        this.#pendingChanges = null;
+        throw error;
+      }
+      const changes = this.#pendingChanges;
+      this.#pendingChanges = null;
+      for (const change of changes ?? [])
+        this.#dispatchChange(change.taskId, change.kind, change.entityId);
+      if (result.status === "unknown")
+        this.#addIssue(
+          task.id,
+          session.id,
+          "stream-ended-unknown",
+          null,
+          `Native Execution reconciliation remains unknown: ${result.reason}`,
+        );
+      return this.#publicExecution(executionData);
+    });
   }
 
   async createTask(input: CreateTaskInput): Promise<RuntimeTask> {
@@ -1679,6 +2027,9 @@ export class TaskRuntime {
           executionId: execution.id,
           requestedAt,
           status: "unknown",
+          deliveryStatus: "not-delivered",
+          deliveryEvidence: null,
+          stopEvidence: null,
           reason: "Native session is not attached in this Runtime process.",
         };
         this.#store.insert(
@@ -1727,6 +2078,9 @@ export class TaskRuntime {
         executionId: execution.id,
         requestedAt,
         status: "requested",
+        deliveryStatus: "pending",
+        deliveryEvidence: null,
+        stopEvidence: null,
         reason: null,
       };
       this.#store.insert(
@@ -1748,19 +2102,56 @@ export class TaskRuntime {
           executionId: currentExecution.data.nativeExecutionId as EngineExecutionRef,
         });
         const current = this.#require<RuntimeStopRequest>("stop-request", id);
-        if (current.data.status === "confirmed") return current.data;
+        const latestExecution = this.#require<ExecutionData>("execution", execution.id);
+        const terminal = TERMINAL_EXECUTION_STATUSES.has(latestExecution.data.status);
+        const receiptDelivery = mapStopDelivery(receipt.status, receipt.evidence);
         request = {
-          ...request,
-          status: mapStopStatus(receipt.status),
-          reason: receipt.reason ?? null,
+          ...current.data,
+          status:
+            current.data.status === "confirmed"
+              ? "confirmed"
+              : terminal
+                ? "unknown"
+                : mapStopStatus(receipt.status),
+          deliveryStatus: mergeStopDelivery(current.data.deliveryStatus, receiptDelivery),
+          deliveryEvidence:
+            receipt.evidence?.source === "engine"
+              ? receipt.evidence
+              : current.data.deliveryEvidence,
+          reason:
+            current.data.status === "confirmed"
+              ? current.data.reason
+              : terminal
+                ? (current.data.reason ??
+                  `Execution reached terminal state ${latestExecution.data.status} before native stop confirmation.`)
+                : (receipt.reason ?? null),
         };
       } catch (error) {
         const current = this.#require<RuntimeStopRequest>("stop-request", id);
-        if (current.data.status === "confirmed") return current.data;
+        const latestExecution = this.#require<ExecutionData>("execution", execution.id);
+        const terminal = TERMINAL_EXECUTION_STATUSES.has(latestExecution.data.status);
+        const deliveryStatus =
+          error instanceof EngineContractError && error.failure.sideEffects === "none"
+            ? "not-delivered"
+            : "unknown";
         request = {
-          ...request,
-          status: error instanceof EngineContractError ? mapStopStatus(error.kind) : "unknown",
-          reason: errorMessage(error),
+          ...current.data,
+          status:
+            current.data.status === "confirmed"
+              ? "confirmed"
+              : terminal
+                ? "unknown"
+                : error instanceof EngineContractError
+                  ? mapStopStatus(error.kind)
+                  : "unknown",
+          deliveryStatus: mergeStopDelivery(current.data.deliveryStatus, deliveryStatus),
+          reason:
+            current.data.status === "confirmed"
+              ? current.data.reason
+              : terminal
+                ? (current.data.reason ??
+                  `Execution reached terminal state ${latestExecution.data.status} before native stop confirmation.`)
+                : errorMessage(error),
         };
       }
       this.#save(
@@ -2918,6 +3309,12 @@ export class TaskRuntime {
       data.terminalAt = now;
       input.data.status = "completed";
       input.data.terminalAt = now;
+      this.#markStopRequestsUnconfirmed(
+        target.taskId,
+        execution.id,
+        now,
+        "Execution completed before native stop confirmation.",
+      );
     } else if (event.type === "execution.failed") {
       if (event.evidence.source !== "engine")
         return this.#invalidTerminal(target, event, "Failure requires Engine evidence.");
@@ -2927,6 +3324,12 @@ export class TaskRuntime {
       input.data.status = "failed";
       input.data.error = event.failure.message;
       input.data.terminalAt = now;
+      this.#markStopRequestsUnconfirmed(
+        target.taskId,
+        execution.id,
+        now,
+        "Execution failed before native stop confirmation.",
+      );
     } else if (event.type === "execution.stopped") {
       if (event.evidence.source !== "engine")
         return this.#invalidTerminal(target, event, "Stop confirmation requires Engine evidence.");
@@ -2934,12 +3337,13 @@ export class TaskRuntime {
       data.terminalAt = now;
       input.data.status = "stopped";
       input.data.terminalAt = now;
-      this.#confirmStopRequests(target.taskId, execution.id, now);
+      this.#confirmStopRequests(target.taskId, execution.id, now, event.evidence);
     } else if (event.type === "execution.unknown") {
       data.status = "unknown";
       data.error = event.reason;
       input.data.status = "unknown";
       input.data.error = event.reason;
+      this.#markStopRequestsUnconfirmed(target.taskId, execution.id, now, event.reason);
     } else if (event.type === "approval.requested") {
       const id = this.#newId("approval");
       const approval: ApprovalData = {
@@ -3063,10 +3467,17 @@ export class TaskRuntime {
         .list<StopRequestData>("stop-request", target.taskId)
         .filter((record) => record.data.executionId === execution.id)
         .at(-1);
-      if (latest) {
-        latest.data.status =
-          event.status === "temporarily-unavailable" ? "temporarily-unavailable" : event.status;
-        latest.data.reason = null;
+      if (latest && latest.data.deliveryStatus !== "not-requested") {
+        if (latest.data.status !== "confirmed") latest.data.status = mapStopStatus(event.status);
+        latest.data.deliveryStatus = mergeStopDelivery(
+          latest.data.deliveryStatus,
+          mapStopEventDelivery(event.status, event.evidence),
+        );
+        if (event.evidence?.source === "engine") latest.data.deliveryEvidence = event.evidence;
+        latest.data.reason =
+          event.status === "requested"
+            ? null
+            : "Engine did not confirm delivery of the stop request.";
         this.#save(
           "stop-request",
           latest.id,
@@ -3114,7 +3525,12 @@ export class TaskRuntime {
     return false;
   }
 
-  #confirmStopRequests(taskId: string, executionId: string, observedAt: number): void {
+  #confirmStopRequests(
+    taskId: string,
+    executionId: string,
+    observedAt: number,
+    evidence: EngineEvidence,
+  ): void {
     const allRequests = this.#store
       .list<StopRequestData>("stop-request", taskId)
       .filter((record) => record.data.executionId === executionId);
@@ -3135,6 +3551,9 @@ export class TaskRuntime {
         executionId,
         requestedAt: observedAt,
         status: "confirmed",
+        deliveryStatus: "not-requested",
+        deliveryEvidence: null,
+        stopEvidence: evidence,
         reason: "Engine reported that the Execution stopped.",
       };
       this.#store.insert(
@@ -3154,6 +3573,9 @@ export class TaskRuntime {
     }
     for (const record of requests) {
       record.data.status = "confirmed";
+      record.data.deliveryStatus = record.data.deliveryStatus ?? "unknown";
+      record.data.deliveryEvidence = record.data.deliveryEvidence ?? null;
+      record.data.stopEvidence = evidence;
       record.data.reason = "Engine confirmed execution stopped.";
       this.#save(
         "stop-request",
@@ -3163,6 +3585,41 @@ export class TaskRuntime {
         executionId,
         record.data,
         "confirmed",
+        record.createdAt,
+        observedAt,
+      );
+      this.#publish(taskId, "stop-request", record.id);
+    }
+  }
+
+  #markStopRequestsUnconfirmed(
+    taskId: string,
+    executionId: string,
+    observedAt: number,
+    reason: string,
+  ): void {
+    const requests = this.#store
+      .list<StopRequestData>("stop-request", taskId)
+      .filter(
+        (record) =>
+          record.data.executionId === executionId &&
+          (record.data.status === "requested" || record.data.status === "unknown"),
+      );
+    for (const record of requests) {
+      record.data.status = "unknown";
+      if (!record.data.deliveryStatus || record.data.deliveryStatus === "pending")
+        record.data.deliveryStatus = "unknown";
+      record.data.deliveryEvidence = record.data.deliveryEvidence ?? null;
+      record.data.stopEvidence = record.data.stopEvidence ?? null;
+      record.data.reason = reason;
+      this.#save(
+        "stop-request",
+        record.id,
+        taskId,
+        record.sessionId,
+        executionId,
+        record.data,
+        "unknown",
         record.createdAt,
         observedAt,
       );
@@ -3284,6 +3741,7 @@ export class TaskRuntime {
     authorizationId: string,
     scope: RuntimeAuthorizationScope,
     allowNonActiveTask = false,
+    allowUnknownSession = false,
   ): { task: StoredRecord<TaskData>; session: StoredRecord<SessionData> } {
     const task = this.#require<TaskData>("task", taskId);
     const participant = this.#store.get<RuntimeParticipant>("participant", task.data.participantId);
@@ -3318,6 +3776,7 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError("Authorization has expired.");
     if (
       session.data.projection.status !== "active" &&
+      !(allowUnknownSession && session.data.projection.status === "unknown") &&
       scope !== "execution.interrupt" &&
       scope !== "task.freeze" &&
       scope !== "task.close"
@@ -3325,6 +3784,42 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError(`Session is ${session.data.projection.status}.`);
     }
     return { task, session };
+  }
+
+  #assertNoUnresolvedSessionWork(taskId: string, sessionId: string): void {
+    const input = this.#store
+      .list<InputData>("input", taskId)
+      .find(
+        (record) =>
+          record.sessionId === sessionId &&
+          record.status !== null &&
+          ACTIVE_INPUT_STATUSES.has(record.status),
+      );
+    const execution = this.#store
+      .list<ExecutionData>("execution", taskId)
+      .find(
+        (record) =>
+          record.data.sessionId === sessionId &&
+          !TERMINAL_EXECUTION_STATUSES.has(record.data.status),
+      );
+    const compact = this.#store
+      .list<RuntimeCompactOperation>("compact-operation", taskId)
+      .find(
+        (record) =>
+          record.data.sessionId === sessionId && ACTIVE_COMPACT_STATUSES.has(record.data.status),
+      );
+    const fileRewind = this.#store
+      .list<RuntimeFileRewindOperation>("file-rewind-operation", taskId)
+      .find(
+        (record) =>
+          record.data.sessionId === sessionId &&
+          (record.data.status === "requested" || record.data.status === "unknown"),
+      );
+    if (input || execution || compact || fileRewind)
+      throw new RuntimeEligibilityError(
+        `Session has unresolved native work${execution ? ` in Execution ${execution.id}` : input ? ` for Input ${input.id}` : compact ? ` in compaction ${compact.id}` : ` in file rewind ${fileRewind!.id}`}; reconcile it before restoring or submitting new work.`,
+        "result-unknown",
+      );
   }
 
   #dispatchGuard(input: {
@@ -3721,7 +4216,7 @@ export class TaskRuntime {
         session.id,
         "stream-ended-unknown",
         null,
-        "Runtime restarted without Engine session reattachment or execution reconciliation support.",
+        "Runtime restarted before this native Session could be reattached; verify its execution state before continuing.",
       );
       for (const input of this.#store.list<InputData>("input", session.taskId)) {
         if (input.data.sessionId !== session.id) continue;
@@ -3732,7 +4227,8 @@ export class TaskRuntime {
           input.data.terminalAt = recoveredAt;
         } else if (ACTIVE_INPUT_STATUSES.has(input.data.status)) {
           input.data.status = "unknown";
-          input.data.error = "Runtime restarted; Engine state cannot be reattached or reconciled.";
+          input.data.error =
+            "Runtime restarted; explicit native Execution reconciliation is required before continuing.";
         } else continue;
         this.#save(
           "input",
@@ -3754,7 +4250,7 @@ export class TaskRuntime {
           continue;
         execution.data.status = "unknown";
         execution.data.error =
-          "Runtime restarted; Engine state cannot be reattached or reconciled.";
+          "Runtime restarted; explicit native Execution reconciliation is required before continuing.";
         this.#save(
           "execution",
           execution.id,
@@ -3885,9 +4381,12 @@ export class TaskRuntime {
       userInputs: this.#store
         .list<UserInputData>("user-input", taskId)
         .map((record) => this.#publicUserInput(record.data)),
-      stopRequests: this.#store
-        .list<RuntimeStopRequest>("stop-request", taskId)
-        .map((record) => record.data),
+      stopRequests: this.#store.list<RuntimeStopRequest>("stop-request", taskId).map((record) => ({
+        ...record.data,
+        deliveryStatus: record.data.deliveryStatus ?? legacyStopDeliveryStatus(record.data),
+        deliveryEvidence: record.data.deliveryEvidence ?? null,
+        stopEvidence: record.data.stopEvidence ?? null,
+      })),
       compactOperations: this.#store
         .list<RuntimeCompactOperation>("compact-operation", taskId)
         .map((record) => record.data),
@@ -4326,6 +4825,54 @@ function mapStopStatus(status: string): RuntimeStopRequest["status"] {
   if (status === "unsupported") return "unsupported";
   if (status === "temporarily-unavailable") return "temporarily-unavailable";
   if (status === "authorization-required") return "authorization-required";
+  return "unknown";
+}
+
+function mapStopDelivery(
+  status: EngineCommandReceipt["status"],
+  evidence: EngineEvidence | undefined,
+): RuntimeStopRequest["deliveryStatus"] {
+  if (status === "requested") return evidence?.source === "engine" ? "delivered" : "unknown";
+  if (
+    status === "closed" ||
+    status === "unsupported" ||
+    status === "temporarily-unavailable" ||
+    status === "authorization-required"
+  )
+    return "not-delivered";
+  return "unknown";
+}
+
+function mapStopEventDelivery(
+  status: Extract<EngineEvent, { readonly type: "execution.interruption-requested" }>["status"],
+  evidence: EngineEvidence | undefined,
+): RuntimeStopRequest["deliveryStatus"] {
+  if (status === "requested") return evidence?.source === "engine" ? "delivered" : "unknown";
+  if (status === "unsupported" || status === "temporarily-unavailable") return "not-delivered";
+  return "unknown";
+}
+
+function mergeStopDelivery(
+  current: RuntimeStopRequest["deliveryStatus"] | undefined,
+  incoming: RuntimeStopRequest["deliveryStatus"],
+): RuntimeStopRequest["deliveryStatus"] {
+  if (current === "not-requested") return current;
+  if (incoming === "delivered" || current === "delivered") return "delivered";
+  if (incoming === "not-delivered") return "not-delivered";
+  if (incoming !== "pending") return incoming;
+  return current ?? "pending";
+}
+
+function legacyStopDeliveryStatus(
+  request: Pick<RuntimeStopRequest, "status" | "reason">,
+): RuntimeStopRequest["deliveryStatus"] {
+  if (request.reason === "Engine reported that the Execution stopped.") return "not-requested";
+  if (
+    request.status === "unsupported" ||
+    request.status === "temporarily-unavailable" ||
+    request.status === "authorization-required"
+  )
+    return "not-delivered";
   return "unknown";
 }
 

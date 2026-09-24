@@ -32,6 +32,7 @@ import {
   findFakeUserInput,
   requireFakeCapability,
   requireFakeExecution,
+  resumeFakeSession,
 } from "./fake-engine-events.js";
 
 export type { FakeEngineOptions, FakeEngineStep } from "./fake-engine-support.js";
@@ -88,11 +89,18 @@ export class FakeEngine implements EngineAdapter {
   }
 
   async createSession(): Promise<EngineSessionRef> {
-    this.#requireAvailable("session.create");
+    requireFakeCapability(this.#capabilities, "session.create");
     this.#sessionSequence += 1;
     const session = `fake-session-${this.#sessionSequence}` as EngineSessionRef;
     this.#sessions.add(session);
     return session;
+  }
+
+  async resumeSession(input: {
+    readonly session: EngineSessionRef;
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineSessionRef> {
+    return resumeFakeSession(this.#sessions, this.#capabilities, input);
   }
 
   async run(input: Parameters<EngineAdapter["run"]>[0]) {
@@ -103,7 +111,7 @@ export class FakeEngine implements EngineAdapter {
         "Fake Engine has no native conversation branch to revise.",
         "none",
       );
-    this.#requireAvailable("execution.run");
+    requireFakeCapability(this.#capabilities, "execution.run");
     if (!this.#sessions.has(input.session)) {
       throw this.#error(
         "temporarily-unavailable",
@@ -411,10 +419,6 @@ export class FakeEngine implements EngineAdapter {
 
   #record(executionId: EngineExecutionRef): ExecutionRecord {
     return requireFakeExecution(this.#executions, executionId);
-  }
-
-  #requireAvailable(operation: "session.create" | "execution.run"): void {
-    requireFakeCapability(this.#capabilities, operation);
   }
 
   #error(

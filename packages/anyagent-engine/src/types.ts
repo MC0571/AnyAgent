@@ -3,6 +3,8 @@ import type {
   EngineFileRewindPreview,
   EngineFileRewindReceipt,
 } from "./file-workspace.js";
+import type { EngineExecutionReconciliation } from "./execution-reconciliation.js";
+export type { EngineExecutionReconciliation } from "./execution-reconciliation.js";
 export type {
   EngineFileChanges,
   EngineFileRewindPreview,
@@ -25,6 +27,7 @@ export interface CapabilityStatus {
 
 export type EngineCapability =
   | "session.create"
+  | "session.resume"
   | "session.fork"
   | "session.compact"
   | "session.close"
@@ -75,12 +78,14 @@ export interface EngineEvidence {
 
 export type EngineOperation =
   | "session.create"
+  | "session.resume"
   | "session.fork"
   | "session.compact"
   | "session.close"
   | "execution.run"
   | "execution.revise"
   | "execution.interrupt"
+  | "execution.reconcile"
   | "approval.respond"
   | "assistant.feedback"
   | "workspace.file-rewind";
@@ -366,6 +371,19 @@ export interface EngineAdapter {
   /** Recheck conditional availability when the adapter can actively probe it. */
   refreshCapabilities?(): Promise<EngineCapabilitySnapshot>;
   createSession(): Promise<EngineSessionRef>;
+  /** Reattach to an existing native Session; this must never create or rebind a Session. */
+  resumeSession?(input: {
+    readonly session: EngineSessionRef;
+    /** Synchronous Host qualification immediately before native reattachment. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineSessionRef>;
+  /** Query native state for one persisted Execution without sending its Input again. */
+  reconcileExecution?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+    /** Synchronous Host qualification immediately before the native read. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineExecutionReconciliation>;
   /** Create a distinct native child Session from a proven source Execution. */
   forkSession?(input: {
     readonly session: EngineSessionRef;

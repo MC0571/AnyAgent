@@ -186,6 +186,12 @@ export function createAnyAgentService(
     async getHistory(taskId) {
       return runtime.getHistory(taskId);
     },
+    async restoreTaskSession(input) {
+      return runtime.restoreTaskSession(input);
+    },
+    async reconcileExecution(input) {
+      return runtime.reconcileExecution(input);
+    },
     async getAssistantFeedback(taskId) {
       const task = runtime.getTask(taskId);
       if (!task || task.engine.engineId !== "zcode" || !task.session.nativeSessionId)

@@ -27,6 +27,17 @@ export interface CompactSession {
   readonly authorizationId: string;
 }
 
+export interface TaskLifecycleRequest {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly authorizationId: string;
+}
+
+export interface ReconcileExecution extends TaskLifecycleRequest {
+  readonly executionId: string;
+}
+
 export interface SubmitInput {
   readonly taskId: string;
   readonly participantId: string;

@@ -73,7 +73,7 @@ export function findFakeApproval(
 
 export function requireFakeCapability(
   capabilities: ReadonlyMap<EngineCapability, CapabilityStatus>,
-  operation: "session.create" | "execution.run",
+  operation: "session.create" | "session.resume" | "execution.run",
 ): void {
   const status = capabilities.get(operation)!;
   if (status.support === "supported" && status.availability === "available") return;
@@ -93,6 +93,23 @@ export function requireFakeCapability(
     message: status.reason ?? `Capability ${operation} is not currently available.`,
     sideEffects: "none",
   });
+}
+
+export function resumeFakeSession(
+  sessions: ReadonlySet<EngineSessionRef>,
+  capabilities: ReadonlyMap<EngineCapability, CapabilityStatus>,
+  input: { readonly session: EngineSessionRef; readonly beforeDispatch?: () => void },
+): EngineSessionRef {
+  requireFakeCapability(capabilities, "session.resume");
+  input.beforeDispatch?.();
+  if (!sessions.has(input.session))
+    throw new EngineContractError({
+      kind: "unsupported",
+      operation: "session.resume",
+      message: "Fake Engine cannot reattach an unknown Session.",
+      sideEffects: "none",
+    });
+  return input.session;
 }
 
 export function requireFakeExecution(

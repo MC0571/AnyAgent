@@ -79,6 +79,12 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
       history.inputs.map((item) => item.sessionId),
       [task.session.id, task.session.id],
     );
+    const reattached = await host.service.restoreTaskSession(input);
+    assert.equal(reattached.id, task.id);
+    assert.equal(reattached.participant.id, task.participant.id);
+    assert.equal(reattached.session.id, task.session.id);
+    assert.equal(reattached.session.nativeSessionId, task.session.nativeSessionId);
+    assert.equal((await host.service.getHistory(task.id))?.inputs.length, 2);
     assert.ok(changes > 0);
 
     const other = await host.service.createTask({ engineId: "fake" });

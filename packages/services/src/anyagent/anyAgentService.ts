@@ -23,6 +23,9 @@ import type {
   StageRuntimeAttachmentInput,
   SubmitInput,
   TaskHistory,
+  TaskLifecycleRequest,
+  ReconcileExecution,
+  RuntimeExecution,
 } from "@anyagent/runtime/types";
 import { createServiceDescriptor } from "../descriptors.js";
 
@@ -43,6 +46,8 @@ export interface IAnyAgentService {
   listTasks(): Promise<readonly RuntimeTask[]>;
   getTask(taskId: string): Promise<RuntimeTask | null>;
   getHistory(taskId: string): Promise<TaskHistory | null>;
+  restoreTaskSession(input: TaskLifecycleRequest): Promise<RuntimeTask>;
+  reconcileExecution(input: ReconcileExecution): Promise<RuntimeExecution>;
   /** Read-only feedback projection from the native Session, not a second product authority. */
   getAssistantFeedback(
     taskId: string,

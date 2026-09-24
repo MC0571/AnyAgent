@@ -18,6 +18,7 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import { requireRecord } from "../record-access.js";
 import type { V4CommandCoreHost } from "../types.js";
+import { V4CommandNoopError } from "../../v4-gateway.js";
 
 /**
  * 能力不支持错误：会话 runtime 未实现可选能力时抛出（对照旧 server-operations.ts
@@ -36,30 +37,55 @@ export class V4CapabilityUnsupportedError extends Error {
 /**
  * resolveInteraction：投递应答给等待中的反向请求（interaction-broker 的 race deferred）。
  *
- * 语义保真（勘查结论）：
- * - 未命中（delivered === false，交互已被应答/已注销/未知 id）按幂等成功收口，不抛错——
- *   多端先到先得，晚到应答是无害幂等操作，抛 failed 会误导客户端。
- * - 不做 requireRecord：晚到应答可能发生在会话已收口/删除之后，同样必须无害；
- *   登记表按 interactionId 全局寻址，不依赖 record 存在。
+ * ACK 只有在登记表真实投递到同一 Session 的等待请求后才携带 resolveInteraction result。
+ * 已处理的迟到答复、未命中请求和正在处理的全权授权分别回传可区分的 noop，避免 Host
+ * 把没有送达的答复当成 forwarded。
  */
 async function resolveInteraction(
   host: V4CommandCoreHost,
   envelope: CommandEnvelope,
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["resolveInteraction"];
-  const delivered =
+  const sessionId = envelope.sessionId;
+  const outcome =
     payload.answer.optionId === PERMISSION_FULL_ACCESS_OPTION_ID
-      ? ((await host.interactions?.resolveFullAccess(payload.interactionId, envelope.sessionId!)) ??
-        false)
-      : (host.interactions?.resolve(payload.interactionId, payload.answer) ?? false);
-  if (!delivered) {
-    host.logger?.info?.("v4 resolveInteraction no pending interaction (idempotent)", {
+      ? sessionId
+        ? ((await host.interactions?.resolveFullAccess(payload.interactionId, sessionId)) ??
+          "not-found")
+        : "not-found"
+      : (host.interactions?.resolve(payload.interactionId, payload.answer, sessionId) ??
+        "not-found");
+  if (outcome === "delivered") {
+    return {
+      type: "resolveInteraction",
+      resolvedBy: {
+        clientId: envelope.clientId,
+        ...(payload.answer.optionId ? { optionId: payload.answer.optionId } : {}),
+      },
+    };
+  }
+  if (outcome === "already-resolved") {
+    host.logger?.info?.("v4 resolveInteraction request was already settled", {
       event: "zcode_protocol.v4.interaction_already_resolved",
       interactionId: payload.interactionId,
-      sessionId: envelope.sessionId,
+      sessionId,
     });
+    throw new V4CommandNoopError("proto.alreadyResolved");
   }
-  return undefined;
+  if (outcome === "busy") {
+    host.logger?.info?.("v4 resolveInteraction request is already being handled", {
+      event: "zcode_protocol.v4.interaction_busy",
+      interactionId: payload.interactionId,
+      sessionId,
+    });
+    throw new V4CommandNoopError("proto.interactionBusy");
+  }
+  host.logger?.info?.("v4 resolveInteraction request was not found for session", {
+    event: "zcode_protocol.v4.interaction_not_found",
+    interactionId: payload.interactionId,
+    sessionId,
+  });
+  throw new V4CommandNoopError("proto.interactionNotFound");
 }
 
 async function snoozeInteractionAutoResolution(

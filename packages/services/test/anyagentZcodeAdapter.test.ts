@@ -17,6 +17,7 @@ interface NativeAssistantRow {
   turnId?: string;
   sourceCommandId?: string;
   state?: string;
+  text?: string;
   marker?: { type: string; status?: string };
   actions?: { canFork?: true; canEdit?: true; canRetry?: true; canRewindFiles?: true };
   fileChanges?: {
@@ -43,9 +44,11 @@ function harness({
   compactAckStatus = "accepted",
   compactSendFails = false,
   compactQueryUnknown = false,
+  interactionAck = "delivered",
   nativeActiveTurnId = null,
   nativePendingRequestIds = [],
   nativeSessionStatus = "idle",
+  resumeSessionId = "native-session",
   validateModelSelection,
   beforeRows,
 }: {
@@ -63,9 +66,11 @@ function harness({
   compactAckStatus?: "accepted" | "duplicate";
   compactSendFails?: boolean;
   compactQueryUnknown?: boolean;
+  interactionAck?: "delivered" | "already-resolved" | "not-found" | "accepted-no-result";
   nativeActiveTurnId?: string | null;
   nativePendingRequestIds?: string[];
   nativeSessionStatus?: string;
+  resumeSessionId?: string;
   validateModelSelection?: NonNullable<
     Parameters<typeof createZCodeAdapter>[0]["validateModelSelection"]
   >;
@@ -82,6 +87,7 @@ function harness({
     baseRevision?: number;
     baseLogEpoch?: string;
   }> = [];
+  const resumeCalls: string[] = [];
   const rowQueries: Array<{ beforeRowId?: number; limit: number }> = [];
   const remainingWatermarks = [...pageWatermarks];
   const agent = {
@@ -102,6 +108,13 @@ function harness({
       runtime: { activeTurnId: nativeActiveTurnId, pendingRequestIds: nativePendingRequestIds },
       session: { status: nativeSessionStatus },
     }),
+    resumeSession: async ({ sessionId }: { sessionId: string }) => {
+      resumeCalls.push(sessionId);
+      return {
+        session: { sessionId: resumeSessionId },
+        settings: { model: { current: { providerId: "provider-a" } } },
+      } as Awaited<ReturnType<AgentPort["resumeSession"]>>;
+    },
     sendConversationCommandV4: async ({
       envelope,
     }: {
@@ -150,6 +163,36 @@ function harness({
       if (envelope.type === "compact") {
         if (compactSendFails) throw new Error("native compact ACK lost");
         return { status: compactAckStatus, commandId: envelope.commandId };
+      }
+      if (envelope.type === "resolveInteraction") {
+        if (interactionAck === "already-resolved")
+          return {
+            status: "noop",
+            commandId: envelope.commandId,
+            reasonCode: "proto.alreadyResolved",
+          };
+        if (interactionAck === "not-found")
+          return {
+            status: "noop",
+            commandId: envelope.commandId,
+            reasonCode: "proto.interactionNotFound",
+          };
+        if (interactionAck === "accepted-no-result")
+          return { status: "accepted", commandId: envelope.commandId };
+        const payload = envelope.payload as {
+          answer: { optionId?: string };
+        };
+        return {
+          status: "accepted",
+          commandId: envelope.commandId,
+          result: {
+            type: "resolveInteraction",
+            resolvedBy: {
+              clientId: "anyagent-m1-host",
+              ...(payload.answer.optionId ? { optionId: payload.answer.optionId } : {}),
+            },
+          },
+        };
       }
       if (envelope.type === "setAssistantFeedback") {
         if (feedbackCommandStatus === "stale")
@@ -327,7 +370,14 @@ function harness({
     adapter,
     commands,
     rowQueries,
+    resumeCalls,
     rows,
+    createFreshAdapter: () =>
+      createZCodeAdapter({
+        agent,
+        workspacePath: "/tmp/workspace",
+        validateModelSelection: validateModelSelection ?? (() => undefined),
+      }),
     emit(event: unknown) {
       for (const listener of listeners) listener(event);
     },
@@ -366,6 +416,198 @@ function completeNativeSource(fixture: ReturnType<typeof harness>) {
     },
   });
 }
+
+test("ZCode cold resume keeps the native Session ID and reconciliation uses exact native turn evidence", async () => {
+  const states = [
+    { state: "completedSuccess", expected: "completed" },
+    { state: "running", expected: "running" },
+    { state: "completedInterrupted", expected: "stopped" },
+    { state: "failed", expected: "failed" },
+  ] as const;
+  for (const scenario of states) {
+    const fixture = harness({
+      rows: [
+        {
+          rowId: 1,
+          kind: "turnHeader",
+          turnId: "turn-persisted",
+          sourceCommandId: "execution-persisted",
+          state: scenario.state,
+        },
+        {
+          rowId: 2,
+          kind: "assistantText",
+          turnId: "turn-persisted",
+          text: "native answer",
+        },
+      ],
+    });
+    const freshAdapter = fixture.createFreshAdapter();
+    let qualifications = 0;
+    const session = await freshAdapter.resumeSession!({
+      session: "native-session" as never,
+      beforeDispatch: () => {
+        qualifications += 1;
+      },
+    });
+    assert.equal(session, "native-session");
+    assert.deepEqual(fixture.resumeCalls, ["native-session"]);
+    assert.equal(qualifications, 1);
+    assert.equal(
+      fixture.commands.some((item) => item.type === "createSession"),
+      false,
+    );
+
+    const reconciliation = await freshAdapter.reconcileExecution!({
+      session,
+      executionId: "execution-persisted" as never,
+      beforeDispatch: () => {
+        qualifications += 1;
+      },
+    });
+    assert.equal(reconciliation.status, scenario.expected);
+    assert.equal(qualifications, 2);
+    if (reconciliation.status === "completed") assert.equal(reconciliation.result, "native answer");
+    if (reconciliation.status === "failed")
+      assert.equal(reconciliation.error, "Native turn failed.");
+    if (reconciliation.status !== "unknown") assert.equal(reconciliation.evidence.source, "engine");
+    freshAdapter.dispose();
+  }
+});
+
+test("ZCode reconciles a persisted Session read-only before cold reattachment", async () => {
+  const fixture = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-after-restart",
+        sourceCommandId: "execution-after-restart",
+        state: "completedSuccess",
+      },
+      {
+        rowId: 2,
+        kind: "assistantText",
+        turnId: "turn-after-restart",
+        text: "original result",
+      },
+    ],
+  });
+  const coldAdapter = fixture.createFreshAdapter();
+  let qualified = 0;
+  const result = await coldAdapter.reconcileExecution!({
+    session: "persisted-native-session" as never,
+    executionId: "execution-after-restart" as never,
+    beforeDispatch: () => {
+      qualified += 1;
+    },
+  });
+  assert.equal(result.status, "completed");
+  if (result.status === "completed") assert.equal(result.result, "original result");
+  assert.equal(result.evidence.source, "engine");
+  assert.equal(qualified, 1);
+  assert.equal(fixture.rowQueries.length, 1);
+  assert.deepEqual(fixture.resumeCalls, []);
+  assert.deepEqual(fixture.commands, []);
+  coldAdapter.dispose();
+});
+
+test("ZCode resume and reconciliation refuse mismatched or ambiguous native identities", async () => {
+  const mismatched = harness({ resumeSessionId: "different-session" });
+  const mismatchedAdapter = mismatched.createFreshAdapter();
+  let qualified = false;
+  await assert.rejects(
+    mismatchedAdapter.resumeSession!({
+      session: "requested-session" as never,
+      beforeDispatch: () => {
+        qualified = true;
+      },
+    }),
+    (error: unknown) =>
+      error instanceof EngineContractError && error.failure.kind === "protocol-error",
+  );
+  assert.equal(qualified, true);
+  assert.equal(
+    mismatched.commands.some((item) => item.type === "createSession"),
+    false,
+  );
+  mismatchedAdapter.dispose();
+
+  const duplicate = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-one",
+        sourceCommandId: "execution-duplicate",
+        state: "completedSuccess",
+      },
+      {
+        rowId: 2,
+        kind: "turnHeader",
+        turnId: "turn-two",
+        sourceCommandId: "execution-duplicate",
+        state: "completedSuccess",
+      },
+    ],
+  });
+  const duplicateAdapter = duplicate.createFreshAdapter();
+  const session = await duplicateAdapter.resumeSession!({ session: "native-session" as never });
+  assert.equal(
+    (
+      await duplicateAdapter.reconcileExecution!({
+        session,
+        executionId: "execution-duplicate" as never,
+      })
+    ).status,
+    "unknown",
+  );
+  duplicateAdapter.dispose();
+});
+
+test("ZCode reconciliation stays unknown without an exact stable native projection", async () => {
+  const missing = harness({ rows: [] });
+  const missingAdapter = missing.createFreshAdapter();
+  const session = await missingAdapter.resumeSession!({ session: "native-session" as never });
+  const absent = await missingAdapter.reconcileExecution!({
+    session,
+    executionId: "missing-execution" as never,
+  });
+  assert.equal(absent.status, "unknown");
+  assert.equal(missing.commands.length, 0);
+  missingAdapter.dispose();
+
+  const unstable = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-stable",
+        sourceCommandId: "execution-stable",
+        state: "completedSuccess",
+      },
+      ...Array.from({ length: 200 }, (_, index) => ({
+        rowId: index + 2,
+        kind: "userInput",
+        turnId: `unrelated-${index}`,
+      })),
+    ],
+    pageWatermarks: [
+      { atRevision: 4, atLogEpoch: "same-epoch" },
+      { atRevision: 5, atLogEpoch: "same-epoch" },
+    ],
+  });
+  const unstableAdapter = unstable.createFreshAdapter();
+  const resumed = await unstableAdapter.resumeSession!({ session: "native-session" as never });
+  const changed = await unstableAdapter.reconcileExecution!({
+    session: resumed,
+    executionId: "execution-stable" as never,
+  });
+  assert.equal(changed.status, "unknown");
+  assert.equal(unstable.rowQueries.length, 2);
+  assert.equal(unstable.commands.length, 0);
+  unstableAdapter.dispose();
+});
 
 async function waitUntil(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -2441,6 +2683,142 @@ test("direct ZCode permission request keeps native options and can be rejected",
   );
 });
 
+test("approval is forwarded only when the native ACK proves delivery", async () => {
+  const cases = [
+    { ack: "accepted-no-result" as const, expected: "unknown" },
+    { ack: "not-found" as const, expected: "unknown" },
+    { ack: "already-resolved" as const, expected: "already-answered" },
+  ];
+  for (const [index, scenario] of cases.entries()) {
+    const fixture = harness({ interactionAck: scenario.ack });
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({ session, input: `approve ${index}` });
+    const reading = (async () => {
+      for await (const _event of run.events) {
+        // Drain native events until disposal below.
+      }
+    })();
+    fixture.emit({
+      type: "permission.request",
+      request: {
+        requestId: `approval-${index}`,
+        sessionId: "native-session",
+        turnId: `turn-${index}`,
+        toolName: "write",
+        options: [
+          { optionId: "allow", kind: "allowOnce", name: "Allow" },
+          { optionId: "deny", kind: "deny", name: "Deny" },
+        ],
+      },
+    });
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: `start-${index}`,
+        seq: 1,
+        sessionId: "native-session",
+        turnId: `turn-${index}`,
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: `work-${index}` },
+      },
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    const receipt = await fixture.adapter.replyToApproval({
+      session,
+      approvalId: `approval-${index}` as never,
+      optionId: "deny",
+    });
+    assert.equal(receipt.status, scenario.expected);
+    fixture.adapter.dispose();
+    await reading;
+  }
+});
+
+test("an approval from a prior execution cannot be answered by the next execution", async () => {
+  const fixture = harness();
+  const session = await fixture.adapter.createSession();
+  const firstRun = await fixture.adapter.run({ session, input: "first execution" });
+  const firstIterator = firstRun.events[Symbol.asyncIterator]();
+  const firstReading = (async () => {
+    while (true) {
+      const next = await firstIterator.next();
+      if (next.done || next.value.type === "execution.completed") break;
+    }
+    await firstIterator.return?.();
+  })();
+  fixture.emit({
+    type: "permission.request",
+    request: {
+      requestId: "old-approval",
+      sessionId: "native-session",
+      turnId: "turn-old",
+      toolName: "write",
+      options: [{ optionId: "deny", kind: "deny", name: "Deny" }],
+    },
+  });
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "old-start",
+      seq: 1,
+      sessionId: "native-session",
+      turnId: "turn-old",
+      timestamp: 1,
+      type: "turn.started",
+      payload: { inputId: "native-input", foregroundExecutionId: "work-old" },
+    },
+  });
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "old-done",
+      seq: 2,
+      sessionId: "native-session",
+      turnId: "turn-old",
+      timestamp: 2,
+      type: "turn.completed",
+      payload: { inputId: "native-input", resultType: "success", response: "done" },
+    },
+  });
+  await firstReading;
+
+  const secondRun = await fixture.adapter.run({ session, input: "second execution" });
+  const secondIterator = secondRun.events[Symbol.asyncIterator]();
+  const secondReading = (async () => {
+    while (true) {
+      const next = await secondIterator.next();
+      if (next.done) break;
+    }
+  })();
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "new-start",
+      seq: 1,
+      sessionId: "native-session",
+      turnId: "turn-new",
+      timestamp: 3,
+      type: "turn.started",
+      payload: { inputId: "native-input-2", foregroundExecutionId: "work-new" },
+    },
+  });
+  assert.equal(
+    (
+      await fixture.adapter.replyToApproval({
+        session,
+        approvalId: "old-approval" as never,
+        optionId: "deny",
+      })
+    ).status,
+    "unsupported",
+  );
+  assert.equal(fixture.commands.filter((item) => item.type === "resolveInteraction").length, 0);
+  fixture.adapter.dispose();
+  await secondReading;
+});
+
 test("native permission denial wins over local answer and user-input marker is not a request", async () => {
   const fixture = harness();
   const session = await fixture.adapter.createSession();
@@ -2707,6 +3085,52 @@ test("native user-input response preserves its answer and rejection action", asy
     { status: "rejected", response: nativeDecline },
   );
 
+  fixture.adapter.dispose();
+  await reading;
+});
+
+test("user-input reply is unknown when the native ACK does not prove delivery", async () => {
+  const fixture = harness({ interactionAck: "accepted-no-result" });
+  const session = await fixture.adapter.createSession();
+  const run = await fixture.adapter.run({ session, input: "ask a question" });
+  const reading = (async () => {
+    for await (const _event of run.events) {
+      // Drain events until the Adapter is disposed below.
+    }
+  })();
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "question-turn-start",
+      seq: 1,
+      sessionId: "native-session",
+      turnId: "question-turn",
+      timestamp: 1,
+      type: "turn.started",
+      payload: { inputId: "native-input", foregroundExecutionId: "question-work" },
+    },
+  });
+  fixture.emit({
+    type: "userInput.request",
+    request: {
+      requestId: "question-1",
+      sessionId: "native-session",
+      turnId: "question-turn",
+      prompt: "Continue?",
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(
+    (
+      await fixture.adapter.replyToUserInput({
+        session,
+        requestId: "question-1" as never,
+        response: "yes",
+      })
+    ).status,
+    "unknown",
+  );
   fixture.adapter.dispose();
   await reading;
 });

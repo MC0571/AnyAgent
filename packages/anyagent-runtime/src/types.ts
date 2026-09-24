@@ -5,6 +5,7 @@ import type {
   EngineApprovalPresentation,
   EngineUserInputAnswer,
   EngineEvent,
+  EngineEvidence,
   EngineJsonObject,
   EngineUserInputPresentation,
 } from "@anyagent/engine-contract";
@@ -28,6 +29,8 @@ export type {
   RuntimeFileRewindPreview,
   SetAssistantFeedback,
   RuntimeAssistantFeedbackResult,
+  ReconcileExecution,
+  TaskLifecycleRequest,
   SubmitInput,
 } from "./runtime-operation-types.js";
 
@@ -242,6 +245,10 @@ export interface RuntimeExecution {
   readonly terminalAt: number | null;
   readonly result: string | null;
   readonly error: string | null;
+  /** Last native state query; unknown remains explicit until native evidence resolves it. */
+  readonly reconciledAt?: number;
+  readonly reconciliationEvidence?: EngineEvidence;
+  readonly reconciliationReason?: string;
 }
 
 /** Event delivery history keeps original ownership and native provenance. */
@@ -311,6 +318,9 @@ export interface RuntimeUserInput {
   readonly response: EngineUserInputAnswer | null;
 }
 
+type StopUnavailable = "unsupported" | "temporarily-unavailable" | "authorization-required";
+type StopStatus = "requested" | StopUnavailable | "unknown" | "confirmed";
+
 export interface RuntimeStopRequest {
   readonly id: string;
   readonly taskId: string;
@@ -318,13 +328,12 @@ export interface RuntimeStopRequest {
   readonly sessionId: string;
   readonly executionId: string;
   readonly requestedAt: number;
-  readonly status:
-    | "requested"
-    | "unsupported"
-    | "temporarily-unavailable"
-    | "authorization-required"
-    | "unknown"
-    | "confirmed";
+  readonly status: StopStatus;
+  /** Whether the native Engine confirmed delivery of this interrupt request. */
+  readonly deliveryStatus: "pending" | "delivered" | "not-delivered" | "unknown" | "not-requested";
+  readonly deliveryEvidence: EngineEvidence | null;
+  /** Native evidence that the Execution stopped; a request ACK alone never fills this field. */
+  readonly stopEvidence: EngineEvidence | null;
   readonly reason: string | null;
 }
 
@@ -439,11 +448,4 @@ export interface RequestStop {
   readonly sessionId: string;
   readonly authorizationId: string;
   readonly executionId: string;
-}
-
-export interface TaskLifecycleRequest {
-  readonly taskId: string;
-  readonly participantId: string;
-  readonly sessionId: string;
-  readonly authorizationId: string;
 }

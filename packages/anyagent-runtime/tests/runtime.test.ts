@@ -17,6 +17,7 @@ import type {
   EngineEvent,
   EngineEventInput,
   EngineExecutionRef,
+  EngineExecutionReconciliation,
   EngineJsonObject,
   EngineRun,
   EngineSessionRef,
@@ -75,6 +76,7 @@ class ManualEngine implements EngineAdapter {
   readonly capabilities = Object.fromEntries(
     [
       "session.create",
+      "session.resume",
       "session.fork",
       "session.compact",
       "session.close",
@@ -99,6 +101,13 @@ class ManualEngine implements EngineAdapter {
   ) as Record<EngineCapability, CapabilityStatus>;
   #nextSession = 0;
   createSessionCalls = 0;
+  readonly resumeCalls: Parameters<NonNullable<EngineAdapter["resumeSession"]>>[0][] = [];
+  resumeResult: EngineSessionRef | null = null;
+  readonly reconcileCalls: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0][] = [];
+  reconcileResult: EngineExecutionReconciliation = {
+    status: "unknown",
+    reason: "no native evidence configured",
+  };
   readonly forkCalls: Parameters<NonNullable<EngineAdapter["forkSession"]>>[0][] = [];
   forkFailure: Error | null = null;
   readonly compactCalls: Parameters<NonNullable<EngineAdapter["compactSession"]>>[0][] = [];
@@ -153,6 +162,24 @@ class ManualEngine implements EngineAdapter {
     const session = `native-session-${++this.#nextSession}` as EngineSessionRef;
     this.sessions.push(session);
     return session;
+  }
+
+  async resumeSession(
+    input: Parameters<NonNullable<EngineAdapter["resumeSession"]>>[0],
+  ): Promise<EngineSessionRef> {
+    input.beforeDispatch?.();
+    this.resumeCalls.push(input);
+    if (!this.sessions.includes(input.session))
+      throw new Error("The native Session does not belong to this Engine instance.");
+    return this.resumeResult ?? input.session;
+  }
+
+  async reconcileExecution(
+    input: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0],
+  ): Promise<EngineExecutionReconciliation> {
+    input.beforeDispatch?.();
+    this.reconcileCalls.push(input);
+    return this.reconcileResult;
   }
 
   async forkSession(input: Parameters<NonNullable<EngineAdapter["forkSession"]>>[0]) {
@@ -210,7 +237,12 @@ class ManualEngine implements EngineAdapter {
   }
   async interrupt(): Promise<EngineCommandReceipt> {
     this.interrupts++;
-    return { status: this.interruptStatus };
+    return {
+      status: this.interruptStatus,
+      ...(this.interruptStatus === "requested"
+        ? { evidence: { source: "engine" as const, evidenceId: `interrupt-${this.interrupts}` } }
+        : {}),
+    };
   }
   async setAssistantFeedback(
     input: Parameters<NonNullable<EngineAdapter["setAssistantFeedback"]>>[0],
@@ -596,6 +628,306 @@ test("Runtime restart marks dispatched Input unknown and rejects queued text wit
       history.inputs.find((input) => input.id === queuedId)?.error ?? "",
       /before this queued Input was dispatched/i,
     );
+    assert.equal(engine.runs.length, 1);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Runtime cold restore reattaches the same Session for an active Task after multiple turns", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-session-restore-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+  let identity!: {
+    taskId: string;
+    participantId: string;
+    sessionId: string;
+    authorizationId: string;
+  };
+  let otherTask!: Awaited<ReturnType<typeof runtime.createTask>>;
+  let nativeSessionId!: EngineSessionRef;
+  const completeTurn = async (text: string) => {
+    const before = engine.runs.length;
+    await runtime.submitInput({ ...identity, text });
+    const runIndex = before;
+    engine.emit(runIndex, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: `${text}-accepted` },
+    });
+    engine.emit(runIndex, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: `${text}-started` },
+    });
+    engine.emit(runIndex, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: `${text}-completed` },
+    });
+    await until(
+      () =>
+        runtime
+          .getHistory(identity.taskId)
+          ?.inputs.some((input) => input.text === text && input.status === "completed") === true,
+    );
+  };
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    nativeSessionId = task.session.nativeSessionId as EngineSessionRef;
+    otherTask = await runtime.createTask({ engineId: "manual", environment, authorization });
+    await completeTurn("first turn");
+    await completeTurn("second turn");
+    assert.equal(runtime.getHistory(task.id)?.inputs.length, 2);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 2);
+    runtime.close();
+
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    const recovered = runtime.getTask(identity.taskId)!;
+    assert.equal(recovered.participant.id, identity.participantId);
+    assert.equal(recovered.session.id, identity.sessionId);
+    assert.equal(recovered.session.status, "unknown");
+    assert.equal(recovered.session.nativeSessionId, nativeSessionId);
+    await assert.rejects(
+      runtime.restoreTaskSession({ ...identity, sessionId: otherTask.session.id }),
+      /Session ownership|participant/i,
+    );
+    assert.equal(engine.resumeCalls.length, 0);
+
+    const restored = await runtime.restoreTaskSession(identity);
+    assert.equal(restored.id, identity.taskId);
+    assert.equal(restored.participant.id, identity.participantId);
+    assert.equal(restored.session.id, identity.sessionId);
+    assert.equal(restored.session.nativeSessionId, nativeSessionId);
+    assert.equal(restored.session.status, "active");
+    assert.deepEqual(
+      engine.resumeCalls.map((call) => call.session),
+      [nativeSessionId],
+    );
+    assert.equal(engine.createSessionCalls, 2);
+    assert.equal(runtime.getHistory(identity.taskId)?.inputs.length, 2);
+    assert.equal(runtime.getHistory(identity.taskId)?.executions.length, 2);
+
+    await runtime.submitInput({ ...identity, text: "third turn" });
+    assert.equal(engine.runs.length, 3);
+    assert.equal(engine.runs[2]?.session, nativeSessionId);
+    assert.equal(engine.createSessionCalls, 2);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Runtime cold restore rejects expired authorization, stale configuration, and terminal Tasks", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-restore-eligibility-"));
+  let now = 10;
+  const expiredDb = join(directory, "expired.sqlite");
+  const expiredEngine = new ManualEngine();
+  let runtime = createTaskRuntime({
+    databasePath: expiredDb,
+    engines: new Map([["manual", expiredEngine]]),
+    now: () => now,
+  });
+  const expiredTask = await runtime.createTask({
+    engineId: "manual",
+    environment,
+    authorization: { ...authorization, id: "expiring-restore-grant", expiresAt: 20 },
+  });
+  const expiredIdentity = {
+    taskId: expiredTask.id,
+    participantId: expiredTask.participant.id,
+    sessionId: expiredTask.session.id,
+    authorizationId: expiredTask.authorizationId,
+  };
+  runtime.close();
+  now = 21;
+  runtime = createTaskRuntime({
+    databasePath: expiredDb,
+    engines: new Map([["manual", expiredEngine]]),
+    now: () => now,
+  });
+  try {
+    await assert.rejects(runtime.restoreTaskSession(expiredIdentity), /Authorization has expired/i);
+    assert.equal(expiredEngine.resumeCalls.length, 0);
+  } finally {
+    runtime.close();
+  }
+
+  const staleDb = join(directory, "stale-config.sqlite");
+  const staleEngine = new ManualEngine();
+  runtime = createTaskRuntime({
+    databasePath: staleDb,
+    engines: new Map([["manual", staleEngine]]),
+  });
+  const staleTask = await runtime.createTask({ engineId: "manual", environment, authorization });
+  const staleIdentity = {
+    taskId: staleTask.id,
+    participantId: staleTask.participant.id,
+    sessionId: staleTask.session.id,
+    authorizationId: staleTask.authorizationId,
+  };
+  runtime.close();
+  staleEngine.configurationVersion = "changed-after-authorization";
+  runtime = createTaskRuntime({
+    databasePath: staleDb,
+    engines: new Map([["manual", staleEngine]]),
+  });
+  try {
+    await assert.rejects(runtime.restoreTaskSession(staleIdentity), /configuration changed/i);
+    assert.equal(staleEngine.resumeCalls.length, 0);
+  } finally {
+    runtime.close();
+  }
+
+  const terminalDb = join(directory, "terminal.sqlite");
+  const terminalEngine = new ManualEngine();
+  runtime = createTaskRuntime({
+    databasePath: terminalDb,
+    engines: new Map([["manual", terminalEngine]]),
+  });
+  const terminalTask = await runtime.createTask({ engineId: "manual", environment, authorization });
+  const terminalIdentity = {
+    taskId: terminalTask.id,
+    participantId: terminalTask.participant.id,
+    sessionId: terminalTask.session.id,
+    authorizationId: terminalTask.authorizationId,
+  };
+  runtime.closeTask({ ...terminalIdentity, outcome: "completed" });
+  runtime.close();
+  runtime = createTaskRuntime({
+    databasePath: terminalDb,
+    engines: new Map([["manual", terminalEngine]]),
+  });
+  try {
+    await assert.rejects(runtime.restoreTaskSession(terminalIdentity), /completed|active task/i);
+    assert.equal(terminalEngine.resumeCalls.length, 0);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Runtime reconciles persisted unknown work from native evidence without resending its Input", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-reconcile-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const input = await runtime.submitInput({ ...identity, text: "do not repeat this operation" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "reconcile-input-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)?.executions.length === 1);
+    const originalExecutionId = runtime.getHistory(task.id)?.executions[0]?.id;
+    assert.ok(originalExecutionId);
+    assert.equal(engine.runs.length, 1);
+    runtime.close();
+
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    engine.setCapability("execution.reconcile", {
+      support: "supported",
+      availability: "available",
+    });
+    engine.reconcileResult = {
+      status: "completed",
+      result: "native result",
+      evidence: { source: "engine", evidenceId: "reconcile-completed" },
+    };
+    const reconciled = await runtime.reconcileExecution({
+      ...identity,
+      executionId: originalExecutionId,
+    });
+    assert.equal(reconciled.id, originalExecutionId);
+    assert.equal(reconciled.status, "completed");
+    assert.equal(reconciled.result, "native result");
+    assert.equal(reconciled.reconciliationEvidence?.evidenceId, "reconcile-completed");
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((item) => item.id === input.id)?.status,
+      "completed",
+    );
+    assert.equal(engine.reconcileCalls.length, 1);
+    assert.equal(engine.runs.length, 1);
+    assert.equal(engine.reconcileCalls[0]?.executionId, "native-execution-1");
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("cold-start reconciliation keeps running work queryable until terminal evidence, then restores the same Session", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-reconcile-running-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "do not duplicate this operation" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "running-reconcile-input" },
+    });
+    await until(() => runtime.getHistory(task.id)?.executions.length === 1);
+    engine.closeEvents(0);
+    await until(() => runtime.getHistory(task.id)?.executions[0]?.status === "unknown");
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    assert.equal(engine.runs.length, 1);
+    runtime.close();
+
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    engine.setCapability("execution.reconcile", {
+      support: "supported",
+      availability: "available",
+    });
+    engine.reconcileResult = {
+      status: "running",
+      evidence: { source: "engine", evidenceId: "running-native-turn" },
+    };
+    const running = await runtime.reconcileExecution({ ...identity, executionId });
+    assert.equal(running.status, "unknown");
+    assert.equal(running.reconciliationEvidence?.evidenceId, "running-native-turn");
+    assert.equal(
+      runtime
+        .getHistory(task.id)
+        ?.inputs.find((input) => input.text === "do not duplicate this operation")?.status,
+      "unknown",
+    );
+    assert.equal(engine.reconcileCalls.length, 1);
+
+    engine.reconcileResult = {
+      status: "completed",
+      result: "the original operation finished",
+      evidence: { source: "engine", evidenceId: "terminal-native-turn" },
+    };
+    const terminal = await runtime.reconcileExecution({ ...identity, executionId });
+    assert.equal(terminal.status, "completed");
+    assert.equal(terminal.result, "the original operation finished");
+    assert.equal(engine.reconcileCalls.length, 2);
+    assert.equal(engine.runs.length, 1);
+    assert.equal(engine.createSessionCalls, 1);
+
+    await runtime.restoreTaskSession(identity);
+    assert.equal(engine.resumeCalls.length, 1);
+    assert.equal(engine.resumeCalls[0]?.session, task.session.nativeSessionId);
+    assert.equal(engine.createSessionCalls, 1);
     assert.equal(engine.runs.length, 1);
   } finally {
     runtime.close();
@@ -2192,6 +2524,7 @@ test("interruption request is not stop confirmation; only execution.stopped is t
       executionId: execution.id,
     });
     assert.equal(earlyStop.status, "temporarily-unavailable");
+    assert.equal(earlyStop.deliveryStatus, "not-delivered");
     engine.interruptStatus = "requested";
     const stop = await runtime.requestStop({
       taskId: task.id,
@@ -2201,6 +2534,9 @@ test("interruption request is not stop confirmation; only execution.stopped is t
       executionId: execution.id,
     });
     assert.equal(stop.status, "requested");
+    assert.equal(stop.deliveryStatus, "delivered");
+    assert.equal(stop.deliveryEvidence?.evidenceId, "interrupt-2");
+    assert.equal(stop.stopEvidence, null);
     assert.equal(engine.interrupts, 2);
     assert.equal(runtime.getHistory(task.id)!.executions[0]!.status, "accepted");
     engine.emit(0, {
@@ -2211,6 +2547,8 @@ test("interruption request is not stop confirmation; only execution.stopped is t
     assert.equal(runtime.getHistory(task.id)!.inputs[0]!.id, input.id);
     assert.equal(runtime.getHistory(task.id)!.stopRequests[0]!.status, "temporarily-unavailable");
     assert.equal(runtime.getHistory(task.id)!.stopRequests[1]!.status, "confirmed");
+    assert.equal(runtime.getHistory(task.id)!.stopRequests[1]!.deliveryStatus, "delivered");
+    assert.equal(runtime.getHistory(task.id)!.stopRequests[1]!.stopEvidence?.evidenceId, "stopped");
     const closed = runtime.closeTask({
       taskId: task.id,
       participantId: task.participant.id,
@@ -2260,12 +2598,68 @@ test("native stop evidence before interrupt ACK keeps one confirmed StopRequest"
       evidence: { source: "engine", evidenceId: "stopped" },
     });
     await until(() => runtime.getHistory(task.id)!.stopRequests[0]!.status === "confirmed");
-    releaseInterrupt!({ status: "requested" });
+    releaseInterrupt!({
+      status: "requested",
+      evidence: { source: "engine", evidenceId: "stop-ack-after-event" },
+    });
     assert.equal((await stopPromise).status, "confirmed");
+    assert.equal(runtime.getHistory(task.id)!.stopRequests[0]!.deliveryStatus, "delivered");
+    assert.equal(
+      runtime.getHistory(task.id)!.stopRequests[0]!.deliveryEvidence?.evidenceId,
+      "stop-ack-after-event",
+    );
+    assert.equal(runtime.getHistory(task.id)!.stopRequests[0]!.stopEvidence?.evidenceId, "stopped");
     assert.deepEqual(
       runtime.getHistory(task.id)!.stopRequests.map((request) => request.status),
       ["confirmed"],
     );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("an interrupt receipt without native delivery evidence stays unknown and cannot erase a terminal execution", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({
+      ...identity,
+      text: "finish while stop acknowledgement is delayed",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "delayed-stop-input" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    let releaseInterrupt: ((receipt: EngineCommandReceipt) => void) | undefined;
+    engine.interrupt = () => new Promise((resolve) => (releaseInterrupt = resolve));
+    const stopPromise = runtime.requestStop({ ...identity, executionId });
+    await until(() => !!releaseInterrupt && runtime.getHistory(task.id)!.stopRequests.length === 1);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "completed before stop was observed",
+      evidence: { source: "engine", evidenceId: "completed-before-stop-ack" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    releaseInterrupt!({ status: "requested" });
+    const stop = await stopPromise;
+    assert.equal(stop.status, "unknown");
+    assert.equal(stop.deliveryStatus, "unknown");
+    assert.equal(stop.deliveryEvidence, null);
+    assert.equal(stop.stopEvidence, null);
+    assert.match(stop.reason ?? "", /completed/i);
+    assert.equal(runtime.getHistory(task.id)!.executions[0]!.status, "completed");
   } finally {
     runtime.close();
   }
