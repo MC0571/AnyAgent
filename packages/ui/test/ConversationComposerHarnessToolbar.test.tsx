@@ -145,6 +145,7 @@ test("ConversationComposer keeps the Harness toolbar stable from selection throu
     replaceComposerDraft: () => {},
     workspacePath: "/tmp/anyagent-composer-test",
     harnesses: [{ engineId: "fake-engine", label: "Fake Engine", selectable: true }],
+    draftConfig: { provider: "opencode-go", model: "go-alpha", mode: "build", planEnabled: false },
     attachmentPut: async () => ({}) as never,
     onSendText: async (text: string, options?: { attachments?: unknown }) => {
       sent.push({ text, attachments: options?.attachments });
@@ -238,6 +239,8 @@ test("ConversationComposer keeps the Harness toolbar stable from selection throu
     await act(async () => {
       harnessItem.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
     });
+    assert.match(picker.textContent ?? "", /Fake Engine/);
+    assert.doesNotMatch(picker.textContent ?? "", /go-alpha/);
 
     const mode = () =>
       container.querySelector<HTMLButtonElement>('[data-testid="chat-mode-select-trigger"]');

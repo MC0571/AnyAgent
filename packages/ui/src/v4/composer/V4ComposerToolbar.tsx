@@ -837,13 +837,14 @@ function V4ComposerModelControlsImpl({
 
   const modelTriggerDisplay = useMemo(() => {
     if (selectedHarness) {
+      const harnessModel = selectedHarness.engineId === "zcode" ? effectiveConfig?.model : null;
       const providerName = modelSelectionView?.providers.find(
         (candidate) => candidate.providerId === effectiveConfig?.provider,
       )?.providerName;
       return {
-        fullLabel: `Harness · ${selectedHarness.label}${effectiveConfig?.model ? ` · ${providerName ?? effectiveConfig.provider}/${effectiveConfig.model}` : ""}`,
+        fullLabel: `Harness · ${selectedHarness.label}${harnessModel ? ` · ${providerName ?? effectiveConfig?.provider}/${harnessModel}` : ""}`,
         providerPrefix: "Harness · ",
-        modelLabel: effectiveConfig?.model ?? selectedHarness.label,
+        modelLabel: harnessModel ?? selectedHarness.label,
       };
     }
     // 非可选值（未选 / synthetic / 不可用）：占位文案或默认「选择模型」。
