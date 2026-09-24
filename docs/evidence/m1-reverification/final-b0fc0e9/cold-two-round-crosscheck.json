@@ -1,0 +1,153 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+  "nativeSessionId": "sess_418b065d-7596-481c-982e-273f7ab1afc7",
+  "completedBeforeRestart": 3,
+  "fourthRoundAfterExplicitRestore": true,
+  "product": [
+    {
+      "kind": "participant",
+      "id": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": null,
+      "status": "active",
+      "nativeSessionId": null,
+      "nativeExecutionId": null,
+      "text": null
+    },
+    {
+      "kind": "session",
+      "id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "active",
+      "nativeSessionId": "sess_418b065d-7596-481c-982e-273f7ab1afc7",
+      "nativeExecutionId": null,
+      "text": null
+    },
+    {
+      "kind": "task",
+      "id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": null,
+      "status": "active",
+      "nativeSessionId": null,
+      "nativeExecutionId": null,
+      "text": null
+    },
+    {
+      "kind": "input",
+      "id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "35c27963-88d7-4b3e-b2dd-6076ce4e56c4",
+      "text": "PR25_B0_DENY：请调用 Write 工具在当前项目目录创建 m1-b0-deny.txt，内容严格为 SHOULD_NOT_EXIST_B0。先执行工具再回答。"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "35c27963-88d7-4b3e-b2dd-6076ce4e56c4",
+      "text": null
+    },
+    {
+      "kind": "input",
+      "id": "input_8782045b-b68f-4240-9f75-f29c636184cb",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "bc82be11-3768-4232-a882-254b2799b622",
+      "text": "PR25_B0_ALLOW：请用 Write 工具在当前项目目录创建 m1-b0-allow.txt，内容严格为 ALLOW_ONCE_B0，然后只回复 ALLOW_DONE_B0。"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "bc82be11-3768-4232-a882-254b2799b622",
+      "text": null
+    },
+    {
+      "kind": "input",
+      "id": "input_362b6630-4697-4a82-9e9f-349ba81f4d12",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "418591cd-c314-4fe2-8982-ea7e96fe6315",
+      "text": "PR25_B0_AFTER_COMPACT：只回复 COMPACT_RESUME_B0。"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_126b542c-792a-42eb-8781-85f4967f07cb",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "418591cd-c314-4fe2-8982-ea7e96fe6315",
+      "text": null
+    },
+    {
+      "kind": "input",
+      "id": "input_65ffcb57-7912-4d9d-b331-f303b15611c9",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "6ad12f94-78ec-4e41-8240-c5e65b66d382",
+      "text": "PR25_B0_COLD_R4：请用 Markdown 一级标题“恢复成功”、一个 TypeScript 代码块 const marker = \"COLD_R4_B0\";，最后单独输出 COLD_R4_B0。"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_213030ca-1113-4b4e-a97a-13c23304ae75",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "nativeSessionId": null,
+      "nativeExecutionId": "6ad12f94-78ec-4e41-8240-c5e65b66d382",
+      "text": null
+    }
+  ],
+  "nativeInputs": [
+    {
+      "id": "queue_35c27963-88d7-4b3e-b2dd-6076ce4e56c4",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "status": "promoted",
+      "admitted_sequence": 0,
+      "promoted_sequence": 0
+    },
+    {
+      "id": "queue_bc82be11-3768-4232-a882-254b2799b622",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "status": "promoted",
+      "admitted_sequence": 1,
+      "promoted_sequence": 1
+    },
+    {
+      "id": "queue_418591cd-c314-4fe2-8982-ea7e96fe6315",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "status": "promoted",
+      "admitted_sequence": 2,
+      "promoted_sequence": 2
+    },
+    {
+      "id": "queue_6ad12f94-78ec-4e41-8240-c5e65b66d382",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "status": "promoted",
+      "admitted_sequence": 3,
+      "promoted_sequence": 3
+    }
+  ]
+}

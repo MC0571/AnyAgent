@@ -1,0 +1,1810 @@
+{
+  "productCommit": "db192db555f1ef950052f528595ad3d055562ef9",
+  "source": "read-only SQLite projections in isolated /tmp/anyagent-opencode-go.aBEA0z; selected fields only, no credentials or raw tool payload",
+  "productRecords": [
+    {
+      "kind": "participant",
+      "id": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "status": "unknown",
+      "nativeSessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203"
+    },
+    {
+      "kind": "task",
+      "id": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "status": "active",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc"
+    },
+    {
+      "kind": "input",
+      "id": "input_cc62d370-9b7c-4ecd-a949-07351797a81b",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_cc62d370-9b7c-4ecd-a949-07351797a81b",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "PR25_DB192_R1",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_5c6ed7e6-251b-4090-9dc3-340d8b7f6f07",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_cc62d370-9b7c-4ecd-a949-07351797a81b",
+      "executionId": "execution_5c6ed7e6-251b-4090-9dc3-340d8b7f6f07",
+      "nativeKey": "1ecf5ca3-8e03-4e46-a7bf-21fd94048e46",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "input",
+      "id": "input_79ac1985-9fbc-4058-b2df-63dc2b0f88ca",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_79ac1985-9fbc-4058-b2df-63dc2b0f88ca",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "PR25_DB192_R2",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_5c06234b-3ff5-4574-951a-9f839341c7b0",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_79ac1985-9fbc-4058-b2df-63dc2b0f88ca",
+      "executionId": "execution_5c06234b-3ff5-4574-951a-9f839341c7b0",
+      "nativeKey": "17dd429e-9a8d-4826-87b6-c23d87107d56",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "integrity-issue",
+      "id": "issue_e1722a1e-1d95-46c0-bda1-512601f19827",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "status": "stream-ended-unknown"
+    },
+    {
+      "kind": "input",
+      "id": "input_34d662ec-9f87-4af6-b7fe-5b26ffff3d60",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_34d662ec-9f87-4af6-b7fe-5b26ffff3d60",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "Use the skill named `pr25-validation` for this turn.\nFirst call the `Skill` tool with name `pr25-val",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_a33958d4-036c-4307-a4b7-6c060394c1eb",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_34d662ec-9f87-4af6-b7fe-5b26ffff3d60",
+      "executionId": "execution_a33958d4-036c-4307-a4b7-6c060394c1eb",
+      "nativeKey": "addd880b-454b-45bd-9c02-bae4e1567965",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "input",
+      "id": "input_25b72a2e-05d4-4757-b625-7c46ccf325c5",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_25b72a2e-05d4-4757-b625-7c46ccf325c5",
+      "status": "stopped",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "PR25_DB192_STOP",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_64cc2b7d-47fe-4d41-afc1-a82b472a58f6",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_25b72a2e-05d4-4757-b625-7c46ccf325c5",
+      "executionId": "execution_64cc2b7d-47fe-4d41-afc1-a82b472a58f6",
+      "nativeKey": "1eeed3e2-c20a-4313-858e-79c95e050571",
+      "status": "stopped",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "stop-request",
+      "id": "stop_9a5284a6-6d9b-4d1c-93a8-c6fb1f71e865",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "execution_64cc2b7d-47fe-4d41-afc1-a82b472a58f6",
+      "status": "confirmed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "deliveryStatus": "delivered",
+      "deliveryEvidence": {
+        "source": "engine",
+        "evidenceId": "e7187819-736a-4e51-a760-88cfc40038e5"
+      },
+      "stopEvidence": {
+        "source": "engine",
+        "evidenceId": "e18a1933-fca7-4d8f-bc5f-f0fd46acf013"
+      }
+    },
+    {
+      "kind": "input",
+      "id": "input_6f2fa05c-2a33-438d-9f97-479cafd13251",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_6f2fa05c-2a33-438d-9f97-479cafd13251",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "PR25_DB192_DENY",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_bc4f1a23-3198-4d96-946c-a090c551e7e6",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_6f2fa05c-2a33-438d-9f97-479cafd13251",
+      "executionId": "execution_bc4f1a23-3198-4d96-946c-a090c551e7e6",
+      "nativeKey": "958a97ad-148d-43bc-b1e2-ba8cc3178792",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "approval",
+      "id": "approval_dd777f0e-bed2-4ea2-93e5-c8102b39dd5d",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "execution_bc4f1a23-3198-4d96-946c-a090c551e7e6",
+      "nativeKey": "[\"958a97ad-148d-43bc-b1e2-ba8cc3178792\",\"perm_73d29c05-3a16-4f67-919a-b7d8602ef149\"]",
+      "status": "rejected",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestEventId": "event_577c3758-153c-43f2-9810-b1ab05e697af"
+    },
+    {
+      "kind": "input",
+      "id": "input_1ad847d9-98e8-4d38-990a-13097c4cbd16",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_1ad847d9-98e8-4d38-990a-13097c4cbd16",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "PR25_DB192_ALLOW",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_e4c89905-819d-4e4f-a953-dc96a503c183",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_1ad847d9-98e8-4d38-990a-13097c4cbd16",
+      "executionId": "execution_e4c89905-819d-4e4f-a953-dc96a503c183",
+      "nativeKey": "287c624c-9298-48e9-9849-f2be147adb72",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "approval",
+      "id": "approval_01a2cd44-ae16-452a-8793-dce6bf9919db",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "execution_e4c89905-819d-4e4f-a953-dc96a503c183",
+      "nativeKey": "[\"287c624c-9298-48e9-9849-f2be147adb72\",\"perm_214baff3-d03d-4f65-8851-165222853292\"]",
+      "status": "forwarded",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestEventId": "event_adf5c9a0-cf57-4133-9a5b-e6ef4c1ac71c"
+    },
+    {
+      "kind": "file-rewind-operation",
+      "id": "file-rewind_bfe780d1-6441-4175-aaff-fd4aaefc096f",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "executionId": "execution_e4c89905-819d-4e4f-a953-dc96a503c183",
+      "nativeKey": "file-rewind_bfe780d1-6441-4175-aaff-fd4aaefc096f",
+      "status": "applied",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "compact-operation",
+      "id": "compact_a4508798-d197-4374-a110-e6d81b72c482",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "nativeKey": "compact_a4508798-d197-4374-a110-e6d81b72c482",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "participant",
+      "id": "participant_b805f08c-4482-4218-aeb9-60e05d971272",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "status": "unknown",
+      "nativeSessionId": "fake-session-1"
+    },
+    {
+      "kind": "task",
+      "id": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "status": "active",
+      "participantId": "participant_b805f08c-4482-4218-aeb9-60e05d971272",
+      "authorizationId": "authorization_d01bd985-dcef-45d1-b850-b874f583c1d3"
+    },
+    {
+      "kind": "input",
+      "id": "input_5a370d6e-ddeb-44cf-bd57-28a5f107d8ec",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "inputId": "input_5a370d6e-ddeb-44cf-bd57-28a5f107d8ec",
+      "status": "completed",
+      "participantId": "participant_b805f08c-4482-4218-aeb9-60e05d971272",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_d01bd985-dcef-45d1-b850-b874f583c1d3",
+      "marker": "FAKE_DB192_A_R1"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_70458a80-eb75-4bab-8ab6-770e70de296a",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "inputId": "input_5a370d6e-ddeb-44cf-bd57-28a5f107d8ec",
+      "executionId": "execution_70458a80-eb75-4bab-8ab6-770e70de296a",
+      "nativeKey": "fake-execution-1",
+      "status": "completed",
+      "participantId": "participant_b805f08c-4482-4218-aeb9-60e05d971272"
+    },
+    {
+      "kind": "input",
+      "id": "input_8d764cb3-ec6b-4b28-be81-182b5474fbb9",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "inputId": "input_8d764cb3-ec6b-4b28-be81-182b5474fbb9",
+      "status": "completed",
+      "participantId": "participant_b805f08c-4482-4218-aeb9-60e05d971272",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_d01bd985-dcef-45d1-b850-b874f583c1d3",
+      "marker": "FAKE_DB192_A_R2"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_7598e649-ffe9-4582-98dc-d9027c4cfcf5",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "inputId": "input_8d764cb3-ec6b-4b28-be81-182b5474fbb9",
+      "executionId": "execution_7598e649-ffe9-4582-98dc-d9027c4cfcf5",
+      "nativeKey": "fake-execution-2",
+      "status": "completed",
+      "participantId": "participant_b805f08c-4482-4218-aeb9-60e05d971272"
+    },
+    {
+      "kind": "participant",
+      "id": "participant_fc554804-352c-4f01-a7c6-563dc0a883a6",
+      "taskId": "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df",
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_cda4c470-903f-498e-b4b2-46ca06842e48",
+      "taskId": "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df",
+      "sessionId": "session_cda4c470-903f-498e-b4b2-46ca06842e48",
+      "status": "unknown",
+      "nativeSessionId": "fake-session-2"
+    },
+    {
+      "kind": "task",
+      "id": "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df",
+      "taskId": "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df",
+      "status": "active",
+      "participantId": "participant_fc554804-352c-4f01-a7c6-563dc0a883a6",
+      "authorizationId": "authorization_416b3c7f-d8d5-40a8-b4aa-feb2e6fe2726"
+    },
+    {
+      "kind": "input",
+      "id": "input_e94e862c-b28f-42c0-9dc1-3c7d082f828d",
+      "taskId": "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df",
+      "sessionId": "session_cda4c470-903f-498e-b4b2-46ca06842e48",
+      "inputId": "input_e94e862c-b28f-42c0-9dc1-3c7d082f828d",
+      "status": "completed",
+      "participantId": "participant_fc554804-352c-4f01-a7c6-563dc0a883a6",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_416b3c7f-d8d5-40a8-b4aa-feb2e6fe2726",
+      "marker": "FAKE_DB192_B_R1"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_237ee90d-274a-4469-8d2c-2743c3752db2",
+      "taskId": "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df",
+      "sessionId": "session_cda4c470-903f-498e-b4b2-46ca06842e48",
+      "inputId": "input_e94e862c-b28f-42c0-9dc1-3c7d082f828d",
+      "executionId": "execution_237ee90d-274a-4469-8d2c-2743c3752db2",
+      "nativeKey": "fake-execution-3",
+      "status": "completed",
+      "participantId": "participant_fc554804-352c-4f01-a7c6-563dc0a883a6"
+    },
+    {
+      "kind": "input",
+      "id": "input_aef7596a-3952-4b17-b9d4-f6c985cdb3b5",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "inputId": "input_aef7596a-3952-4b17-b9d4-f6c985cdb3b5",
+      "status": "completed",
+      "participantId": "participant_b805f08c-4482-4218-aeb9-60e05d971272",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_d01bd985-dcef-45d1-b850-b874f583c1d3",
+      "marker": "FAKE_DB192_A_R3"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_3e34a725-8138-47ed-98f1-b5dc7495c0b5",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "inputId": "input_aef7596a-3952-4b17-b9d4-f6c985cdb3b5",
+      "executionId": "execution_3e34a725-8138-47ed-98f1-b5dc7495c0b5",
+      "nativeKey": "fake-execution-4",
+      "status": "completed",
+      "participantId": "participant_b805f08c-4482-4218-aeb9-60e05d971272"
+    },
+    {
+      "kind": "input",
+      "id": "input_3f73515c-325c-474d-9df3-4197c155fdaa",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_3f73515c-325c-474d-9df3-4197c155fdaa",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "PR25_DB192_POST_COMPACT",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_8b4b492b-cd39-4ce5-a14a-b7337c7793af",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_3f73515c-325c-474d-9df3-4197c155fdaa",
+      "executionId": "execution_8b4b492b-cd39-4ce5-a14a-b7337c7793af",
+      "nativeKey": "f1807d9a-3e2c-44ab-bafc-38f8bae588d8",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "input",
+      "id": "input_0e601d15-d3b5-4d61-886b-c096e8205e0d",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_0e601d15-d3b5-4d61-886b-c096e8205e0d",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_818a9807-923e-4111-aae6-5cc8e68bbafc",
+      "marker": "PR25_DB192_QUEUE",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_56bf639d-d784-43a7-a15e-f773a7a389bc",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "inputId": "input_0e601d15-d3b5-4d61-886b-c096e8205e0d",
+      "executionId": "execution_56bf639d-d784-43a7-a15e-f773a7a389bc",
+      "nativeKey": "c17a0e7b-bc5b-485e-9ebe-07d00b6a2691",
+      "status": "completed",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372"
+    },
+    {
+      "kind": "participant",
+      "id": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "status": "active",
+      "nativeSessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1"
+    },
+    {
+      "kind": "task",
+      "id": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "status": "active",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "forkedFrom": {
+        "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+        "inputId": "input_0e601d15-d3b5-4d61-886b-c096e8205e0d",
+        "executionId": "execution_56bf639d-d784-43a7-a15e-f773a7a389bc"
+      },
+      "nativeForkCommandId": "fork_91213c59-ddaf-4956-9552-f285b7a358e3",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5"
+    },
+    {
+      "kind": "input",
+      "id": "input_55fe97ec-4a7a-4292-a155-c3d1630bbaf4",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_55fe97ec-4a7a-4292-a155-c3d1630bbaf4",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "marker": "PR25_DB192_FORK",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_b5e9b577-35e5-470b-9d16-75a925310c50",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_55fe97ec-4a7a-4292-a155-c3d1630bbaf4",
+      "executionId": "execution_b5e9b577-35e5-470b-9d16-75a925310c50",
+      "nativeKey": "9e205c4d-6b1c-4cfd-b84f-ca12fa169a56",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b"
+    },
+    {
+      "kind": "input",
+      "id": "input_cfd74ab9-caae-4b43-a8ce-9d4b85203236",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_cfd74ab9-caae-4b43-a8ce-9d4b85203236",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "marker": "PR25_DB192_QUESTION",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_9c804a00-05c9-4208-b745-72048a3c1fdc",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_cfd74ab9-caae-4b43-a8ce-9d4b85203236",
+      "executionId": "execution_9c804a00-05c9-4208-b745-72048a3c1fdc",
+      "nativeKey": "fd8c5b2d-d875-412a-b0de-20f8e533c104",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b"
+    },
+    {
+      "kind": "user-input",
+      "id": "user-input_8dfe150f-c887-4d0c-8608-a1a7ff245429",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "nativeKey": "[\"fd8c5b2d-d875-412a-b0de-20f8e533c104\",\"perm_0de5a209-54ef-405f-893d-c95f9b25a0a9\"]",
+      "status": "forwarded",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestEventId": "event_3f93e9c2-2dff-43c7-b2da-81dfd376c83f",
+      "nativeRequestId": "perm_0de5a209-54ef-405f-893d-c95f9b25a0a9",
+      "response": {
+        "action": "accept",
+        "content": {
+          "answers": {
+            "Please choose A or B.": "B"
+          },
+          "answer_0": "B",
+          "answer": "B"
+        }
+      },
+      "inputKind": "choice"
+    },
+    {
+      "kind": "input",
+      "id": "input_c4f0d819-abda-4a60-8b71-0d747fe10a21",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_c4f0d819-abda-4a60-8b71-0d747fe10a21",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "marker": "[pr25-db192-context.txt](./pr25-db192-context.txt)  PR25_DB192_MENTION",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_d8ca15d8-544a-40ea-8a1a-1a65e9f49d89",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_c4f0d819-abda-4a60-8b71-0d747fe10a21",
+      "executionId": "execution_d8ca15d8-544a-40ea-8a1a-1a65e9f49d89",
+      "nativeKey": "fadd2680-d0d1-47ed-b67e-54d1bc154e80",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b"
+    },
+    {
+      "kind": "attachment",
+      "id": "attachment_13ab205c-dbc9-4812-b4cb-a9cd1d91795a",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_aaaea1fb-60f2-49ca-b59e-099462a76bf8",
+      "status": "claimed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "nativeSessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5"
+    },
+    {
+      "kind": "input",
+      "id": "input_aaaea1fb-60f2-49ca-b59e-099462a76bf8",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_aaaea1fb-60f2-49ca-b59e-099462a76bf8",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "attachments": [
+        {
+          "id": "attachment_13ab205c-dbc9-4812-b4cb-a9cd1d91795a",
+          "fileName": "pr25-db192-context.txt",
+          "mimeType": "text/plain",
+          "sizeBytes": 24
+        }
+      ],
+      "marker": "PR25_DB192_ATTACHMENT",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_f4dcba5a-508b-4428-baeb-07077f1599c7",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_aaaea1fb-60f2-49ca-b59e-099462a76bf8",
+      "executionId": "execution_f4dcba5a-508b-4428-baeb-07077f1599c7",
+      "nativeKey": "27cd7a36-2293-45cc-b4dd-3a12e462b3c6",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b"
+    },
+    {
+      "kind": "input",
+      "id": "input_63e14b5a-7fce-4d3f-a530-115d56765263",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_63e14b5a-7fce-4d3f-a530-115d56765263",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "revisionOf": {
+        "kind": "edit",
+        "inputId": "input_aaaea1fb-60f2-49ca-b59e-099462a76bf8",
+        "executionId": "execution_f4dcba5a-508b-4428-baeb-07077f1599c7"
+      },
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "attachments": [
+        {
+          "id": "attachment_13ab205c-dbc9-4812-b4cb-a9cd1d91795a",
+          "fileName": "pr25-db192-context.txt",
+          "mimeType": "text/plain",
+          "sizeBytes": 24
+        }
+      ],
+      "marker": "PR25_DB192_EDIT_KEEP",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_662f024b-c16c-476f-b2a9-7cbb46a37591",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_63e14b5a-7fce-4d3f-a530-115d56765263",
+      "executionId": "execution_662f024b-c16c-476f-b2a9-7cbb46a37591",
+      "nativeKey": "revision_90da928c-0c94-4588-b93c-653aa8b6d634",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "revisionOf": {
+        "kind": "edit",
+        "inputId": "input_aaaea1fb-60f2-49ca-b59e-099462a76bf8",
+        "executionId": "execution_f4dcba5a-508b-4428-baeb-07077f1599c7"
+      }
+    },
+    {
+      "kind": "attachment",
+      "id": "attachment_51e2b7a7-bb5e-40af-a455-3a2841f5a08f",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_ccb8faf5-16e7-4ba8-9609-013ff2742716",
+      "status": "claimed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "nativeSessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5"
+    },
+    {
+      "kind": "input",
+      "id": "input_ccb8faf5-16e7-4ba8-9609-013ff2742716",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_ccb8faf5-16e7-4ba8-9609-013ff2742716",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "revisionOf": {
+        "kind": "edit",
+        "inputId": "input_63e14b5a-7fce-4d3f-a530-115d56765263",
+        "executionId": "execution_662f024b-c16c-476f-b2a9-7cbb46a37591"
+      },
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "attachments": [
+        {
+          "id": "attachment_51e2b7a7-bb5e-40af-a455-3a2841f5a08f",
+          "fileName": "pr25-db192-context-two.txt",
+          "mimeType": "text/plain",
+          "sizeBytes": 31
+        }
+      ],
+      "marker": "PR25_DB192_EDIT_REPLACE",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_17fb9343-93bc-4981-a309-efa5d536e0b1",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_ccb8faf5-16e7-4ba8-9609-013ff2742716",
+      "executionId": "execution_17fb9343-93bc-4981-a309-efa5d536e0b1",
+      "nativeKey": "revision_f2d610ee-d14f-4e4e-ac7c-c66592c2f1bd",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "revisionOf": {
+        "kind": "edit",
+        "inputId": "input_63e14b5a-7fce-4d3f-a530-115d56765263",
+        "executionId": "execution_662f024b-c16c-476f-b2a9-7cbb46a37591"
+      }
+    },
+    {
+      "kind": "integrity-issue",
+      "id": "issue_694c59f0-dc67-45be-85d9-a1771b548844",
+      "taskId": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "sessionId": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "status": "stream-ended-unknown"
+    },
+    {
+      "kind": "integrity-issue",
+      "id": "issue_df6bef5b-52e7-4507-ae42-449107976115",
+      "taskId": "task_1fd0f965-85ac-45b2-b981-798cfb86faeb",
+      "sessionId": "session_42aff60f-6c5f-4be3-bacf-baf6b5d60809",
+      "status": "stream-ended-unknown"
+    },
+    {
+      "kind": "integrity-issue",
+      "id": "issue_d33997fd-73e9-4a54-bf32-5456ded5dec9",
+      "taskId": "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df",
+      "sessionId": "session_cda4c470-903f-498e-b4b2-46ca06842e48",
+      "status": "stream-ended-unknown"
+    },
+    {
+      "kind": "integrity-issue",
+      "id": "issue_bb3395e2-73f6-4c07-803e-251a370431c7",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "status": "stream-ended-unknown"
+    },
+    {
+      "kind": "input",
+      "id": "input_ac6b9317-5765-49cb-bc29-ec39e62845e1",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_ac6b9317-5765-49cb-bc29-ec39e62845e1",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "marker": "PR25_DB192_RETRY_SOURCE",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_ad001e5d-7f92-4b0c-8bcb-0c4fb67c42ad",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_ac6b9317-5765-49cb-bc29-ec39e62845e1",
+      "executionId": "execution_ad001e5d-7f92-4b0c-8bcb-0c4fb67c42ad",
+      "nativeKey": "cbc36458-0541-48d1-b33a-833074200c78",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b"
+    },
+    {
+      "kind": "input",
+      "id": "input_1cdd5b5b-1370-4741-b426-a3f8d35f2e07",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_1cdd5b5b-1370-4741-b426-a3f8d35f2e07",
+      "nativeKey": "fd3d6c03-445f-4142-9916-2e6c1c0ebaa2",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "queue",
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "marker": "PR25_DB192_QUEUED",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_6925eb27-4319-4673-816c-034e2beb6c28",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_1cdd5b5b-1370-4741-b426-a3f8d35f2e07",
+      "executionId": "execution_6925eb27-4319-4673-816c-034e2beb6c28",
+      "nativeKey": "input_1cdd5b5b-1370-4741-b426-a3f8d35f2e07",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b"
+    },
+    {
+      "kind": "input",
+      "id": "input_65375c14-89e2-40d3-b835-e1bfe5dbc3da",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_65375c14-89e2-40d3-b835-e1bfe5dbc3da",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "requestedDelivery": "startNow",
+      "revisionOf": {
+        "kind": "retry",
+        "inputId": "input_1cdd5b5b-1370-4741-b426-a3f8d35f2e07",
+        "executionId": "execution_6925eb27-4319-4673-816c-034e2beb6c28"
+      },
+      "authorizationId": "authorization_db476a55-2b93-494a-a7f4-2399bd5c37d5",
+      "attachments": [],
+      "marker": "PR25_DB192_QUEUED",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "execution",
+      "id": "execution_c8803eb3-795d-4b50-b496-eefd49469985",
+      "taskId": "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02",
+      "sessionId": "session_7e486fab-afd2-42c5-92cc-fcc7d03e9243",
+      "inputId": "input_65375c14-89e2-40d3-b835-e1bfe5dbc3da",
+      "executionId": "execution_c8803eb3-795d-4b50-b496-eefd49469985",
+      "nativeKey": "revision_e84e34a4-0144-4e3a-a92c-98c9c025818c",
+      "status": "completed",
+      "participantId": "participant_e5fae7cb-9c9b-4bb3-8729-ee47c9efb04b",
+      "revisionOf": {
+        "kind": "retry",
+        "inputId": "input_1cdd5b5b-1370-4741-b426-a3f8d35f2e07",
+        "executionId": "execution_6925eb27-4319-4673-816c-034e2beb6c28"
+      }
+    }
+  ],
+  "nativeSessionInputs": [
+    {
+      "id": "queue_1ecf5ca3-8e03-4e46-a7bf-21fd94048e46",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 0,
+      "promotedSequence": 0,
+      "promotedMessageId": "msg_mufxaa1m_fbb41498-f54a-4792-b134-314831ac86b6",
+      "status": "promoted",
+      "marker": "PR25_DB192_R1"
+    },
+    {
+      "id": "queue_17dd429e-9a8d-4826-87b6-c23d87107d56",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 1,
+      "promotedSequence": 1,
+      "promotedMessageId": "msg_mufxba5k_ec3dd505-d355-4029-a5c2-2720444dfe9f",
+      "status": "promoted",
+      "marker": "PR25_DB192_R2"
+    },
+    {
+      "id": "queue_addd880b-454b-45bd-9c02-bae4e1567965",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 2,
+      "promotedSequence": 2,
+      "promotedMessageId": "msg_mufxeo5j_4ba9bbeb-79d7-4c5b-bcf0-0a0381de84e8",
+      "status": "promoted",
+      "marker": "Use the skill named `pr25-validation` for this turn.\nFirst call the `Skill` tool with name `pr25-val"
+    },
+    {
+      "id": "queue_1eeed3e2-c20a-4313-858e-79c95e050571",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 3,
+      "promotedSequence": 3,
+      "promotedMessageId": "msg_mufxgfv3_ad6560e7-c6a7-4d37-9da3-56ac798325a7",
+      "status": "promoted",
+      "marker": "PR25_DB192_STOP"
+    },
+    {
+      "id": "queue_958a97ad-148d-43bc-b1e2-ba8cc3178792",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 4,
+      "promotedSequence": 4,
+      "promotedMessageId": "msg_mufxhrzt_1843fd8b-bc80-437d-b1d7-d5dbb787a614",
+      "status": "promoted",
+      "marker": "PR25_DB192_DENY"
+    },
+    {
+      "id": "queue_287c624c-9298-48e9-9849-f2be147adb72",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 5,
+      "promotedSequence": 5,
+      "promotedMessageId": "msg_mufxjjri_68ca0e6f-7a3f-41dd-957b-4c5ebf1979cb",
+      "status": "promoted",
+      "marker": "PR25_DB192_ALLOW"
+    },
+    {
+      "id": "queue_f1807d9a-3e2c-44ab-bafc-38f8bae588d8",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 6,
+      "promotedSequence": 6,
+      "promotedMessageId": "msg_mufxsi43_042b823b-ed9e-4d7a-aeb4-a5e549c29213",
+      "status": "promoted",
+      "marker": "PR25_DB192_POST_COMPACT"
+    },
+    {
+      "id": "queue_c17a0e7b-bc5b-485e-9ebe-07d00b6a2691",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 7,
+      "promotedSequence": 7,
+      "promotedMessageId": "msg_mufxt1hw_8f2773cb-6289-4f15-945b-757f9d0b94bc",
+      "status": "promoted",
+      "marker": "PR25_DB192_QUEUE"
+    },
+    {
+      "id": "queue_9e205c4d-6b1c-4cfd-b84f-ca12fa169a56",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 0,
+      "promotedSequence": 0,
+      "promotedMessageId": "msg_mufxtoi3_4b717caf-443e-4c1b-8d51-74e604dcc314",
+      "status": "promoted",
+      "marker": "PR25_DB192_FORK"
+    },
+    {
+      "id": "queue_fd8c5b2d-d875-412a-b0de-20f8e533c104",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 1,
+      "promotedSequence": 1,
+      "promotedMessageId": "msg_mufxul8f_d0a2884a-dfa1-423a-be9a-dd1fb2256d9c",
+      "status": "promoted",
+      "marker": "PR25_DB192_QUESTION"
+    },
+    {
+      "id": "queue_fadd2680-d0d1-47ed-b67e-54d1bc154e80",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 2,
+      "promotedSequence": 2,
+      "promotedMessageId": "msg_mufxwoxr_82500c43-42dd-4c42-9692-cf9f909f9282",
+      "status": "promoted",
+      "marker": "[pr25-db192-context.txt](./pr25-db192-context.txt)  PR25_DB192_MENTION"
+    },
+    {
+      "id": "queue_27cd7a36-2293-45cc-b4dd-3a12e462b3c6",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 3,
+      "promotedSequence": 3,
+      "promotedMessageId": "msg_mufxygay_b63755b4-60ee-4322-8590-4b2072f6965a",
+      "status": "promoted",
+      "marker": "PR25_DB192_ATTACHMENT"
+    },
+    {
+      "id": "queue_revision_90da928c-0c94-4588-b93c-653aa8b6d634",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 4,
+      "promotedSequence": 4,
+      "promotedMessageId": "msg_mufxz8n8_afcb24be-e4b6-42a0-a2ce-bfe89b5ee848",
+      "status": "promoted",
+      "marker": "PR25_DB192_EDIT_KEEP"
+    },
+    {
+      "id": "queue_revision_f2d610ee-d14f-4e4e-ac7c-c66592c2f1bd",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 5,
+      "promotedSequence": 5,
+      "promotedMessageId": "msg_mufy0jio_0ee7de4d-a185-4396-9ac9-dc8bb72e1949",
+      "status": "promoted",
+      "marker": "PR25_DB192_EDIT_REPLACE"
+    },
+    {
+      "id": "queue_cbc36458-0541-48d1-b33a-833074200c78",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 6,
+      "promotedSequence": 6,
+      "promotedMessageId": "msg_mufyadx7_17d14d54-7947-4266-9122-ba202d430fc6",
+      "status": "promoted",
+      "marker": "PR25_DB192_RETRY_SOURCE"
+    },
+    {
+      "id": "queue_input_1cdd5b5b-1370-4741-b426-a3f8d35f2e07",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 7,
+      "promotedSequence": 7,
+      "promotedMessageId": "msg_mufybk0e_040144cf-1747-4a66-982e-92dda26a45b7",
+      "status": "promoted",
+      "marker": "PR25_DB192_QUEUED"
+    },
+    {
+      "id": "queue_revision_e84e34a4-0144-4e3a-a92c-98c9c025818c",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 8,
+      "promotedSequence": 8,
+      "promotedMessageId": "msg_mufydzmw_9fefffe9-a61b-4b66-824c-aaa9c74ea9dc",
+      "status": "promoted",
+      "marker": "PR25_DB192_QUEUED"
+    },
+    {
+      "id": "queue_01a0d4f8-1af7-760c-9c85-b0d9008e20f8",
+      "sessionId": "sess_e776ad33-9d11-4b52-a075-01fe57d47a7d",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admittedSequence": 0,
+      "promotedSequence": 0,
+      "promotedMessageId": "msg_mufy593e_840d6863-6b3c-4782-8b99-642374d4d712",
+      "status": "promoted",
+      "marker": "M0_DB192"
+    }
+  ],
+  "nativeMessages": [
+    {
+      "id": "msg_mufxaa1m_fbb41498-f54a-4792-b134-314831ac86b6",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxaa20_82e7a118-1e24-4d76-9919-0e5d9a7d7f58",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxaede_1277309d-746a-460f-98f6-3d5e5f68add6",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxba5k_ec3dd505-d355-4029-a5c2-2720444dfe9f",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxba5n_bdc3f074-01c1-4b05-8491-732d51e61d08",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxeo5j_4ba9bbeb-79d7-4c5b-bcf0-0a0381de84e8",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxeo5v_d3e36982-2ef1-44a1-a666-abe9310a4a0f",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxetsn_119a82e9-9c1e-4767-93e2-0fc0bb6ad6e6",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxgfv3_ad6560e7-c6a7-4d37-9da3-56ac798325a7",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxgfv6_6a4b762d-6c6f-457a-86a7-7840cdbe158e",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxhrzt_1843fd8b-bc80-437d-b1d7-d5dbb787a614",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxhrzy_826318d3-5621-443f-b96f-ad62b6b58f82",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxip0p_0fb4db5e-cf22-4161-96cf-916f51e4e0ed",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxjjri_68ca0e6f-7a3f-41dd-957b-4c5ebf1979cb",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxjjrl_5105b90c-e5bc-43cf-af10-e8a8ce354ad4",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxk53v_728df631-c930-4370-9518-fe70078da72c",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxlw1c_ebcbf6c3-588a-40eb-a579-6ba8aa79ef63",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxmydu_7b396384-2c1f-4ae4-85ea-428938c4e8f3",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxsi43_042b823b-ed9e-4d7a-aeb4-a5e549c29213",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxsi4a_75402d3a-a133-4171-8a0b-4fc7f3532fac",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxt1hw_8f2773cb-6289-4f15-945b-757f9d0b94bc",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxt1i0_e787ccc3-b56d-4db8-8aa1-08e255384193",
+      "sessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_27c32f31-b5ca-4808-af70-9aa8ae09947f",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_86653a67-a6f2-4297-bc21-a9e896ae984b",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_f2e79161-e4e4-49cd-a832-0ce3195b62d3",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_f4fe5f04-f770-413a-91cd-7e62d0025174",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_7ef7c00a-8974-4d4a-9f69-97d7336ee693",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_a26b3a67-47d2-427f-a0a1-d2f11f4292c9",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_5ae41ce5-4a34-435f-883e-2a19d26055e3",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_348d36fe-e34e-427f-b795-bb7653d3da97",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_8300c935-555f-4d30-8c93-091e4a691347",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_a605db56-3414-4394-816f-dd4ed031863c",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_67dfbf31-2830-46cc-898a-a3e35e01e488",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_bdff2c83-a6df-4e14-8250-ff7b7269fd3f",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_7fe6d769-37b3-4c35-9b01-72090a15daf1",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_782b33ca-6370-4494-b6e8-f14d71595e09",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_6a413c76-eefe-429b-8853-4799627cf2a7",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_5fa8e098-9402-4000-b2b2-0133d0666886",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_e7f8e3d6-1335-4b75-a4cd-fa41e3d5a47b",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_50d9a872-ab9d-41eb-b428-8c059232bbb6",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_6f56087c-116f-479e-ae01-ce5edb5e058c",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_b3a400e2-ec3f-4962-b6e6-d13874625435",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_2bf6ec7d-1f16-46ab-83ef-9c52875625ef",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_7b224527-45ed-4269-b1dd-caa95107df08",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_0cc0f9e2-4687-48ce-9642-d16c39f65adc",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtalg_a583431b-e6a4-49c8-9183-61ec858c6187",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_part_mufxtama_4df8aa1e-e112-4a90-b011-3d6fff9961c4_message",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtoi3_4b717caf-443e-4c1b-8d51-74e604dcc314",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxtoi7_310aa590-ef23-4897-b252-3e4f4a27d6d8",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxul8f_d0a2884a-dfa1-423a-be9a-dd1fb2256d9c",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxul8k_805ac3f1-3a9d-496f-8c3e-5e082346008d",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxuxj0_0a0bc6b6-07de-4ea3-a012-aba904531625",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxwoxr_82500c43-42dd-4c42-9692-cf9f909f9282",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxwoxx_6e93e3e7-2279-4b4b-b2c1-b598e4d575d7",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxwrxe_1d3113c6-4676-488a-b2f3-58491ff95ad6",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxygay_b63755b4-60ee-4322-8590-4b2072f6965a",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxygb5_98f1c6bc-7bf4-4457-bf7a-52c61c7731f6",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxz8n8_afcb24be-e4b6-42a0-a2ce-bfe89b5ee848",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufxz8ne_cf21b089-ee8b-418c-8389-46736523c6d9",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufy0jio_0ee7de4d-a185-4396-9ac9-dc8bb72e1949",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufy0jiu_727b73cd-6412-4989-89d9-6f05612fd7b4",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufyadx7_17d14d54-7947-4266-9122-ba202d430fc6",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufyadxf_3febdd0e-9e43-4b2d-b559-33f89d51e2ff",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufybk0e_040144cf-1747-4a66-982e-92dda26a45b7",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufybk0h_ee944629-a8eb-4b55-a9e4-f49f9e2fd9e4",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufydzmw_9fefffe9-a61b-4b66-824c-aaa9c74ea9dc",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufydzn1_e2286211-9e30-4b64-a4f9-6887d0194657",
+      "sessionId": "sess_99d3f6c8-14b1-482f-8597-22aaf65864c1",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_part_mufy44tp_4d7a8683-927f-4faf-bbee-02fc78caac9a_message",
+      "sessionId": "sess_e776ad33-9d11-4b52-a075-01fe57d47a7d",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    },
+    {
+      "id": "msg_mufy593e_840d6863-6b3c-4782-8b99-642374d4d712",
+      "sessionId": "sess_e776ad33-9d11-4b52-a075-01fe57d47a7d",
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      },
+      "feedback": null
+    },
+    {
+      "id": "msg_mufy593n_d3544711-30e1-44f1-a7a4-9e021a23a141",
+      "sessionId": "sess_e776ad33-9d11-4b52-a075-01fe57d47a7d",
+      "role": "assistant",
+      "model": {},
+      "feedback": null
+    }
+  ],
+  "productEventCounts": {
+    "task_b41ef201-a190-4c18-9ff7-56a13e09768f": {
+      "approval.requested": 2,
+      "approval.response": 2,
+      "execution.completed": 7,
+      "execution.started": 8,
+      "execution.stopped": 1,
+      "input.accepted": 8,
+      "message.delta": 68,
+      "tool.completed": 2,
+      "tool.started": 3
+    },
+    "task_2a616b8e-c432-49ea-acd8-b4e1ce07fc02": {
+      "execution.completed": 9,
+      "execution.started": 9,
+      "input.accepted": 9,
+      "message.delta": 202,
+      "tool.completed": 2,
+      "tool.started": 2,
+      "user-input.requested": 1
+    },
+    "task_1fd0f965-85ac-45b2-b981-798cfb86faeb": {
+      "execution.completed": 3,
+      "execution.started": 3,
+      "file.changed": 3,
+      "input.accepted": 3,
+      "message.delta": 6,
+      "tool.completed": 3,
+      "tool.started": 3
+    },
+    "task_18bfc8a6-2d0b-4ea2-8bce-b80a916164df": {
+      "execution.completed": 1,
+      "execution.started": 1,
+      "file.changed": 1,
+      "input.accepted": 1,
+      "message.delta": 2,
+      "tool.completed": 1,
+      "tool.started": 1
+    }
+  }
+}

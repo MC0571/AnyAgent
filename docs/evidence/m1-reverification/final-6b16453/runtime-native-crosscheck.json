@@ -1,0 +1,132 @@
+{
+  "productCommit": "6b164539f9ded6f276236d2c3ffb22cbc95da706",
+  "source": "read-only isolated product/native SQLite selected fields",
+  "productTask": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+  "nativeSession": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203",
+  "productRecords": [
+    {
+      "kind": "execution",
+      "id": "execution_58087671-3dc2-4b03-a2a6-134ad607350a",
+      "status": "completed",
+      "nativeKey": "96b30542-b82c-4023-9042-8797ed3083f3",
+      "marker": "",
+      "inputId": "input_dc541136-34c3-43e7-ada6-fcf7be4e1945",
+      "nativeExecutionId": "96b30542-b82c-4023-9042-8797ed3083f3",
+      "submissionConfig": null
+    },
+    {
+      "kind": "execution",
+      "id": "execution_0d504d61-02c3-4283-9159-e80d9388f2f0",
+      "status": "completed",
+      "nativeKey": "0ff021c1-766d-4a7b-8055-5d4ad2e6383b",
+      "marker": "",
+      "inputId": "input_aa644464-ca83-4277-a67e-e9b5e178d9fe",
+      "nativeExecutionId": "0ff021c1-766d-4a7b-8055-5d4ad2e6383b",
+      "submissionConfig": null
+    },
+    {
+      "kind": "execution",
+      "id": "execution_ff91ed1a-0e2d-449a-a9d6-70f576667ddb",
+      "status": "completed",
+      "nativeKey": "9a14a5df-8a51-4574-ae42-97b8a7be2fb3",
+      "marker": "",
+      "inputId": "input_4f4e211b-5cc3-4107-92fa-9f836b0bc793",
+      "nativeExecutionId": "9a14a5df-8a51-4574-ae42-97b8a7be2fb3",
+      "submissionConfig": null
+    },
+    {
+      "kind": "input",
+      "id": "input_dc541136-34c3-43e7-ada6-fcf7be4e1945",
+      "status": "completed",
+      "nativeKey": null,
+      "marker": "PR25_6B16453_RESTORE",
+      "inputId": null,
+      "nativeExecutionId": "96b30542-b82c-4023-9042-8797ed3083f3",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "input",
+      "id": "input_aa644464-ca83-4277-a67e-e9b5e178d9fe",
+      "status": "completed",
+      "nativeKey": null,
+      "marker": "PR25_6B_QUEUE_SOURCE",
+      "inputId": null,
+      "nativeExecutionId": "0ff021c1-766d-4a7b-8055-5d4ad2e6383b",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "input",
+      "id": "input_4f4e211b-5cc3-4107-92fa-9f836b0bc793",
+      "status": "completed",
+      "nativeKey": null,
+      "marker": "PR25_6B_QUEUE_B",
+      "inputId": null,
+      "nativeExecutionId": "9a14a5df-8a51-4574-ae42-97b8a7be2fb3",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    {
+      "kind": "session",
+      "id": "session_c0de0b3e-2eb6-4bb3-b450-4374cc2f6e88",
+      "status": "active",
+      "participantId": null,
+      "nativeSessionId": "sess_7630ba51-bd8e-46ea-af15-b23e9ac90203"
+    },
+    {
+      "kind": "task",
+      "id": "task_b41ef201-a190-4c18-9ff7-56a13e09768f",
+      "status": "active",
+      "participantId": "participant_653a4202-8a5e-423d-a840-4e0489707372",
+      "nativeSessionId": null
+    }
+  ],
+  "nativeInputs": [
+    {
+      "id": "queue_96b30542-b82c-4023-9042-8797ed3083f3",
+      "admittedSequence": 8,
+      "status": "promoted",
+      "marker": "PR25_6B16453_RESTORE"
+    },
+    {
+      "id": "queue_0ff021c1-766d-4a7b-8055-5d4ad2e6383b",
+      "admittedSequence": 9,
+      "status": "promoted",
+      "marker": "PR25_6B_QUEUE_SOURCE"
+    },
+    {
+      "id": "queue_9a14a5df-8a51-4574-ae42-97b8a7be2fb3",
+      "admittedSequence": 10,
+      "status": "promoted",
+      "marker": "PR25_6B_QUEUE_B"
+    }
+  ]
+}

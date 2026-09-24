@@ -1,0 +1,31 @@
+{
+  "candidate": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "previewClosedFileContent": "ALLOW_ONCE_B0",
+  "postApplyFileExists": false,
+  "records": [
+    {
+      "kind": "file-rewind-operation",
+      "id": "file-rewind_50be2ba7-19d5-4798-bca5-26d989375874",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "execution_id": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+      "status": "applied",
+      "data": {
+        "id": "file-rewind_50be2ba7-19d5-4798-bca5-26d989375874",
+        "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+        "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+        "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+        "executionId": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+        "status": "applied",
+        "requestedAt": 1790285379510,
+        "terminalAt": 1790285379536,
+        "evidence": {
+          "source": "engine",
+          "evidenceId": "file-rewind_50be2ba7-19d5-4798-bca5-26d989375874",
+          "detail": "Rewound 1 file from summary checkpoints."
+        },
+        "reason": null
+      }
+    }
+  ]
+}

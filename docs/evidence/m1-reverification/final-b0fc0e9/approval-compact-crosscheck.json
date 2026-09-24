@@ -1,0 +1,124 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "deniedFileExists": false,
+  "allowedFileAfterRewindExists": false,
+  "records": [
+    {
+      "kind": "input",
+      "id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+      "execution_id": null,
+      "status": "completed",
+      "nativeExecutionId": "35c27963-88d7-4b3e-b2dd-6076ce4e56c4",
+      "acceptedAt": 1790285120090,
+      "terminalAt": 1790285148620
+    },
+    {
+      "kind": "execution",
+      "id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+      "execution_id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+      "status": "completed",
+      "nativeExecutionId": "35c27963-88d7-4b3e-b2dd-6076ce4e56c4",
+      "acceptedAt": 1790285120090,
+      "terminalAt": 1790285148620
+    },
+    {
+      "kind": "approval",
+      "id": "approval_fc0a55a6-727d-4e18-ba80-83b252ad0ed9",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+      "execution_id": null,
+      "status": "rejected",
+      "repliedOptionId": "deny"
+    },
+    {
+      "kind": "input",
+      "id": "input_8782045b-b68f-4240-9f75-f29c636184cb",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_8782045b-b68f-4240-9f75-f29c636184cb",
+      "execution_id": null,
+      "status": "completed",
+      "nativeExecutionId": "bc82be11-3768-4232-a882-254b2799b622",
+      "acceptedAt": 1790285215709,
+      "terminalAt": 1790285239975
+    },
+    {
+      "kind": "execution",
+      "id": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_8782045b-b68f-4240-9f75-f29c636184cb",
+      "execution_id": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+      "status": "completed",
+      "nativeExecutionId": "bc82be11-3768-4232-a882-254b2799b622",
+      "acceptedAt": 1790285215709,
+      "terminalAt": 1790285239975
+    },
+    {
+      "kind": "approval",
+      "id": "approval_b4666adc-4cec-4ae1-8bb8-045fa61e60e1",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+      "execution_id": null,
+      "status": "forwarded",
+      "repliedOptionId": "allow_once"
+    },
+    {
+      "kind": "file-rewind-operation",
+      "id": "file-rewind_50be2ba7-19d5-4798-bca5-26d989375874",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": null,
+      "execution_id": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+      "status": "applied",
+      "requestedAt": 1790285379510,
+      "terminalAt": 1790285379536,
+      "reason": null
+    },
+    {
+      "kind": "compact-operation",
+      "id": "compact_9014b0e3-f053-4093-b41b-c03d1ca3fec4",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": null,
+      "execution_id": null,
+      "status": "completed",
+      "requestedAt": 1790285416794,
+      "acceptedAt": 1790285416866,
+      "terminalAt": 1790285447955,
+      "reason": null
+    },
+    {
+      "kind": "input",
+      "id": "input_362b6630-4697-4a82-9e9f-349ba81f4d12",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_362b6630-4697-4a82-9e9f-349ba81f4d12",
+      "execution_id": null,
+      "status": "completed",
+      "nativeExecutionId": "418591cd-c314-4fe2-8982-ea7e96fe6315",
+      "acceptedAt": 1790285467060,
+      "terminalAt": 1790285470384
+    },
+    {
+      "kind": "execution",
+      "id": "execution_126b542c-792a-42eb-8781-85f4967f07cb",
+      "task_id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_362b6630-4697-4a82-9e9f-349ba81f4d12",
+      "execution_id": "execution_126b542c-792a-42eb-8781-85f4967f07cb",
+      "status": "completed",
+      "nativeExecutionId": "418591cd-c314-4fe2-8982-ea7e96fe6315",
+      "acceptedAt": 1790285467060,
+      "terminalAt": 1790285470384
+    }
+  ]
+}
