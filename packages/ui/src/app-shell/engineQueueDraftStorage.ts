@@ -3,6 +3,7 @@ import {
   clearV4ComposerDraft,
   persistV4ComposerDraft,
   readV4ComposerDraft,
+  readV4ComposerDraftResult,
   type V4ComposerDraft,
 } from "@/v4/composer/composerDraftStore.js";
 import { submissionModeSchema } from "@zcode/shared/zcode-protocol-v4";
@@ -10,9 +11,13 @@ import { submissionModeSchema } from "@zcode/shared/zcode-protocol-v4";
 export function prepareQueueEditDraft(
   workspacePath: string,
   workspaceIdentity: string | undefined,
+  taskScopeId: string,
   scopeId: string,
   recovered: Pick<EngineTaskComposerDraft, "text" | "config">,
-) {
+): "storage-failed" | "review-required" | null {
+  const current = readV4ComposerDraftResult(workspacePath, workspaceIdentity, taskScopeId);
+  if (!current.ok) return "storage-failed";
+  if (current.draft?.queueEditRequiresReview) return "review-required";
   const mode = submissionModeSchema.safeParse(recovered.config?.mode);
   return persistV4ComposerDraft(workspacePath, workspaceIdentity, scopeId, {
     text: recovered.text,
@@ -20,7 +25,9 @@ export function prepareQueueEditDraft(
     ...(recovered.config?.modelSelection
       ? { modelSelection: recovered.config.modelSelection }
       : {}),
-  });
+  })
+    ? null
+    : "storage-failed";
 }
 
 export function restoreReviewedQueueDraft(

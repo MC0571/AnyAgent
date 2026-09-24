@@ -1663,6 +1663,11 @@ test("EngineConversation sends through the product composer and renders ordered 
       );
       assert.equal(submissions.length, submittedBeforeFailure, "read failure must block Host send");
       assert.equal(
+        queueControls!.onSubmitPrepare(`${taskBId}-ordinary`, "ordinary draft", undefined, false),
+        true,
+        "an ordinary Composer without queue recovery keeps its path",
+      );
+      assert.equal(
         queueControls!.onQueueEditPrepare(taskBId, "read-fault-probe", {
           text: "Must stay queued",
         }),
@@ -1674,12 +1679,12 @@ test("EngineConversation sends through the product composer and renders ordered 
         "a failed read must not turn clear into an empty-file write",
       );
       assert.equal(
-        queueControls!.onSubmitPrepare(taskBId, "ordinary draft", undefined, false),
-        true,
-        "an ordinary Composer without queue recovery keeps its path",
-      );
-      assert.equal(
-        queueControls!.onSubmitPrepare(taskBId, "possible old queue draft", undefined, true),
+        queueControls!.onSubmitPrepare(
+          `${taskBId}-ordinary`,
+          "possible old queue draft",
+          undefined,
+          true,
+        ),
         false,
         "a cold Task with cancelled queue history remains blocked while drafts cannot be read",
       );
@@ -1819,6 +1824,79 @@ test("EngineConversation sends through the product composer and renders ordered 
         '[data-testid="engine-composer-input"]',
       ) as HTMLElement & { __zcodeLexicalInputE2E?: { getText: () => string } };
       assert.equal(restartedEditor.__zcodeLexicalInputE2E?.getText(), "");
+      const queuedDuringReview = {
+        id: "queued-during-review",
+        taskId,
+        participantId,
+        sessionId,
+        text: "New queued B must not include submitted A",
+        status: "queued",
+        receivedAt: 5_000,
+      };
+      history = { ...history, inputs: [...history.inputs, queuedDuringReview] };
+      await act(async () => emit(taskId, history));
+      const reviewBlockedEdit = container.querySelector<HTMLButtonElement>(
+        '[data-testid="v4-queue-item-edit-queued-during-review"]',
+      );
+      assert.ok(reviewBlockedEdit);
+      await act(async () => reviewBlockedEdit.click());
+      assert.equal(history.inputs.at(-1)?.status, "queued", "B must remain with Host");
+      assert.equal(
+        readV4ComposerDraft(
+          "/tmp/anyagent-ui",
+          undefined,
+          `anyagent-queue-edit:${taskId}:queued-during-review`,
+        ),
+        null,
+        "review-required must block preparation before Host cancellation",
+      );
+      assert.equal(
+        queueControls!.onQueueEditPrepare(taskId, queuedDuringReview.id, {
+          text: queuedDuringReview.text,
+        }),
+        false,
+      );
+      assert.equal(
+        persistV4ComposerDraft(
+          "/tmp/anyagent-ui",
+          undefined,
+          `anyagent-queue-edit:${taskId}:queued-during-review`,
+          { text: queuedDuringReview.text },
+        ),
+        true,
+      );
+      assert.equal(
+        queueControls!.onQueueRecovered(taskId, queuedDuringReview.id),
+        false,
+        "a late B cancellation ACK must not merge or clear the submitted A marker",
+      );
+      assert.equal(
+        readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)
+          ?.queueEditRequiresReview,
+        true,
+      );
+      assert.equal(
+        readV4ComposerDraft(
+          "/tmp/anyagent-ui",
+          undefined,
+          `anyagent-queue-edit:${taskId}:queued-during-review`,
+        )?.text,
+        queuedDuringReview.text,
+        "B's prepared text remains separate for later reconciliation",
+      );
+      assert.equal(
+        clearV4ComposerDraft(
+          "/tmp/anyagent-ui",
+          undefined,
+          `anyagent-queue-edit:${taskId}:queued-during-review`,
+        ),
+        true,
+      );
+      history = {
+        ...history,
+        inputs: history.inputs.filter((input) => input.id !== queuedDuringReview.id),
+      };
+      await act(async () => emit(taskId, history));
     } finally {
       Object.defineProperty(storagePrototype, "setItem", originalSetItem);
       Object.defineProperty(storagePrototype, "removeItem", originalRemoveItem);

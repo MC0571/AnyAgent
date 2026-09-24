@@ -20,11 +20,11 @@ import {
 
 const scopeForTask = (taskId: string) => `anyagent-queue-edit:${taskId}`;
 const scopeForPreparedInput = (taskId: string, inputId: string) =>
-  `anyagent-queue-edit:${taskId}:${inputId}`;
+  `${scopeForTask(taskId)}:${inputId}`;
 
 export type EngineQueueDraftIssue = "storage-failed" | "review-required";
+type QueueRecoveryDraft = Pick<EngineTaskComposerDraft, "text" | "config">;
 
-/** Only a cancelled queue item is owned here; ordinary Composer drafts stay in their editor. */
 export function useEngineComposerDrafts(
   workspacePath: string,
   workspaceIdentity: string | undefined,
@@ -77,18 +77,18 @@ export function useEngineComposerDrafts(
     });
   }, [readResult, selectedTaskId, setIssue]);
   const onQueueEditPrepare = useCallback(
-    (
-      taskId: string,
-      inputId: string,
-      recovered: Pick<EngineTaskComposerDraft, "text" | "config">,
-    ) =>
-      prepareQueueEditDraft(
+    (taskId: string, inputId: string, recovered: QueueRecoveryDraft) => {
+      const issue = prepareQueueEditDraft(
         workspacePath,
         workspaceIdentity,
+        scopeForTask(taskId),
         scopeForPreparedInput(taskId, inputId),
         recovered,
-      ),
-    [workspaceIdentity, workspacePath],
+      );
+      if (issue) setIssue(taskId, issue);
+      return !issue;
+    },
+    [setIssue, workspaceIdentity, workspacePath],
   );
   const onQueueRecovered = useCallback(
     (taskId: string, inputId: string) => {
@@ -101,6 +101,7 @@ export function useEngineComposerDrafts(
       const previousResult = readResult(taskId);
       if (!previousResult.ok) return false;
       const previous = previousResult.draft;
+      if (previous?.queueEditRequiresReview) return false;
       if (previous?.queueEditRecoveredInputIds?.includes(inputId)) {
         clearV4ComposerDraft(
           workspacePath,

@@ -1983,6 +1983,10 @@ export function EngineConversation({
 
   const editQueuedInput = async (inputId: string) => {
     if (!visibleTask || busyAction || pendingEditQueueItemId) return;
+    if (draftStorageIssue === "review-required") {
+      setNotice({ kind: "info", message: "请先核对上一份撤回草稿的提交结果，再编辑队列项。" });
+      return;
+    }
     const input = queuedInputs.find((entry) => entry.id === inputId);
     if (!input) return;
     if (input.attachments?.length) {
