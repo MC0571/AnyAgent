@@ -61,6 +61,7 @@ import {
   V4CommandNotImplementedError,
 } from "../zcode-protocol-v4/v4-gateway.js";
 import {
+  SESSION_ENTRY_NATIVE_TURN_TERMINAL,
   SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
   SessionEventType,
   createEventId,
@@ -1899,6 +1900,14 @@ export function createConversationV4Gateway(
         ...(source.sharedContextImport ? { sharedContextImport: source.sharedContextImport } : {}),
         sourceEventSeq,
       };
+    },
+    loadNativeTurnTerminalEntries: async (sessionId) => {
+      const store = context.deps.sessionStore;
+      if (!store?.sessionEntries) return [];
+      return store.sessionEntries({
+        sessionID: sessionId as SessionId,
+        type: SESSION_ENTRY_NATIVE_TURN_TERMINAL,
+      });
     },
     onError: (scope, error, errorContext) =>
       context.logger?.warn("ZCode Protocol v4 gateway error", {

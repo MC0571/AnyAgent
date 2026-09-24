@@ -2,6 +2,7 @@ import type { WorkspaceId } from "@zcode/contracts";
 import { buildExecutionStateEntry, readRuntimeExecutionState } from "../execution-state.js";
 import {
   SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
+  SESSION_ENTRY_NATIVE_TURN_TERMINAL,
   SESSION_ENTRY_USER_INPUT_AUTO_RESOLUTION,
   SessionEventType,
   createMessageId,
@@ -16,6 +17,8 @@ import type {
   SessionId,
   TargetCompletionVerificationPayload,
   TraceContext,
+  TurnCompletePayload,
+  TurnErrorPayload,
   TurnInputIntentMetadata,
   UserInputAutoResolutionUpdatedPayload,
 } from "../deps.js";
@@ -267,6 +270,14 @@ async function persistDurableSessionEvent(
 ): Promise<void> {
   if (!this.sessionStore) return;
 
+  if (
+    event.type === SessionEventType.TurnComplete ||
+    event.type === SessionEventType.TurnError
+  ) {
+    await persistNativeTurnTerminalEntry.call(this, event, traceContext);
+    return;
+  }
+
   if (event.type === SessionEventType.CheckpointCreated) {
     await persistWorkspaceCheckpointEntry(this, event, traceContext);
     return;
@@ -484,6 +495,58 @@ async function persistDurableSessionEvent(
       module: "core.runtime",
       sessionEventType: event.type,
       status: "failed",
+    });
+  }
+}
+
+async function persistNativeTurnTerminalEntry(
+  this: AgentRuntimeInternal,
+  event: SessionEvent,
+  traceContext: TraceContext,
+): Promise<void> {
+  const payload =
+    event.type === SessionEventType.TurnComplete
+      ? (event.payload as TurnCompletePayload)
+      : (event.payload as TurnErrorPayload);
+  const inputId = payload.inputId?.trim();
+  const turnId = event.turnId ? String(event.turnId).trim() : "";
+  const eventId = String(event.id).trim();
+  if (!inputId || !turnId || !eventId || !this.sessionStore?.saveSessionEntry) return;
+
+  try {
+    await this.sessionStore.saveSessionEntry({
+      id: `native-turn-terminal:${eventId}`,
+      sessionID: event.sessionId,
+      type: SESSION_ENTRY_NATIVE_TURN_TERMINAL,
+      touchSession: false,
+      time: {
+        created: event.timestamp.getTime(),
+        updated: event.timestamp.getTime(),
+      },
+      data: {
+        eventId,
+        eventType: event.type,
+        inputId,
+        resultType:
+          event.type === SessionEventType.TurnComplete
+            ? (event.payload as TurnCompletePayload).resultType
+            : "failed",
+        sequenceNumber: event.sequenceNumber,
+        turnId,
+      },
+    });
+  } catch (error) {
+    // The live event remains authoritative for the current process. Without this durable fact,
+    // post-restart reconciliation intentionally stays unknown.
+    this.logger?.warn("Failed to persist native turn terminal provenance", {
+      ...traceContextToLogContext(traceContext),
+      errorMessage: error instanceof Error ? error.message : String(error),
+      event: "native_turn_terminal.persist_failed",
+      eventId,
+      module: "core.runtime",
+      sessionId: String(event.sessionId),
+      status: "failed",
+      turnId,
     });
   }
 }

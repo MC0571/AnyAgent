@@ -806,6 +806,7 @@ export const SESSION_ENTRY_MODEL_SELECTION = "runtime/model_selection" as const;
 export const SESSION_ENTRY_EXECUTION_STATE = "runtime/execution_state" as const;
 export const SESSION_ENTRY_USER_INPUT_AUTO_RESOLUTION =
   "runtime/user_input_auto_resolution" as const;
+export const SESSION_ENTRY_NATIVE_TURN_TERMINAL = "runtime/native_turn_terminal" as const;
 export const SESSION_ENTRY_WORKSPACE_CHECKPOINT = "runtime/workspace_checkpoint" as const;
 export const SESSION_ENTRY_WORKSPACE_FILE_REWIND = "runtime/workspace_file_rewind" as const;
 
@@ -815,6 +816,7 @@ export const SESSION_ENTRY_TYPES = [
   SESSION_ENTRY_MODEL_SELECTION,
   SESSION_ENTRY_EXECUTION_STATE,
   SESSION_ENTRY_USER_INPUT_AUTO_RESOLUTION,
+  SESSION_ENTRY_NATIVE_TURN_TERMINAL,
   SESSION_ENTRY_WORKSPACE_CHECKPOINT,
   SESSION_ENTRY_WORKSPACE_FILE_REWIND,
 ] as const;

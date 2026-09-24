@@ -53,6 +53,23 @@ export const turnWorkSegmentSchema = z.object({
 });
 export type TurnWorkSegment = z.infer<typeof turnWorkSegmentSchema>;
 
+export const nativeTerminalEvidenceSchema = z.object({
+  eventId: z.string().min(1),
+  eventType: z.enum(["turn_complete", "turn_error"]),
+  sourceCommandId: z.string().min(1),
+  turnId: z.string().min(1),
+  resultType: z.enum([
+    "success",
+    "cancelled",
+    "error_max_turns",
+    "error_max_budget",
+    "error_during_execution",
+    "error_max_tool_calls",
+    "failed",
+  ]),
+});
+export type NativeTerminalEvidence = z.infer<typeof nativeTerminalEvidenceSchema>;
+
 // turnHeader：product turn 边界 + 权威工时 + 每轮文件摘要。
 // guide 产生的内部折叠边界由 workSegments 表达；行归属仍由 CLI 决定，客户端零归属逻辑。
 export const turnHeaderRowSchema = z.object({
@@ -73,6 +90,9 @@ export const turnHeaderRowSchema = z.object({
   executionKind: z.enum(["agent", "controlOnly"]).optional(),
   // 当前 query 的命令归因与历史轮次数；optional 兼容旧 transcript/snapshot。
   sourceCommandId: z.string().optional(),
+  // 可选的本机原生终态证明，只由按原 sourceCommandId 找到的 durable live event 添加；
+  // 旧数据库、冷 transcript 合成事件或没有持久化证明的终态行都缺席此字段。
+  nativeTerminalEvidence: nativeTerminalEvidenceSchema.optional(),
   historyRoundCount: z.number().int().nonnegative().optional(),
   state: z.enum(["running", "completedSuccess", "completedInterrupted", "failed"]),
   startedAt: timestampSchema,

@@ -18,6 +18,13 @@ interface NativeAssistantRow {
   sourceCommandId?: string;
   state?: string;
   historyRoundCount?: number;
+  nativeTerminalEvidence?: {
+    eventId: string;
+    eventType: "turn_complete" | "turn_error";
+    sourceCommandId: string;
+    turnId: string;
+    resultType: string;
+  };
   text?: string;
   marker?: { type: string; status?: string };
   actions?: { canFork?: true; canEdit?: true; canRetry?: true; canRewindFiles?: true };
@@ -94,7 +101,11 @@ function harness({
   }> = [];
   const resumeCalls: string[] = [];
   const nativeCompactCalls: Parameters<AgentPort["compactSession"]>[0][] = [];
-  const rowQueries: Array<{ beforeRowId?: number; limit: number }> = [];
+  const rowQueries: Array<{
+    beforeRowId?: number;
+    limit: number;
+    nativeTerminalSourceCommandId?: string;
+  }> = [];
   const remainingWatermarks = [...pageWatermarks];
   const agent = {
     initialize: async () => ({ available: true, workspaceKey: "/tmp/workspace" }),
@@ -317,11 +328,17 @@ function harness({
     conversationRowsRangeV4: async ({
       beforeRowId,
       limit,
+      nativeTerminalSourceCommandId,
     }: {
       beforeRowId?: number;
       limit: number;
+      nativeTerminalSourceCommandId?: string;
     }) => {
-      rowQueries.push({ ...(beforeRowId === undefined ? {} : { beforeRowId }), limit });
+      rowQueries.push({
+        ...(beforeRowId === undefined ? {} : { beforeRowId }),
+        limit,
+        ...(nativeTerminalSourceCommandId ? { nativeTerminalSourceCommandId } : {}),
+      });
       await beforeRows?.();
       const watermark = remainingWatermarks.shift() ?? {
         atRevision: 0,
@@ -436,12 +453,12 @@ function completeNativeSource(fixture: ReturnType<typeof harness>) {
   });
 }
 
-test("ZCode cold resume keeps the native Session ID and reconciliation uses exact native turn evidence", async () => {
+test("ZCode cold resume keeps the Session ID and reconciliation requires native terminal provenance", async () => {
   const states = [
-    { state: "completedSuccess", expected: "completed" },
-    { state: "running", expected: "running" },
+    { state: "completedSuccess", expected: "unknown" },
+    { state: "running", expected: "unknown" },
     { state: "completedInterrupted", expected: "unknown" },
-    { state: "failed", expected: "failed" },
+    { state: "failed", expected: "unknown" },
   ] as const;
   for (const scenario of states) {
     const fixture = harness({
@@ -487,15 +504,21 @@ test("ZCode cold resume keeps the native Session ID and reconciliation uses exac
     });
     assert.equal(reconciliation.status, scenario.expected);
     assert.equal(qualifications, 2);
-    if (reconciliation.status === "completed") assert.equal(reconciliation.result, "native answer");
-    if (reconciliation.status === "failed")
-      assert.equal(reconciliation.error, "Native turn failed.");
-    if (reconciliation.status !== "unknown") assert.equal(reconciliation.evidence.source, "engine");
+    if (reconciliation.status === "unknown") {
+      assert.equal(reconciliation.evidence.source, "engine");
+      if (scenario.state !== "running")
+        assert.match(
+          reconciliation.reason ?? "",
+          /no sourceCommandId-bound native terminal event/i,
+        );
+    }
+    if (scenario.state === "running")
+      assert.match(reconciliation.reason ?? "", /does not prove.*still live/i);
     freshAdapter.dispose();
   }
 });
 
-test("ZCode reconciliation keeps cold-hydrated interrupted and empty-success rows unknown", async () => {
+test("ZCode reconciliation cannot infer terminal outcomes from transcript-shaped rows", async () => {
   const interrupted = harness({
     rows: [
       {
@@ -515,7 +538,7 @@ test("ZCode reconciliation keeps cold-hydrated interrupted and empty-success row
   });
   assert.equal(interruptedResult.status, "unknown");
   assert.equal(interruptedResult.evidence.source, "engine");
-  assert.match(interruptedResult.reason ?? "", /stop is unconfirmed/i);
+  assert.match(interruptedResult.reason ?? "", /no sourceCommandId-bound native terminal event/i);
   assert.equal(interrupted.commands.length, 0);
   interruptedAdapter.dispose();
 
@@ -538,12 +561,135 @@ test("ZCode reconciliation keeps cold-hydrated interrupted and empty-success row
   });
   assert.equal(emptySuccessResult.status, "unknown");
   assert.equal(emptySuccessResult.evidence.source, "engine");
-  assert.match(emptySuccessResult.reason ?? "", /completion is unconfirmed/i);
+  assert.match(emptySuccessResult.reason ?? "", /no sourceCommandId-bound native terminal event/i);
   assert.equal(emptySuccess.commands.length, 0);
   emptySuccessAdapter.dispose();
 });
 
-test("ZCode reconciles a persisted Session read-only before cold reattachment", async () => {
+test("ZCode reconciliation accepts only exact persisted native terminal provenance", async () => {
+  const matching = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-terminal-after-restart",
+        sourceCommandId: "execution-terminal-after-restart",
+        state: "completedSuccess",
+        historyRoundCount: 2,
+        nativeTerminalEvidence: {
+          eventId: "event-terminal-after-restart",
+          eventType: "turn_complete",
+          sourceCommandId: "execution-terminal-after-restart",
+          turnId: "turn-terminal-after-restart",
+          resultType: "success",
+        },
+      },
+      {
+        rowId: 2,
+        kind: "assistantText",
+        turnId: "turn-terminal-after-restart",
+        text: "partially persisted answer",
+      },
+    ],
+  });
+  const matchingAdapter = matching.createFreshAdapter();
+  const completed = await matchingAdapter.reconcileExecution!({
+    session: "native-session" as never,
+    executionId: "execution-terminal-after-restart" as never,
+  });
+  assert.equal(completed.status, "completed");
+  if (completed.status === "completed")
+    assert.equal(completed.result, "partially persisted answer");
+  assert.deepEqual(matching.rowQueries, [
+    { limit: 200, nativeTerminalSourceCommandId: "execution-terminal-after-restart" },
+  ]);
+  matchingAdapter.dispose();
+
+  const mismatched = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-terminal-mismatch",
+        sourceCommandId: "execution-terminal-mismatch",
+        state: "completedSuccess",
+        nativeTerminalEvidence: {
+          eventId: "event-wrong-command",
+          eventType: "turn_complete",
+          sourceCommandId: "another-execution",
+          turnId: "turn-terminal-mismatch",
+          resultType: "success",
+        },
+      },
+    ],
+  });
+  const mismatchedAdapter = mismatched.createFreshAdapter();
+  const unknown = await mismatchedAdapter.reconcileExecution!({
+    session: "native-session" as never,
+    executionId: "execution-terminal-mismatch" as never,
+  });
+  assert.equal(unknown.status, "unknown");
+  mismatchedAdapter.dispose();
+
+  const failedFixture = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-failed-after-restart",
+        sourceCommandId: "execution-failed-after-restart",
+        state: "failed",
+        nativeTerminalEvidence: {
+          eventId: "event-failed-after-restart",
+          eventType: "turn_error",
+          sourceCommandId: "execution-failed-after-restart",
+          turnId: "turn-failed-after-restart",
+          resultType: "failed",
+        },
+      },
+    ],
+  });
+  const failedAdapter = failedFixture.createFreshAdapter();
+  const failed = await failedAdapter.reconcileExecution!({
+    session: "persisted-native-session" as never,
+    executionId: "execution-failed-after-restart" as never,
+  });
+  assert.equal(failed.status, "failed");
+  failedAdapter.dispose();
+});
+
+test("ZCode reconciliation maps an exact persisted cancelled terminal event to stopped", async () => {
+  const fixture = harness({
+    rows: [
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "turn-interrupted-after-restart",
+        sourceCommandId: "execution-interrupted-after-restart",
+        state: "completedInterrupted",
+        historyRoundCount: 1,
+        nativeTerminalEvidence: {
+          eventId: "event-interrupted-after-restart",
+          eventType: "turn_complete",
+          sourceCommandId: "execution-interrupted-after-restart",
+          turnId: "turn-interrupted-after-restart",
+          resultType: "cancelled",
+        },
+      },
+    ],
+  });
+  const adapter = fixture.createFreshAdapter();
+  const result = await adapter.reconcileExecution!({
+    session: "persisted-native-session" as never,
+    executionId: "execution-interrupted-after-restart" as never,
+  });
+  assert.equal(result.status, "stopped");
+  assert.equal(fixture.commands.length, 0);
+  assert.equal(fixture.resumeCalls.length, 0);
+  adapter.dispose();
+});
+
+test("ZCode reconciles a persisted Session read-only without guessing terminal provenance", async () => {
   const fixture = harness({
     rows: [
       {
@@ -570,8 +716,8 @@ test("ZCode reconciles a persisted Session read-only before cold reattachment", 
       qualified += 1;
     },
   });
-  assert.equal(result.status, "completed");
-  if (result.status === "completed") assert.equal(result.result, "original result");
+  assert.equal(result.status, "unknown");
+  assert.match(result.reason ?? "", /no sourceCommandId-bound native terminal event/i);
   assert.equal(result.evidence.source, "engine");
   assert.equal(qualified, 1);
   assert.equal(fixture.rowQueries.length, 1);

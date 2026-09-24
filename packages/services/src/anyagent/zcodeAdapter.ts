@@ -1207,13 +1207,24 @@ export function createZCodeAdapter(options: {
       let beforeRowId: number | undefined;
       let baseRevision: number | undefined;
       let baseLogEpoch: string | undefined;
-      const headers: Array<{ turnId: string; state: string; historyRoundCount?: number }> = [];
+      const headers: Array<{
+        turnId: string;
+        state: string;
+        nativeTerminalEvidence?: {
+          eventId: string;
+          eventType: "turn_complete" | "turn_error";
+          sourceCommandId: string;
+          turnId: string;
+          resultType: string;
+        };
+      }> = [];
       const assistantRows: Array<{ turnId: string; rowId: number; text: string }> = [];
       try {
         while (true) {
           const page = await options.agent.conversationRowsRangeV4({
             ...workspace,
             sessionId: session,
+            nativeTerminalSourceCommandId: executionId,
             ...(beforeRowId === undefined ? {} : { beforeRowId }),
             limit: 200,
           });
@@ -1228,9 +1239,9 @@ export function createZCodeAdapter(options: {
               headers.push({
                 turnId: row.turnId,
                 state: row.state,
-                ...(row.historyRoundCount === undefined
-                  ? {}
-                  : { historyRoundCount: row.historyRoundCount }),
+                ...(row.nativeTerminalEvidence
+                  ? { nativeTerminalEvidence: row.nativeTerminalEvidence }
+                  : {}),
               });
             if (row.kind === "assistantText")
               assistantRows.push({ turnId: row.turnId, rowId: row.rowId, text: row.text });
@@ -1261,31 +1272,52 @@ export function createZCodeAdapter(options: {
       const evidence = {
         source: "engine" as const,
         evidenceId: `${executionId}:${header.turnId}:${baseRevision ?? "unknown"}`,
-        detail: `Native turn state is ${header.state}.`,
+        detail: `Native turn projection state is ${header.state}.`,
       };
-      if (header.state === "running") return { status: "running" as const, evidence };
-      if (header.state === "completedInterrupted")
+      if (header.state === "running")
         return unknown(
-          "The native turn is marked interrupted, but cold transcript hydration can synthesize this state; execution stop is unconfirmed.",
+          "The native turn row is running, but rowsRange does not prove that the execution is still live in this process.",
           evidence,
         );
-      if (header.state === "failed")
-        return { status: "failed" as const, error: "Native turn failed.", evidence };
-      if (header.state !== "completedSuccess")
-        return unknown(`Unrecognized native turn state: ${header.state}.`);
-      const turnAssistantRows = assistantRows
-        .filter((row) => row.turnId === header.turnId)
-        .sort((left, right) => left.rowId - right.rowId);
+      const terminal = header.nativeTerminalEvidence;
+      const expectedState =
+        terminal?.eventType === "turn_error" ||
+        (terminal?.eventType === "turn_complete" &&
+          terminal.resultType !== "success" &&
+          terminal.resultType !== "cancelled")
+          ? "failed"
+          : terminal?.eventType === "turn_complete" && terminal.resultType === "success"
+            ? "completedSuccess"
+            : terminal?.eventType === "turn_complete" && terminal.resultType === "cancelled"
+              ? "completedInterrupted"
+              : undefined;
       if (
-        header.historyRoundCount === 0 ||
-        (header.historyRoundCount === undefined && turnAssistantRows.length === 0)
-      )
-        return unknown(
-          "The native turn is marked successful without persisted model history or assistant output; completion is unconfirmed.",
-          evidence,
-        );
-      const result = turnAssistantRows.map((row) => row.text).join("");
-      return { status: "completed" as const, result: result || null, evidence };
+        terminal &&
+        terminal.eventId.trim() &&
+        terminal.sourceCommandId === executionId &&
+        terminal.turnId === header.turnId &&
+        expectedState === header.state
+      ) {
+        if (header.state === "completedSuccess") {
+          const result = assistantRows
+            .filter((row) => row.turnId === header.turnId)
+            .sort((left, right) => left.rowId - right.rowId)
+            .map((row) => row.text)
+            .join("");
+          return { status: "completed" as const, result: result || null, evidence };
+        }
+        if (header.state === "completedInterrupted")
+          return { status: "stopped" as const, evidence };
+        if (header.state === "failed")
+          return { status: "failed" as const, error: "Native turn failed.", evidence };
+      }
+      // Product projection state alone is not an execution outcome. Cold transcript
+      // hydration can synthesize terminal rows, so exact source command + turn + event
+      // provenance and a matching native event result are all required.
+      return unknown(
+        `The native turn row is ${header.state}, but rowsRange provides no sourceCommandId-bound native terminal event matching this row; outcome is unconfirmed.`,
+        evidence,
+      );
     },
     async forkSession({
       session,
