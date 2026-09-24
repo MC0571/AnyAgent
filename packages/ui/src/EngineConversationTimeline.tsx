@@ -32,6 +32,8 @@ import {
 } from "@/v4/ConversationRowView.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
+import { parsePromptWebElementContexts } from "@/lib/webElementContext.js";
+import { WebElementContextAttachmentChip } from "@/v4/composer/WebElementContextAttachmentChip.js";
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
@@ -702,6 +704,7 @@ function EngineUserInputMessage({
   );
   const [addedAttachments, setAddedAttachments] = useState<readonly EngineLocalAttachment[]>([]);
   const { intl } = useZCodeIntl();
+  const visibleInput = parsePromptWebElementContexts(input.text, { workspacePath });
   const retainedAttachments =
     input.attachments?.filter((attachment) => retainedAttachmentIds.includes(attachment.id)) ?? [];
   const attachmentList = (removable: boolean) =>
@@ -825,11 +828,12 @@ function EngineUserInputMessage({
               data-v4-user-input-bubble="true"
               className="flex max-w-full flex-col gap-2 rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base text-foreground @min-[624px]/conversation:max-w-xl"
             >
-              <ConversationUserInputContent text={input.text} />
+              <ConversationUserInputContent text={visibleInput.visibleContent} />
+              <WebElementContextAttachmentChip contexts={visibleInput.webElementContexts} />
               {attachmentList(false)}
             </div>
             <ConversationUserInputActions
-              text={input.text}
+              text={visibleInput.visibleContent}
               editActionTestId={`engine-edit-${input.id}`}
               onEdit={
                 editable && onEdit

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { buildPromptWithWebElementContexts } from "../src/lib/webElementContext.js";
 
 function installDom() {
   const dom = new JSDOM("<!doctype html><html><body></body></html>", {
@@ -220,6 +221,47 @@ test("Engine completed answers reuse native bubble and message actions", async (
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     assert.deepEqual(copied, ["answer 2"]);
+
+    history.inputs[1]!.text = buildPromptWithWebElementContexts("question 2", [
+      {
+        id: "web-context-2",
+        workspacePath: "/tmp/anyagent-ui",
+        pageUrl: "https://example.test/review",
+        pageTitle: "Review page",
+        tagName: "BUTTON",
+        accessibleName: "Approve",
+        capturedAt: now,
+      },
+    ]);
+    await act(async () => {
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(EngineConversationTimeline, {
+              projection: projectEngineConversation(task as never, history as never),
+              workspacePath: "/tmp/anyagent-ui",
+              historyLoading: false,
+              approvalBlockedReason: null,
+              userInputBlockedReason: null,
+              busyAction: null,
+              onReplyApproval: () => {},
+              onReplyUserInput: () => {},
+            }),
+          ),
+        ),
+      );
+    });
+    const contextBubble = container.querySelector<HTMLElement>(
+      '[data-testid="engine-input-input-2"] [data-v4-user-input-bubble]',
+    );
+    assert.ok(contextBubble);
+    assert.match(contextBubble.textContent ?? "", /question 2/u);
+    assert.match(contextBubble.textContent ?? "", /1 个网页元素/u);
+    assert.doesNotMatch(contextBubble.textContent ?? "", /# Web page elements:/u);
 
     // A later product input without an Execution must not make an older user
     // query look editable; native v4 decides editability on the latest query.

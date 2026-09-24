@@ -2521,6 +2521,46 @@ test("an active ZCode Harness task switches models within its Session and submit
       },
     );
     assert.equal(submissions[3]?.taskId, forkTask.id);
+    const webContext = {
+      workspacePath,
+      pageUrl: "https://example.test/review",
+      pageTitle: "Review page",
+      tagName: "BUTTON",
+      accessibleName: "Approve",
+      capturedAt: 1_790_260_000_000,
+    };
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent("zcode:web-element-context-add-to-chat", { detail: webContext }),
+      );
+    });
+    await waitFor(
+      () => assert.match(container.textContent ?? "", /网页元素|web page element/i),
+      "M1 composer did not accept the browser context",
+    );
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("Review this element"));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')!.click(),
+    );
+    await waitFor(() => assert.equal(submissions.length, 5));
+    assert.match(String(submissions[4]?.text), /Review this element/);
+    assert.match(String(submissions[4]?.text), /https:\/\/example\.test\/review/);
+    assert.match(String(submissions[4]?.text), /Approve/);
+    await waitFor(
+      () => assert.doesNotMatch(container.textContent ?? "", /网页元素|web page element/i),
+      "accepted browser context should clear from the composer",
+    );
+    await act(async () => forkInput.__zcodeLexicalInputE2E!.setText("Send only once"));
+    await act(async () => {
+      const send = container.querySelector<HTMLButtonElement>(
+        '[data-testid="engine-composer-submit"]',
+      );
+      assert.ok(send);
+      send.click();
+      send.click();
+    });
+    await waitFor(() => assert.equal(submissions.length, 6));
+    assert.equal(submissions[5]?.text, "Send only once");
     await act(async () => {
       input.blur();
       await new Promise((resolve) => setTimeout(resolve, 0));

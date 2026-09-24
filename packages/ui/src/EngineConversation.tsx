@@ -72,6 +72,12 @@ import { toast } from "@/components/ui/toast.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type { ConversationFindMatchState } from "@/v4/legacyChatViewTypes.js";
+import { useWebElementContexts } from "@/v4/composer/useWebElementContexts.js";
+import { WebElementContextAttachmentChip } from "@/v4/composer/WebElementContextAttachmentChip.js";
+import {
+  buildPromptWithWebElementContexts,
+  parsePromptWebElementContexts,
+} from "@/lib/webElementContext.js";
 
 type Notice = { kind: "error" | "info"; message: string };
 type InheritedSource = {
@@ -263,6 +269,7 @@ export function EngineConversation({
     config: string;
     key: string;
   } | null>(null);
+  const submitPendingRef = useRef(false);
   const conversationScrollRef = useRef<HTMLDivElement | null>(null);
   const followConversationTailRef = useRef(true);
   const { intl, locale } = useZCodeIntl();
@@ -403,6 +410,16 @@ export function EngineConversation({
   }, [projection]);
   const visibleTask = task?.id === selectedTaskId ? task : null;
   const visibleHistory = visibleTask ? history : null;
+  const {
+    contexts: webElementContexts,
+    removeContext: removeWebElementContext,
+    clearContexts: clearWebElementContexts,
+  } = useWebElementContexts({
+    workspacePath: visibleTask?.environment.workDirectory ?? "",
+    listenAddToChatEvents:
+      visibleTask?.engine.engineId === "zcode" && !!visibleTask.environment.workDirectory,
+    scopeId: visibleTask?.id,
+  });
   const visibleFeedback =
     visibleTask?.engine.engineId === "zcode" && feedbackSnapshot?.taskId === visibleTask.id
       ? feedbackSnapshot.read
@@ -445,8 +462,12 @@ export function EngineConversation({
     };
   }, [feedbackReadKey, revision, service, visibleTask?.id]);
   const visibleTitle = visibleTask
-    ? visibleHistory?.inputs[0]?.text.trim().replace(/\s+/g, " ").slice(0, 80) ||
-      `Task ${shortId(visibleTask.id)}`
+    ? parsePromptWebElementContexts(visibleHistory?.inputs[0]?.text ?? "", {
+        workspacePath: visibleTask.environment.workDirectory ?? "",
+      })
+        .visibleContent.trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 80) || `Task ${shortId(visibleTask.id)}`
     : "任务";
   useEffect(() => {
     if (visibleTask) onTitleChange?.(visibleTask.id, visibleTitle);
@@ -480,8 +501,8 @@ export function EngineConversation({
       ).success)
       ? "无法核实分叉 Session 继承的模型配置。"
       : null) ??
-    (shouldQueue && currentAttachments.length > 0
-      ? "当前轮次未结束，附件不能安全排队；请等待后发送。"
+    (shouldQueue && (currentAttachments.length > 0 || webElementContexts.length > 0)
+      ? "当前轮次未结束，上下文不能安全排队；请等待后发送。"
       : null);
   const approvalBlockedReason = visibleTask
     ? currentTaskBlock(visibleTask, "approval.respond", engines, refreshFailed)
@@ -680,6 +701,7 @@ export function EngineConversation({
     const cleanText = text.trim();
     if (!visibleTask || !cleanText) return false;
     const selectedAttachments = attachmentsByTask[visibleTask.id] ?? [];
+    const selectedWebContexts = [...webElementContexts];
     const slashCommand = parseLeadingSlashCommand(cleanText);
     let submittedText = cleanText;
     let submission = zcodeSubmission;
@@ -829,7 +851,16 @@ export function EngineConversation({
       }
     }
 
-    if (submitBlockedReason || busyAction || (isZCodeHarness && !submission)) return false;
+    if (
+      submitBlockedReason ||
+      busyAction ||
+      submitPendingRef.current ||
+      (isZCodeHarness && !submission)
+    )
+      return false;
+    if (selectedWebContexts.length > 0) {
+      submittedText = buildPromptWithWebElementContexts(submittedText, selectedWebContexts);
+    }
     const delivery = shouldQueue ? "queue" : "startNow";
     const configKey = JSON.stringify(submission ?? null);
     const queueKey = shouldQueue
@@ -849,6 +880,7 @@ export function EngineConversation({
         key: queueKey,
       };
     const editor = inputApiRef.current;
+    submitPendingRef.current = true;
     void runAction(
       "input",
       async () => {
@@ -894,30 +926,35 @@ export function EngineConversation({
         });
       },
       () => null,
-    ).then((accepted) => {
-      if (!accepted) return;
-      if (queuedSubmissionRef.current?.key === queueKey) queuedSubmissionRef.current = null;
-      try {
-        const nextHistory = appendPromptHistoryEntry(
-          readPromptHistoryEntries(promptHistoryWorkspacePath),
-          cleanText,
-        );
-        persistPromptHistoryEntries(promptHistoryWorkspacePath, nextHistory);
-        if (promptHistoryWorkspacePathRef.current === promptHistoryWorkspacePath)
-          setPromptHistory(nextHistory);
-      } catch {
-        // History is optional; an unavailable browser store must not undo an accepted input.
-      }
-      if (inputApiRef.current === editor) editor?.clear();
-      if (selectedAttachments.length > 0) {
-        setAttachmentsByTask((current) => ({
-          ...current,
-          [visibleTask.id]: (current[visibleTask.id] ?? []).filter(
-            (attachment) => !selectedAttachments.includes(attachment),
-          ),
-        }));
-      }
-    });
+    )
+      .then((accepted) => {
+        if (!accepted) return;
+        if (queuedSubmissionRef.current?.key === queueKey) queuedSubmissionRef.current = null;
+        try {
+          const nextHistory = appendPromptHistoryEntry(
+            readPromptHistoryEntries(promptHistoryWorkspacePath),
+            cleanText,
+          );
+          persistPromptHistoryEntries(promptHistoryWorkspacePath, nextHistory);
+          if (promptHistoryWorkspacePathRef.current === promptHistoryWorkspacePath)
+            setPromptHistory(nextHistory);
+        } catch {
+          // History is optional; an unavailable browser store must not undo an accepted input.
+        }
+        if (inputApiRef.current === editor) editor?.clear();
+        if (selectedAttachments.length > 0) {
+          setAttachmentsByTask((current) => ({
+            ...current,
+            [visibleTask.id]: (current[visibleTask.id] ?? []).filter(
+              (attachment) => !selectedAttachments.includes(attachment),
+            ),
+          }));
+        }
+        for (const context of selectedWebContexts) removeWebElementContext(context.id);
+      })
+      .finally(() => {
+        submitPendingRef.current = false;
+      });
     // Lexical keeps the draft until the Host accepts it; the button path uses the same rule.
     return false;
   };
@@ -1546,35 +1583,44 @@ export function EngineConversation({
                   }
                   submitLabel={shouldQueue ? "加入队列" : "发送"}
                   topContent={
-                    currentAttachments.length > 0 ? (
-                      <Attachments
-                        variant="inline"
-                        className="flex max-w-full flex-wrap gap-2"
-                        data-testid="engine-composer-attachments"
-                      >
-                        {currentAttachments.map((attachment, index) => (
-                          <Attachment
-                            key={`${attachment.localPath}:${index}`}
+                    currentAttachments.length > 0 || webElementContexts.length > 0 ? (
+                      <>
+                        <WebElementContextAttachmentChip
+                          contexts={webElementContexts}
+                          onRemove={removeWebElementContext}
+                          onRemoveAll={clearWebElementContexts}
+                        />
+                        {currentAttachments.length > 0 ? (
+                          <Attachments
                             variant="inline"
-                            data={{
-                              id: `${attachment.localPath}:${index}`,
-                              type: "file",
-                              filename: attachment.fileName,
-                              mediaType: attachment.mimeType,
-                              url: "",
-                            }}
-                            onRemove={() => removeAttachment(index)}
-                            data-testid={`engine-composer-attachment-${index}`}
+                            className="flex max-w-full flex-wrap gap-2"
+                            data-testid="engine-composer-attachments"
                           >
-                            <AttachmentPreview />
-                            <AttachmentInfo className="max-w-48 text-ui-base text-foreground" />
-                            <AttachmentRemove
-                              alwaysVisible
-                              label={intl.formatMessage({ id: "chat.attachments.remove" })}
-                            />
-                          </Attachment>
-                        ))}
-                      </Attachments>
+                            {currentAttachments.map((attachment, index) => (
+                              <Attachment
+                                key={`${attachment.localPath}:${index}`}
+                                variant="inline"
+                                data={{
+                                  id: `${attachment.localPath}:${index}`,
+                                  type: "file",
+                                  filename: attachment.fileName,
+                                  mediaType: attachment.mimeType,
+                                  url: "",
+                                }}
+                                onRemove={() => removeAttachment(index)}
+                                data-testid={`engine-composer-attachment-${index}`}
+                              >
+                                <AttachmentPreview />
+                                <AttachmentInfo className="max-w-48 text-ui-base text-foreground" />
+                                <AttachmentRemove
+                                  alwaysVisible
+                                  label={intl.formatMessage({ id: "chat.attachments.remove" })}
+                                />
+                              </Attachment>
+                            ))}
+                          </Attachments>
+                        ) : null}
+                      </>
                     ) : null
                   }
                   allowSubmitWhenEmpty={false}
