@@ -607,13 +607,14 @@ test("queued Input is rejected when its Task freezes or authorization expires be
   }
 });
 
-test("Runtime restart holds queued text until original reconciliation, native restore, and explicit resume", async () => {
+test("Runtime restart holds queued attachment until original reconciliation, native restore, and explicit resume", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-queue-restart-"));
   const databasePath = join(directory, "runtime.sqlite");
   const engine = new ManualEngine();
   let runtime = createTaskRuntime({
     databasePath,
     engines: new Map([["manual", engine]]),
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
   });
   let taskId = "";
   let queuedId = "";
@@ -627,7 +628,34 @@ test("Runtime restart holds queued text until original reconciliation, native re
       authorizationId: task.authorizationId,
     };
     await runtime.submitInput({ ...identity, text: "A" });
-    queuedId = (await runtime.submitInput({ ...identity, text: "B", delivery: "queue" })).id;
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/restart.txt",
+      fileName: "restart.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    assert.equal(engine.runs.length, 1, "busy staging must not dispatch another native turn");
+    queuedId = (
+      await runtime.submitInput({
+        ...identity,
+        text: "B",
+        delivery: "queue",
+        attachments: [attachment],
+      })
+    ).id;
+    assert.equal(
+      JSON.stringify(runtime.getHistory(task.id)).includes("/private/restart.txt"),
+      false,
+    );
+    {
+      const database = new DatabaseSync(databasePath);
+      const stored = database
+        .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+        .get("attachment", attachment.id) as { data: string };
+      assert.match(stored.data, /queuedLocator/);
+      database.close();
+    }
     engine.emit(0, {
       type: "input.accepted",
       evidence: { source: "engine", evidenceId: "queue-restart-A-accepted" },
@@ -674,6 +702,124 @@ test("Runtime restart holds queued text until original reconciliation, native re
     await until(() => engine.runs.length === 2);
     assert.equal(engine.runs[1]?.input, "B");
     assert.equal(engine.runs[1]?.commandId, queuedId);
+    assert.deepEqual(engine.runs[1]?.attachments, [
+      { ...attachment, locator: "/private/restart.txt" },
+    ]);
+    {
+      const database = new DatabaseSync(databasePath);
+      const stored = database
+        .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+        .get("attachment", attachment.id) as { data: string };
+      assert.equal(stored.data.includes("/private/restart.txt"), false);
+      database.close();
+    }
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("expired queued attachment is rejected before native promotion", async () => {
+  const engine = new ManualEngine();
+  let now = 0;
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/expired.txt",
+      fileName: "expired.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "expired queued file",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    now = 10 * 60 * 1_000;
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "expiry-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "expiry-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "expiry-A-completed" },
+    });
+    await until(
+      () =>
+        runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status ===
+        "rejected",
+    );
+    assert.equal(engine.runs.length, 1);
+    assert.match(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.error ?? "",
+      /queued attachment reference is unavailable/i,
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("cancelling queued attachment removes its stored dispatch locator", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-queue-cancel-attachment-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/cancel.txt",
+      fileName: "cancel.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "cancel queued file",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    assert.equal(
+      runtime.cancelQueuedInput({ ...identity, inputId: queued.id }).status,
+      "cancelled",
+    );
+    const database = new DatabaseSync(databasePath);
+    const stored = database
+      .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+      .get("attachment", attachment.id) as { data: string };
+    assert.equal(stored.data.includes("/private/cancel.txt"), false);
+    database.close();
+    assert.equal(engine.runs.length, 1);
   } finally {
     runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -1272,13 +1418,14 @@ test("an unknown queued dispatch blocks later Inputs without resending the comma
   }
 });
 
-test("Runtime rejects busy queued attachments and records queue cancellation", async () => {
+test("Runtime stages busy queued attachments, dispatches them once, and records queue cancellation", async () => {
   const engine = new ManualEngine();
   let now = 0;
   const runtime = createTaskRuntime({
     databasePath: ":memory:",
     engines: new Map([["manual", engine]]),
     now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
   });
   try {
     const task = await runtime.createTask({
@@ -1293,22 +1440,21 @@ test("Runtime rejects busy queued attachments and records queue cancellation", a
       authorizationId: task.authorizationId,
     };
     await runtime.submitInput({ ...identity, text: "A" });
-    await assert.rejects(
-      runtime.submitInput({
-        ...identity,
-        text: "queued with file",
-        delivery: "queue",
-        attachments: [
-          { id: "attachment-1", fileName: "note.txt", mimeType: "text/plain", sizeBytes: 4 },
-        ],
-      }),
-      /support text only/i,
-    );
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/note.txt",
+      fileName: "note.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const withFile = await runtime.submitInput({
+      ...identity,
+      text: "queued with file",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    assert.equal(withFile.status, "queued");
     const queued = await runtime.submitInput({ ...identity, text: "cancel me", delivery: "queue" });
-    now = 10;
-    const cancelled = runtime.cancelQueuedInput({ ...identity, inputId: queued.id });
-    assert.equal(cancelled.status, "cancelled");
-    assert.equal(cancelled.error, "Cancelled before native dispatch.");
     assert.equal(engine.runs.length, 1);
     engine.emit(0, {
       type: "input.accepted",
@@ -1322,12 +1468,19 @@ test("Runtime rejects busy queued attachments and records queue cancellation", a
       type: "execution.completed",
       evidence: { source: "engine", evidenceId: "A-completed" },
     });
-    await until(
-      () =>
-        runtime.getHistory(task.id)!.inputs.find((input) => input.id === queued.id)?.status ===
-        "cancelled",
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.commandId, withFile.id);
+    assert.deepEqual(engine.runs[1]?.attachments, [
+      { ...attachment, locator: "/private/note.txt" },
+    ]);
+    now = 10;
+    const cancelled = runtime.cancelQueuedInput({ ...identity, inputId: queued.id });
+    assert.equal(cancelled.status, "cancelled");
+    assert.equal(cancelled.error, "Cancelled before native dispatch.");
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "cancelled",
     );
-    assert.equal(engine.runs.length, 1);
     assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
   } finally {
     runtime.close();

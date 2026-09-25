@@ -222,7 +222,12 @@ test("EngineConversation sends through the product composer and renders ordered 
     executionId: string;
     attachments?: Array<Record<string, unknown>>;
   }> = [];
-  const queuedRequests: Array<{ text: string; delivery: string; idempotencyKey: string }> = [];
+  const queuedRequests: Array<{
+    text: string;
+    delivery: string;
+    idempotencyKey: string;
+    attachments?: Array<Record<string, unknown>>;
+  }> = [];
   const stagedAttachmentRequests: Array<Record<string, unknown>> = [];
   const selectedLocalPaths = ["/tmp/anyagent-ui/src/two.ts"];
   const replies: Array<{ approvalId: string; optionId: string }> = [];
@@ -284,17 +289,19 @@ test("EngineConversation sends through the product composer and renders ordered 
       if (submittedTaskId !== taskId) throw new Error(`Unexpected task ${submittedTaskId}`);
       if (delivery === "queue") {
         assert.ok(idempotencyKey, "a queued request needs a stable retry identity");
-        queuedRequests.push({ text, delivery, idempotencyKey });
+        queuedRequests.push({ text, delivery, idempotencyKey, attachments });
+        const queueInputId = attachments?.length ? "input-queued-file" : "input-queued-test";
         history = {
           ...history,
           inputs: [
             ...history.inputs,
             {
-              id: "input-queued-test",
+              id: queueInputId,
               taskId,
               participantId,
               sessionId,
               text,
+              ...(attachments?.length ? { attachments } : {}),
               status: "queued",
               receivedAt: 1_001,
               acceptedAt: null,
@@ -852,6 +859,61 @@ test("EngineConversation sends through the product composer and renders ordered 
       null,
       "cancelled pre-dispatch Input should not become a user message",
     );
+    const currentAttachmentTrigger = () =>
+      container
+        .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
+        ?.closest("button") as HTMLButtonElement | null;
+    await waitFor(() =>
+      assert.equal(
+        currentAttachmentTrigger()?.disabled,
+        false,
+        "busy Composer context action is available after queue cancellation settles",
+      ),
+    );
+    const queueAttachmentTrigger = currentAttachmentTrigger()!;
+    await act(async () => queueAttachmentTrigger.click());
+    await waitFor(() =>
+      assert.ok(document.querySelector('[data-testid="engine-composer-attachment-menu-item"]')),
+    );
+    const queuedAttachmentOption = document
+      .querySelector<HTMLElement>('[data-testid="engine-composer-attachment-menu-item"]')
+      ?.closest<HTMLElement>('[role="option"]');
+    assert.ok(queuedAttachmentOption);
+    await act(async () =>
+      queuedAttachmentOption.dispatchEvent(
+        new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }),
+      ),
+    );
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="engine-composer-attachment-0"]')),
+    );
+    await act(async () => queueDraft.__zcodeLexicalInputE2E.setText("Queued with file"));
+    assert.equal(composerSubmit()?.disabled, false, "busy attachment may enter the product queue");
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(queuedRequests.length, 3));
+    assert.equal(queuedRequests[2]?.delivery, "queue");
+    assert.deepEqual(queuedRequests[2]?.attachments, [
+      {
+        id: "runtime-attachment-3",
+        fileName: "two.ts",
+        mimeType: "application/octet-stream",
+        sizeBytes: 12,
+      },
+    ]);
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="v4-queue-item-delete-input-queued-file"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-delete-input-queued-file"]')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(
+        container.querySelector('[data-testid="v4-queue-item-delete-input-queued-file"]'),
+        null,
+      ),
+    );
     assert.equal(container.querySelector(".chat-composer-region"), composer);
     assert.equal(
       container.querySelector('[data-testid="chat-model-select-trigger"]'),
@@ -872,8 +934,8 @@ test("EngineConversation sends through the product composer and renders ordered 
       container
         .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
         ?.closest("button")?.disabled,
-      true,
-      "the native + action should be disabled while the Host is handling the submission",
+      false,
+      "the native + action accepts a queued attachment while the earlier turn runs",
     );
     permissionModeTrigger.click();
     thoughtLevelTrigger.click();
@@ -883,7 +945,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       container
         .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
         ?.closest("button")?.disabled,
-      true,
+      false,
     );
     await waitFor(
       () => assert.equal(reportedTitle, structuredMentionPrompt),
@@ -1049,7 +1111,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       JSON.parse(
         dom.window.localStorage.getItem("zcode-chat-prompt-history:/tmp/anyagent-ui") ?? "[]",
       ),
-      [structuredMentionPrompt, "Queued while running"],
+      [structuredMentionPrompt, "Queued while running", "Queued with file"],
       "accepted direct and queued inputs should reuse the existing workspace prompt history",
     );
     const historyInput = document.querySelector('[data-testid="engine-composer-input"]') as
@@ -1058,6 +1120,12 @@ test("EngineConversation sends through the product composer and renders ordered 
         })
       | null;
     assert.ok(historyInput);
+    await act(async () => {
+      historyInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    assert.equal(historyInput.__zcodeLexicalInputE2E.getText(), "Queued with file");
     await act(async () => {
       historyInput.dispatchEvent(
         new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),

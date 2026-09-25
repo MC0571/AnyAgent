@@ -834,8 +834,8 @@ export function EngineConversation({
       ).success)
       ? "无法核实分叉 Session 继承的模型配置。"
       : null) ??
-    (shouldQueue && (currentAttachments.length > 0 || webElementContexts.length > 0)
-      ? "当前轮次未结束，上下文不能安全排队；请等待后发送。"
+    (shouldQueue && webElementContexts.length > 0
+      ? "当前轮次未结束，网页上下文不能安全排队；请等待后发送。"
       : null);
   const approvalBlockedReason = visibleTask
     ? currentTaskBlock(visibleTask, "approval.respond", engines, refreshFailed)
@@ -2900,18 +2900,16 @@ export function EngineConversation({
                   attachmentAction={platform.canSelectFilePath ? attachmentAction : undefined}
                   showMentionButton={isZCodeHarness}
                   fileReferencesOnly={isZCodeHarness}
-                  actionMenuDisabled={shouldQueue || !!runBlockedReason || busyAction !== null}
+                  actionMenuDisabled={!!runBlockedReason || busyAction !== null}
                   actionMenuDisabledReason={
                     runBlockedReason ??
                     (busyAction !== null
                       ? "操作正在处理中。"
-                      : shouldQueue
-                        ? "附件不能排队；请等待当前轮次完成后发送。"
-                        : intl.formatMessage({
-                            id: platform.canSelectFilePath
-                              ? "engine.composer.textOnly"
-                              : "engine.composer.attachmentLocalPathRequired",
-                          }))
+                      : intl.formatMessage({
+                          id: platform.canSelectFilePath
+                            ? "engine.composer.textOnly"
+                            : "engine.composer.attachmentLocalPathRequired",
+                        }))
                   }
                   leadingActions={
                     <ConfigSelect
