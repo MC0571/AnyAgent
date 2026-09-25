@@ -1064,7 +1064,7 @@ test("ZCode unknown compaction ACK is recorded as unknown and never resent", asy
   }
 });
 
-test("ZCode keeps compaction terminal outcomes distinct and rejects busy Sessions", async () => {
+test("ZCode queues plain compaction while a native turn is active and keeps terminal outcomes distinct", async () => {
   const fixture = harness();
   try {
     const session = await fixture.adapter.createSession();
@@ -1099,13 +1099,47 @@ test("ZCode keeps compaction terminal outcomes distinct and rejects busy Session
   const busyFixture = harness({ nativeActiveTurnId: "active-turn" });
   try {
     const session = await busyFixture.adapter.createSession();
-    await assert.rejects(
-      busyFixture.adapter.compactSession!({ session, commandId: "compact-busy" }),
-      /queued promotion is not integrated/i,
+    const pending = busyFixture.adapter.compactSession!({
+      session,
+      commandId: "compact-busy",
+    });
+    await waitUntil(
+      () => busyFixture.commands.some((entry) => entry.type === "compact"),
+      "plain compact should be admitted to the native busy queue",
     );
-    assert.equal(busyFixture.commands.filter((entry) => entry.type === "compact").length, 0);
+    assert.deepEqual(
+      busyFixture.commands.find((entry) => entry.type === "compact")?.payload,
+      {},
+      "busy queue admission must use the native plain compact command",
+    );
+    busyFixture.rows.push({
+      rowId: 1,
+      kind: "timelineMarker",
+      sourceCommandId: "compact-busy",
+      marker: { type: "compact", status: "success" },
+    });
+    busyFixture.emit({ type: "session.event", event: { sessionId: "native-session", seq: 1 } });
+    const receipt = await pending;
+    assert.equal(receipt.status, "completed");
+    assert.equal(busyFixture.commands.filter((entry) => entry.type === "compact").length, 1);
   } finally {
     busyFixture.adapter.dispose();
+  }
+
+  const instructionBusy = harness({ nativeActiveTurnId: "active-turn" });
+  try {
+    const session = await instructionBusy.adapter.createSession();
+    await assert.rejects(
+      instructionBusy.adapter.compactSession!({
+        session,
+        commandId: "compact-instructions-busy",
+        instructions: "preserve constraints",
+      }),
+      /instruction-based compaction cannot be queued/i,
+    );
+    assert.equal(instructionBusy.nativeCompactCalls.length, 0);
+  } finally {
+    instructionBusy.adapter.dispose();
   }
 });
 

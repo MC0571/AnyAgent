@@ -260,7 +260,7 @@ const QueueRow = memo(function QueueRow({
           </Button>
         </ControlHintTooltip>
       ) : null}
-      {onDeleteItem ? (
+      {onDeleteItem && !isCompact ? (
         <ControlHintTooltip title={intl.formatMessage({ id: "chat.queue.remove" })}>
           <Button
             type="button"

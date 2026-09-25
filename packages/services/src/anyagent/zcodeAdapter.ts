@@ -1892,6 +1892,7 @@ export function createZCodeAdapter(options: {
       beforeDispatch,
       onAccepted,
     }): Promise<EngineCompactReceipt> {
+      const summaryInstructions = instructions?.trim();
       if (!sessions.has(session))
         throw operationError(
           "session.compact",
@@ -1899,10 +1900,10 @@ export function createZCodeAdapter(options: {
           "protocol-error",
           "none",
         );
-      if (runs.has(session) || compactOperations.has(session))
+      if ((runs.has(session) && summaryInstructions) || compactOperations.has(session))
         throw operationError(
           "session.compact",
-          "Cannot compact a busy Session; queued promotion is not integrated.",
+          "Instruction-based compaction cannot run while the Session is busy.",
           "temporarily-unavailable",
           "none",
         );
@@ -1992,14 +1993,15 @@ export function createZCodeAdapter(options: {
         );
       }
       if (
-        nativeState.runtime.activeTurnId ||
-        nativeState.runtime.pendingRequestIds.length > 0 ||
-        (nativeState.session.status !== "idle" && nativeState.session.status !== "completed")
+        summaryInstructions &&
+        (nativeState.runtime.activeTurnId ||
+          nativeState.runtime.pendingRequestIds.length > 0 ||
+          (nativeState.session.status !== "idle" && nativeState.session.status !== "completed"))
       ) {
         abandon();
         throw operationError(
           "session.compact",
-          "Native Session is busy or held; queued promotion is not integrated.",
+          "Native Session is busy or held; instruction-based compaction cannot be queued.",
           "temporarily-unavailable",
           "none",
         );
@@ -2012,20 +2014,22 @@ export function createZCodeAdapter(options: {
           sessionId: session,
         });
         if (
-          dispatchState.runtime.activeTurnId ||
-          dispatchState.runtime.pendingRequestIds.length > 0 ||
-          (dispatchState.session.status !== "idle" && dispatchState.session.status !== "completed")
+          summaryInstructions &&
+          (dispatchState.runtime.activeTurnId ||
+            dispatchState.runtime.pendingRequestIds.length > 0 ||
+            (dispatchState.session.status !== "idle" &&
+              dispatchState.session.status !== "completed"))
         )
           throw operationError(
             "session.compact",
-            "Session became busy before native dispatch; queued promotion is not integrated.",
+            "Session became busy before dispatch; instruction-based compaction cannot be queued.",
             "temporarily-unavailable",
             "none",
           );
-        if (runs.has(session))
+        if (runs.has(session) && summaryInstructions)
           throw operationError(
             "session.compact",
-            "Session became busy before native dispatch; queued promotion is not integrated.",
+            "Session became busy before dispatch; instruction-based compaction cannot be queued.",
             "temporarily-unavailable",
             "none",
           );
@@ -2035,7 +2039,6 @@ export function createZCodeAdapter(options: {
         throw error;
       }
 
-      const summaryInstructions = instructions?.trim();
       if (summaryInstructions) {
         const sent = options.agent
           .compactSession({

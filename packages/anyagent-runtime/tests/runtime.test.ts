@@ -698,6 +698,13 @@ test("Runtime restart holds queued attachment until original reconciliation, nat
       1,
       "restoring the native Session cannot auto-dispatch queued work",
     );
+    const compact = await runtime.compactSession(identity);
+    assert.equal(compact.status, "queued");
+    assert.ok(
+      compact.queuePosition! >
+        runtime.getHistory(taskId)!.inputs.find((input) => input.id === queuedId)!.queuePosition!,
+      "a compact created while the restored queue is held follows the queued Input",
+    );
     await runtime.resumeQueuedInputs(identity);
     await until(() => engine.runs.length === 2);
     assert.equal(engine.runs[1]?.input, "B");
@@ -705,6 +712,24 @@ test("Runtime restart holds queued attachment until original reconciliation, nat
     assert.deepEqual(engine.runs[1]?.attachments, [
       { ...attachment, locator: "/private/restart.txt" },
     ]);
+    engine.emit(1, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "queue-restart-B-accepted" },
+    });
+    engine.emit(1, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "queue-restart-B-started" },
+    });
+    engine.emit(1, {
+      type: "execution.completed",
+      result: "B done",
+      evidence: { source: "engine", evidenceId: "queue-restart-B-completed" },
+    });
+    await until(() => engine.compactCalls.length === 1);
+    await until(() => runtime.getHistory(taskId)!.compactOperations[0]?.status === "completed");
+    assert.equal(runtime.getHistory(taskId)!.inputs.length, 2);
+    assert.equal(runtime.getHistory(taskId)!.executions.length, 2);
+    assert.equal(engine.compactCalls[0]?.commandId, compact.id);
     {
       const database = new DatabaseSync(databasePath);
       const stored = database
@@ -2077,6 +2102,266 @@ test("Session compaction requires Task ownership and scope, records native termi
     assert.equal(engine.compactCalls[0]?.commandId, history.compactOperations[0]?.id);
     assert.equal(engine.compactCalls[0]?.instructions, "Keep decisions and open questions");
     assert.equal("instructions" in history.compactOperations[0]!, false);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Session compaction stays between the active Input and later queued Inputs", async () => {
+  const engine = new ManualEngine();
+  let finishCompaction!: (receipt: EngineCompactReceipt) => void;
+  engine.compactHandler = () =>
+    new Promise((resolve) => {
+      finishCompaction = resolve;
+    });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "active A" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "compact-order-A-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+
+    const compact = await runtime.compactSession(identity);
+    assert.equal(compact.status, "accepted");
+    assert.equal(engine.compactCalls.length, 1);
+    const later = await runtime.submitInput({ ...identity, text: "later B", delivery: "queue" });
+    assert.equal(later.status, "queued");
+    assert.ok(compact.queuePosition !== undefined);
+    assert.ok((later.queuePosition ?? -1) > compact.queuePosition);
+    assert.equal(runtime.getHistory(task.id)?.inputs.length, 2);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
+
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "compact-order-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "A done",
+      evidence: { source: "engine", evidenceId: "compact-order-A-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(engine.runs.length, 1, "B must wait while the earlier compaction is unresolved");
+    assert.equal(runtime.getHistory(task.id)?.inputs[1]?.status, "queued");
+
+    finishCompaction({
+      status: "completed",
+      evidence: { source: "engine", evidenceId: "compact-order-native-terminal" },
+    });
+    await until(() => runtime.getHistory(task.id)!.compactOperations[0]!.status === "completed");
+    await until(() => engine.runs.length === 2);
+    assert.equal(runtime.getHistory(task.id)?.inputs.length, 2);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
+
+    engine.emit(1, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "compact-order-B-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 2);
+    engine.emit(1, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "compact-order-B-started" },
+    });
+    engine.emit(1, {
+      type: "execution.completed",
+      result: "B done",
+      evidence: { source: "engine", evidenceId: "compact-order-B-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[1]!.status === "completed");
+    assert.equal(engine.compactCalls.length, 1, "a queued compaction is never resent");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("queued Inputs, plain compaction, and later Inputs keep their order and recheck eligibility", async () => {
+  const engine = new ManualEngine();
+  let finishCompaction!: (receipt: EngineCompactReceipt) => void;
+  engine.compactHandler = () =>
+    new Promise((resolve) => {
+      finishCompaction = resolve;
+    });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "active A" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "compact-fifo-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "compact-fifo-A-started" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
+
+    const earlier = await runtime.submitInput({
+      ...identity,
+      text: "earlier B",
+      delivery: "queue",
+    });
+    const compact = await runtime.compactSession(identity);
+    const later = await runtime.submitInput({ ...identity, text: "later C", delivery: "queue" });
+    assert.equal(earlier.status, "queued");
+    assert.equal(compact.status, "queued");
+    assert.equal(later.status, "queued");
+    assert.ok(earlier.queuePosition! < compact.queuePosition!);
+    assert.ok(compact.queuePosition! < later.queuePosition!);
+    assert.equal(engine.compactCalls.length, 0, "compaction waits behind the earlier queued Input");
+    assert.equal(runtime.getHistory(task.id)?.inputs.length, 3);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
+
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "A done",
+      evidence: { source: "engine", evidenceId: "compact-fifo-A-completed" },
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.input, "earlier B");
+    assert.equal(engine.compactCalls.length, 0);
+
+    engine.emit(1, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "compact-fifo-B-accepted" },
+    });
+    engine.emit(1, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "compact-fifo-B-started" },
+    });
+    engine.emit(1, {
+      type: "execution.completed",
+      result: "B done",
+      evidence: { source: "engine", evidenceId: "compact-fifo-B-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[1]?.status === "completed");
+    await until(() => engine.compactCalls.length === 1);
+    assert.equal(engine.compactCalls[0]?.commandId, compact.id);
+    assert.equal(engine.runs.length, 2, "later C waits for native compaction terminal evidence");
+
+    finishCompaction({
+      status: "completed",
+      evidence: { source: "engine", evidenceId: "compact-fifo-native-terminal" },
+    });
+    await until(() => runtime.getHistory(task.id)!.compactOperations[0]?.status === "completed");
+    await until(() => engine.runs.length === 3);
+    assert.equal(engine.runs[2]?.input, "later C");
+    assert.equal(engine.compactCalls.length, 1, "compaction is never resent during queue recovery");
+    assert.equal(runtime.getHistory(task.id)?.inputs.length, 3);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 2);
+    engine.emit(2, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "compact-fifo-C-accepted" },
+    });
+    engine.emit(2, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "compact-fifo-C-started" },
+    });
+    engine.emit(2, {
+      type: "execution.completed",
+      result: "C done",
+      evidence: { source: "engine", evidenceId: "compact-fifo-C-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[2]?.status === "completed");
+    assert.equal(runtime.getHistory(task.id)?.inputs.length, 3);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 3);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("queued compaction rechecks authorization before promotion", async () => {
+  const engine = new ManualEngine();
+  let now = 0;
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+  });
+  try {
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: { ...authorization, id: "compact-queue-expiring-grant", expiresAt: 100 },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "active A" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "compact-expiry-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "compact-expiry-A-started" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
+
+    const earlier = await runtime.submitInput({
+      ...identity,
+      text: "earlier B",
+      delivery: "queue",
+    });
+    const compact = await runtime.compactSession(identity);
+    const later = await runtime.submitInput({ ...identity, text: "later C", delivery: "queue" });
+    assert.equal(compact.status, "queued");
+    assert.ok(earlier.queuePosition! < compact.queuePosition!);
+    assert.ok(compact.queuePosition! < later.queuePosition!);
+
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "A done",
+      evidence: { source: "engine", evidenceId: "compact-expiry-A-completed" },
+    });
+    await until(() => engine.runs.length === 2);
+    engine.emit(1, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "compact-expiry-B-accepted" },
+    });
+    engine.emit(1, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "compact-expiry-B-started" },
+    });
+    now = 101;
+    engine.emit(1, {
+      type: "execution.completed",
+      result: "B done",
+      evidence: { source: "engine", evidenceId: "compact-expiry-B-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.compactOperations[0]?.status === "failed");
+    await until(() => runtime.getHistory(task.id)!.inputs[2]?.status === "rejected");
+    assert.match(runtime.getHistory(task.id)!.compactOperations[0]!.reason ?? "", /expired/i);
+    assert.equal(engine.compactCalls.length, 0, "expired authorization prevents native compaction");
+    assert.equal(
+      engine.runs.length,
+      2,
+      "later queued Input is not dispatched with expired authorization",
+    );
   } finally {
     runtime.close();
   }
