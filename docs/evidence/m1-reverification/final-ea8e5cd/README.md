@@ -21,6 +21,12 @@
 
 隔离窗口实际显示了断线未知提示、对账按钮、原工具／文件摘要和后续回答；本次没有保存可交付的窗口截图或录屏，因此这些视觉事实仅为操作观察，最终 RC 的视觉证据仍需补齐。自动化 DOM 证明未知状态不显示已失败文案，双 SQLite 与真实文件证明同一原执行对账及该副作用未重复。此场景丢失的是**原生持久终态已形成后的通知帧**，CLI 随即被隔离代理关闭；它不证明“原生执行仍在运行时连接断开并继续执行”的真实 CLI 路径。该路径保持待验证，不能据此将 #21 或 Milestone #2 的所有断线要求标为通过。
 
+## 运行中 Renderer 重载增量
+
+[同一真实 CLI 轮次的脱敏交叉核对](renderer-reload-crosscheck.json)对应同一被测产品提交 `ea8e5cdd31a549a87934e5b7759eea9c428d82be`、同一隔离 App／Task／Session。正式 Composer 发送 `M2_RUNNING_RELOAD_925`，仅允许一次 Write 创建 `m2-running-reload.txt`，要求模型随后继续较长回答；在该 Execution 仍为 `started` 且文件已存在时，按 `⌘R` 重载 Renderer。重载前记录 65 个 `message.delta`，重载后原 Execution 仍为 `started`、事件增至 143 个，最终同一 Execution 以 169 个 delta 和一次 `execution.completed` 结束；窗口实际显示最终标记 `RUNNING_RELOAD_DONE_925` 和一份文件摘要。原生持久记录只有一条该 Input 的 `sendText`、一条 completed Write part 和一条 success terminal；实际文件为 `RUNNING_RELOAD_925\n`，哈希见 JSON，未观察到自动重发。
+
+此增量证明 **Renderer 与仍在运行的 Host 重连** 时，Host 继续接收真实 CLI 事件并将最终结果归入原 Execution。Host 与 CLI 的 stdio 连接在测试中始终有效，产品没有进入 unknown 或触发对账，因此它不替代“执行中观测中断后的 unknown／reconciliation”证据。本次窗口观察亦未保存可交付截图／录屏。
+
 ## 本候选本机检查
 
 无适用远端 CI；以下均为本机可复现检查：`pnpm --dir packages/anyagent-engine test` 9/9、`pnpm --dir packages/anyagent-runtime test` 73/73、三个 Service／Adapter／附件测试文件 83/83、`NODE_OPTIONS=--max-old-space-size=1024 pnpm --dir packages/ui test` 34/34、两个 bootstrap 原生映射测试文件 5/5、`node --test scripts/dev/zcode-stdio-terminal-drop.test.mjs` 4/4；`pnpm typecheck`、`pnpm lint`（0 error、65 条既有 warning）、`pnpm architecture:check -- --changed`（0 violation）、`pnpm build:bootstrap`、`bash docs/decisions/generate-index.sh --check`、受改文件 `oxfmt --check` 与 `git diff --check` 均通过。UI 测试仍输出既有 React `act` 告警。

@@ -1,0 +1,64 @@
+{
+  "testedProductCommit": "ea8e5cdd31a549a87934e5b7759eea9c428d82be",
+  "scenario": "Renderer hot reload during a real running native turn; Host and CLI remained connected",
+  "product": {
+    "taskId": "task_bbdc630b-0999-44f9-9e3f-b6b993d86b72",
+    "participantId": "participant_93ed9df4-5bcd-4ebd-b5fe-48f6e545e86b",
+    "sessionId": "session_38820f5a-f931-4ff5-8f27-03fe51fcc3b8",
+    "nativeSessionId": "sess_4b6cc5d1-c734-4e80-88de-1c74d6165eed",
+    "inputId": "input_230a23f3-a1be-4da4-abdf-e10f54271156",
+    "executionId": "execution_2c500670-7d70-4c9e-b660-5645aa31e343",
+    "inputStatus": "completed",
+    "executionStatus": "completed",
+    "nativeExecutionId": "input_230a23f3-a1be-4da4-abdf-e10f54271156",
+    "resultEndMarker": "RUNNING_RELOAD_DONE_925",
+    "eventTypeCounts": {
+      "approval.requested": 1,
+      "approval.response": 1,
+      "execution.completed": 1,
+      "execution.started": 1,
+      "input.accepted": 1,
+      "message.delta": 169,
+      "tool.completed": 1,
+      "tool.started": 1
+    }
+  },
+  "native": {
+    "entriesForInput": [
+      {
+        "id": "native-turn-started:turn_482d2cf9-891d-4266-a2a5-6dc7e80262af",
+        "type": "runtime/native_turn_started",
+        "inputId": "input_230a23f3-a1be-4da4-abdf-e10f54271156",
+        "eventType": null,
+        "resultType": null
+      },
+      {
+        "id": "native-turn-terminal:536d038a-20d7-4584-aa16-292c3eda1f91",
+        "type": "runtime/native_turn_terminal",
+        "inputId": "input_230a23f3-a1be-4da4-abdf-e10f54271156",
+        "eventType": "turn_complete",
+        "resultType": "success"
+      }
+    ],
+    "sessionInputs": [
+      {
+        "id": "queue_input_230a23f3-a1be-4da4-abdf-e10f54271156",
+        "kind": "sendText",
+        "status": "promoted"
+      }
+    ],
+    "matchingWriteToolParts": [
+      {
+        "id": "part_mugx2ggb_78a4f95e-2cf9-40e2-928b-8a4952450652",
+        "tool": "Write",
+        "status": "completed"
+      }
+    ]
+  },
+  "file": {
+    "path": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project/m2-running-reload.txt",
+    "sizeBytes": 19,
+    "sha256": "f4f2a0567fd3f51d63af262408fc493469e54e6d96b44ab7a08f00a8678f8526",
+    "contentUtf8": "RUNNING_RELOAD_925\n"
+  }
+}

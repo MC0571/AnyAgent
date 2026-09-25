@@ -8,6 +8,8 @@
 
 该注入点在**原生终态已持久化后**，不能证明原生执行仍运行时断线并继续运行；本次亦未保存桌面截图／录屏。两项仍属最终 RC 的具体证据缺口。以下较早候选证据仍按其各自提交阅读，不因本增量自动升级为最终验收。
 
+同一代码提交另有[运行中 Renderer 重载的真实 CLI 增量](final-ea8e5cd/README.md#运行中-renderer-重载增量)和[脱敏交叉核对](final-ea8e5cd/renderer-reload-crosscheck.json)：原 Execution 在重载前后保持 `started`，持续接收事件并最终完成；原生 Input／Write 均仅一次。这是 Renderer↔Host 回连，Host↔CLI stdio 未断，不能充作运行中原生断线或 unknown 对账通过；窗口观察尚无可交付截图。
+
 ## 安全重试候选增量（`7074b10f350bb6ceccf4b876496299deb768e7ab`）
 
 本增量基于已合并 PR #30 的 `origin/main` `ee54d6d84a8b3ac139607776740190ac94e34635`。通用 Runtime 现把失败事件的 `sideEffects: possible` 或缺失副作用事实作为安全重试阻断：即使产品事件流没有工具事件，也须取得 Adapter 对原生来源无工具／文件副作用的稳定快照证明，并把证明绑定新尝试 Input；实际派发前仍由 Adapter 再核对原生来源。`known` 和已观察到的工具／文件变更直接拒绝。核验期间 Host 授权撤销时不创建重试 Input，也不派发原生命令。原失败记录与尝试来源保持独立。此处是安全资格修复，不代表真实 CLI 失败轮桌面重试已验收。
