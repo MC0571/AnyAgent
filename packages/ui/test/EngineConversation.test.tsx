@@ -2893,6 +2893,8 @@ test("an active ZCode Harness task switches models within its Session and submit
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
   const goalStatusLookups: Array<Record<string, unknown>> = [];
   const pluginCatalogLookups: Array<Record<string, unknown>> = [];
+  let delayNextPluginCatalogRead = false;
+  let releasePluginCatalogRead: (() => void) | null = null;
   let rejectNextGoalStatusRead: ((error: Error) => void) | null = null;
   let delayNextGoalStatusRead = false;
   const nativeSkillCatalogLookups: Array<Record<string, unknown>> = [];
@@ -3008,6 +3010,12 @@ test("an active ZCode Harness task switches models within its Session and submit
     },
     getTaskPluginCatalog: async (input: Record<string, unknown>) => {
       pluginCatalogLookups.push(input);
+      if (delayNextPluginCatalogRead) {
+        delayNextPluginCatalogRead = false;
+        await new Promise<void>((resolve) => {
+          releasePluginCatalogRead = resolve;
+        });
+      }
       return {
         plugins: [
           {
@@ -3562,6 +3570,37 @@ test("an active ZCode Harness task switches models within its Session and submit
     );
     await waitFor(() =>
       assert.ok(container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]')),
+    );
+    input = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as typeof input;
+
+    delayNextPluginCatalogRead = true;
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/plugins list"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(pluginCatalogLookups.length, 2));
+    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    await waitFor(() =>
+      assert.ok(container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]')),
+    );
+    input = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as typeof input;
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("B_READY_WHILE_A_PLUGINS_PENDING"));
+    await waitFor(() =>
+      assert.equal(
+        container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+          ?.disabled,
+        false,
+      ),
+    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText(""));
+    await act(async () => releasePluginCatalogRead?.());
+    await act(async () => root.render(appFor(taskId)));
+    assert.equal(
+      document.body.querySelector('[data-testid="engine-cli-plugins"]'),
+      null,
+      "a slow plugin catalog result from A must not reopen after A→B→A",
     );
     input = container.querySelector<HTMLElement>(
       '[data-testid="engine-composer-input"]',

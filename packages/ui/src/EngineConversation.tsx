@@ -628,7 +628,9 @@ export function EngineConversation({
 
   useEffect(() => {
     setBusyAction((current) =>
-      current?.startsWith("goal-show:") && !current.startsWith(`goal-show:${selectedTaskId}:`)
+      (current?.startsWith("goal-show:") || current?.startsWith("plugins-list:")) &&
+      !current.startsWith(`goal-show:${selectedTaskId}:`) &&
+      !current.startsWith(`plugins-list:${selectedTaskId}:`)
         ? null
         : current,
     );
