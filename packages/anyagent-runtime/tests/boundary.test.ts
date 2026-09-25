@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { dirname, extname, relative, resolve, sep } from "node:path";
+import { isBuiltin } from "node:module";
+import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import ts from "typescript";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-const repositoryRoot = resolve(packageRoot, "../..");
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -44,13 +44,34 @@ function sourceImports(filePath: string): string[] {
   return modules;
 }
 
-function resolvesInside(path: string, forbiddenRoot: string): boolean {
-  const pathFromRoot = relative(repositoryRoot, path);
+function isAllowedImport(filePath: string, specifier: string): boolean {
+  if (!specifier.startsWith(".")) {
+    return isBuiltin(specifier) || specifier === "@anyagent/engine-contract";
+  }
+  const pathFromPackage = relative(packageRoot, resolve(dirname(filePath), specifier));
   return (
-    pathFromRoot === forbiddenRoot ||
-    pathFromRoot.startsWith(`${forbiddenRoot}${sep}`)
+    pathFromPackage !== ".." &&
+    !pathFromPackage.startsWith(`..${sep}`) &&
+    !isAbsolute(pathFromPackage)
   );
 }
+
+test("Runtime import boundary rejects other packages and every package escape", () => {
+  const source = resolve(packageRoot, "src/index.ts");
+  for (const specifier of [
+    "typescript",
+    "@zcode/shared",
+    "@vendor/agent-sdk",
+    "../../anyagent-engine/src/index.js",
+    "../../services/src/anyagent/createAnyAgentService.js",
+    "../../../scripts/architecture/architecture-check.mjs",
+  ]) {
+    assert.equal(isAllowedImport(source, specifier), false, specifier);
+  }
+  for (const specifier of ["./types.js", "node:fs", "fs", "@anyagent/engine-contract"]) {
+    assert.equal(isAllowedImport(source, specifier), true, specifier);
+  }
+});
 
 test("Runtime production dependencies contain only Engine Contract", () => {
   const manifest = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")) as {
@@ -64,23 +85,8 @@ test("Runtime source imports stay within its allowed package boundary", () => {
   const imports = sourceFiles(sourceRoot).flatMap((filePath) =>
     sourceImports(filePath).map((specifier) => ({ filePath, specifier })),
   );
-  const violations = imports.filter(({ filePath, specifier }) => {
-    if (
-      specifier.startsWith("@zcode/") ||
-      specifier === "packages/services" ||
-      specifier.startsWith("packages/services/") ||
-      specifier === "packages/desktop" ||
-      specifier.startsWith("packages/desktop/") ||
-      specifier.startsWith("apps/")
-    )
-      return true;
-    if (!specifier.startsWith(".")) return false;
-    const importedPath = resolve(dirname(filePath), specifier);
-    return (
-      resolvesInside(importedPath, "apps") ||
-      resolvesInside(importedPath, "packages/services") ||
-      resolvesInside(importedPath, "packages/desktop")
-    );
-  });
+  const violations = imports.filter(
+    ({ filePath, specifier }) => !isAllowedImport(filePath, specifier),
+  );
   assert.deepEqual(violations, []);
 });
