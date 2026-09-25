@@ -1155,6 +1155,8 @@ export const zcodeSessionResumedEventPayloadSchema = z
     recoveredCompactTimelineCount: z.number().int().nonnegative().optional(),
     recoveredSteerInputCount: z.number().int().nonnegative().optional(),
     resumedTodoCount: z.number().int().nonnegative().optional(),
+    // This is the CLI's durable GoalStatus, not the v4 UI projection status.
+    resumedTarget: z.enum(["active", "paused", "budget_limited", "complete"]).optional(),
   })
   .strict();
 export const zcodeSessionTitleUpdatedEventPayloadSchema = z

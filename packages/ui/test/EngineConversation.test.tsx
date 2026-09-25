@@ -3518,11 +3518,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       input.__zcodeLexicalInputE2E!.setText("/goal");
     });
     await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.equal(
-      container.querySelector('[data-option-id="slash:goal"]'),
-      null,
-      "the fixed CLI /goal command has no M1 Task-scoped handler and must not appear as selectable",
-    );
+    assert.ok(container.querySelector('[data-option-id="slash:goal"]'));
     await act(async () => input.__zcodeLexicalInputE2E!.setText(""));
 
     for (const command of ["compact", "init", "skill"] as const) {
@@ -3767,7 +3763,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       () =>
         assert.ok(
           document.body.textContent?.includes(
-            "固定 CLI 命令暂不支持：/login、/logout、/expert、/dwf、/fork、/mcp、/resume、/rewind、/goal",
+            "固定 CLI 命令暂不支持：/login、/logout、/expert、/dwf、/fork、/mcp、/resume、/rewind",
           ),
         ),
       "/help should distinguish the fixed M0 catalog from M1-supported commands",
@@ -3775,17 +3771,10 @@ test("an active ZCode Harness task switches models within its Session and submit
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/goal status"));
     await submitCurrentDraft();
-    assert.equal(submissions.length, 0, "unmapped native /goal must not become an ordinary prompt");
-    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/goal status");
-    await waitFor(
-      () =>
-        assert.ok(
-          document.body.textContent?.includes(
-            "M1 当前仅支持只读 /goal 查询；目标变更和续跑尚无安全的 Task 级派发路径。",
-          ),
-        ),
-      "a fixed but unmapped M0 command should explain the missing Task-scoped operation",
-    );
+    await waitFor(() => assert.equal(submissions.length, 1));
+    assert.equal(submissions[0]?.text, "/goal status");
+    assert.equal((submissions[0]?.submissionConfig as { control?: string })?.control, "goal");
+    submissions.pop();
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/goal"));
     await submitCurrentDraft();
     await waitFor(() => assert.equal(goalStatusLookups.length, 1));
@@ -3885,7 +3874,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       ["/plugin enable sample", "目前仅接通 /plugins list 和 /plugins status"],
       ["/continue", "M0 CLI Session ID 不能安全地映射并授权"],
       ["/rewind latest", "M0 恢复工作区检查点；M1 只支持绑定到指定产品 Execution"],
-      ["/target pause", "M1 当前仅支持只读 /goal 查询"],
+      ["/target pause", "Goal 暂停与续跑尚无 Task 级控制路径"],
     ] as const;
     for (const [command, reason] of unsupportedNativeCommands) {
       await act(async () => input.__zcodeLexicalInputE2E!.setText(command));

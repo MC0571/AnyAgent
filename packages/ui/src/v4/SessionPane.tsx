@@ -3051,6 +3051,15 @@ export function SessionPane({
     async (text: string, options?: ConversationComposerSendOptions) => {
       if (!harnessService || !selectedHarnessId)
         throw new Error("Harness 服务或选择已失效，请重新选择。");
+      const goalMatch =
+        selectedHarnessId === "zcode"
+          ? /^\/(?:goal|target)(?:\s+([\s\S]*))?$/u.exec(text.trim())
+          : null;
+      const goalObjective = goalMatch?.[1]?.trim();
+      if (goalMatch && (!goalObjective || /^(?:pause|resume)$/iu.test(goalObjective)))
+        throw new Error("新 Task 的 Goal 输入需要明确目标；暂停、续跑和状态查询需要已有 Session。");
+      if (goalMatch && (options?.attachments?.length || options?.submission?.planEnabled))
+        throw new Error("Goal 目标控制不接受附件或 Plan 模式。");
       if (
         options?.contextAttachmentCount ||
         options?.sharedContextRefs?.length ||
@@ -3067,7 +3076,7 @@ export function SessionPane({
               engineId: selectedHarnessId,
               workspacePath,
               workspaceIdentity,
-          });
+            });
       pendingHarnessTaskRef.current = task;
       const attachments = await Promise.all(
         (options?.attachments ?? []).map((attachment) =>
@@ -3093,6 +3102,7 @@ export function SessionPane({
         ...(selectedHarnessId === "zcode" && options?.submission
           ? {
               submissionConfig: {
+                ...(goalMatch ? { control: "goal" } : {}),
                 mode: options.submission.mode,
                 planEnabled: options.submission.planEnabled,
                 modelSelection: {
