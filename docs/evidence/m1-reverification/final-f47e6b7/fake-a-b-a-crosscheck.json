@@ -1,0 +1,44 @@
+{
+  "productCodeCommit": "f47e6b7679f199d82d2f78fc8534aa417b110367",
+  "environment": "macOS arm64; isolated App home and project /tmp/anyagent-opencode-go.aBEA0z",
+  "engine": "Fake Engine via original Root, task list, Composer and AnyAgent Host/Runtime",
+  "taskA": {
+    "taskId": "task_5241042f-e16b-414e-b83c-ea3654094ca5",
+    "participantId": "participant_14d11c95-12f1-4f23-b279-01c42cf615ae",
+    "sessionId": "session_5f27acc1-c56c-4e0b-bea9-4f66c26a8eb8",
+    "inputs": [
+      {
+        "id": "input_3cd9901b-2be8-40ba-aa98-30e62caeb969",
+        "text": "PR25_F47_FAKE_A_R1: first fake round.",
+        "status": "completed"
+      },
+      {
+        "id": "input_479afcd7-3bb0-49db-ba49-5729a20d1e25",
+        "text": "PR25_F47_FAKE_A_R2: second fake round.",
+        "status": "completed"
+      },
+      {
+        "id": "input_8accdc20-4887-4d9d-babb-2274f223e8f0",
+        "text": "PR25_F47_FAKE_A_R3: third fake round after B.",
+        "status": "completed"
+      }
+    ]
+  },
+  "taskB": {
+    "taskId": "task_388032ae-d3c7-45e3-8a5d-1831302edd09",
+    "participantId": "participant_9920a629-2bd5-4c28-a6e3-5f409c2bd5eb",
+    "sessionId": "session_3b155032-0172-450c-9ee3-96abcb73ccd5",
+    "input": {
+      "id": "input_f155c2d8-35d3-466c-99ed-59179152943b",
+      "text": "PR25_F47_FAKE_B_R1: independent fake task.",
+      "status": "completed"
+    }
+  },
+  "uiObservation": [
+    "Original toolbar created A; first and second rounds displayed original message and Read tool components.",
+    "Cmd+N opened a separate original task; selecting Fake and sending B showed a distinct conversation.",
+    "Original sidebar returned to A; third round appeared after A's first two rounds, with no B message in A.",
+    "Navigating to Automation and returning through the original sidebar preserved A's three rounds."
+  ],
+  "observationLayer": "formal macOS App UI plus selected same-scenario product SQLite; no repository screenshot file"
+}

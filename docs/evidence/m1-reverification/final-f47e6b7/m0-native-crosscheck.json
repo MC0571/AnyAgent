@@ -1,0 +1,27 @@
+{
+  "productCodeCommit": "f47e6b7679f199d82d2f78fc8534aa417b110367",
+  "m1Flag": "0",
+  "environment": "macOS arm64; isolated App home and project /tmp/anyagent-opencode-go.aBEA0z",
+  "nativeCliVersion": "0.16.9",
+  "nativeSessionId": "sess_032c942e-86b7-4f26-a0d6-9740c5e47562",
+  "nativeInputId": "queue_01a0d6ff-d21d-7217-9dcf-d32c6950a89c",
+  "nativeInputStatus": "promoted",
+  "nativeInputDelivery": "startNow",
+  "nativeUserMessageId": "msg_mugif9zk_8a78a8c5-2204-4287-bebe-950fba2c5514",
+  "nativeTurnId": "turn_32163bac-7f0e-475c-ba79-c0941517da63",
+  "sourceCommandId": "01a0d6ff-d21d-7217-9dcf-d32c6950a89c",
+  "modelSelection": {
+    "providerId": "opencode-go-messages",
+    "modelId": "qwen3.8-flash",
+    "reasoningLevel": "xhigh"
+  },
+  "prompt": "PR25_F47_M0: Reply exactly M0_F47_OK.",
+  "nativeAssistantMessageId": "msg_mugif9zv_e38851d0-5bc8-4182-a547-06ccadd5ddeb",
+  "answer": "M0_F47_OK",
+  "uiObservation": [
+    "M1 flag off: original Root, Composer and Provider-only model picker were visible",
+    "original Automation and Provider model settings remained reachable",
+    "same original conversation displayed M0_F47_OK"
+  ],
+  "observationLayer": "formal macOS App UI plus selected same-scenario native SQLite; no repository screenshot file"
+}

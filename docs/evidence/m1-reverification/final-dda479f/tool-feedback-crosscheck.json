@@ -1,0 +1,120 @@
+{
+  "productCodeCommit": "dda479f031212729dfcb289a983161e32686e872",
+  "observationLayer": "formal macOS App UI plus product/native SQLite read-only snapshot after fourth round",
+  "nativeCliVersion": "0.16.9",
+  "modelSelection": {
+    "providerId": "opencode-go-messages",
+    "modelId": "qwen3.8-flash",
+    "options": {
+      "reasoningLevel": "xhigh"
+    }
+  },
+  "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+  "participantId": "participant_afc8d3a1-c3f6-423e-bf6f-d997deac248a",
+  "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+  "nativeSessionId": "sess_18b475fb-0313-4a58-888d-f753f46c695f",
+  "productInputId": "input_55c185fd-a751-4090-9d32-d80a81ed48cd",
+  "productExecutionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+  "productInputStatus": "completed",
+  "productExecutionStatus": "completed",
+  "productResult": "TOOL_READ_DDA_OK",
+  "productEvents": [
+    {
+      "type": "input.accepted",
+      "executionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+      "deliverySequence": 0,
+      "observedAt": 1790311544570
+    },
+    {
+      "type": "execution.started",
+      "executionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+      "deliverySequence": 1,
+      "observedAt": 1790311544570
+    },
+    {
+      "type": "tool.started",
+      "executionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+      "deliverySequence": 2,
+      "observedAt": 1790311550689
+    },
+    {
+      "type": "tool.completed",
+      "executionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+      "deliverySequence": 3,
+      "observedAt": 1790311550713
+    },
+    {
+      "type": "message.delta",
+      "executionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+      "deliverySequence": 4,
+      "observedAt": 1790311553429
+    },
+    {
+      "type": "message.delta",
+      "executionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+      "deliverySequence": 5,
+      "observedAt": 1790311553446
+    },
+    {
+      "type": "execution.completed",
+      "executionId": "execution_db7f9ad0-8234-4b1d-b418-06edbfdf1e68",
+      "deliverySequence": 6,
+      "observedAt": 1790311553463
+    }
+  ],
+  "nativeTurnId": "turn_55da7a08-b1cc-4dbc-89bf-97ac86c3bbd9",
+  "nativeMessages": [
+    {
+      "messageId": "msg_mugh9otz_b9bbc3af-eb60-4d98-992b-e3a44d7dbf0d",
+      "role": "user",
+      "turnId": "turn_55da7a08-b1cc-4dbc-89bf-97ac86c3bbd9",
+      "modelId": null,
+      "providerId": null,
+      "feedback": null
+    },
+    {
+      "messageId": "msg_mugh9ou5_2d3c42b8-edb6-457d-ba16-57970d79012f",
+      "role": "assistant",
+      "turnId": "turn_55da7a08-b1cc-4dbc-89bf-97ac86c3bbd9",
+      "modelId": "qwen3.8-flash",
+      "providerId": "opencode-go-messages",
+      "feedback": null
+    },
+    {
+      "messageId": "msg_mugh9tkv_473543cf-5e39-4b37-bc67-d743836d69c6",
+      "role": "assistant",
+      "turnId": "turn_55da7a08-b1cc-4dbc-89bf-97ac86c3bbd9",
+      "modelId": "qwen3.8-flash",
+      "providerId": "opencode-go-messages",
+      "feedback": "like"
+    }
+  ],
+  "nativeParts": [
+    {
+      "partId": "part_mugh9ou3_5f02f6d6-31a4-463f-894d-16f96c88a005",
+      "messageId": "msg_mugh9otz_b9bbc3af-eb60-4d98-992b-e3a44d7dbf0d",
+      "type": "text",
+      "text": "PR25_DDA_R4_TOOL: Use the Read tool to read README.md in this isolated project, then reply exactly TOOL_READ_DDA_OK."
+    },
+    {
+      "partId": "part_mugh9tjn_a861b6d0-61a4-440b-a126-ed22fe12cb8e",
+      "messageId": "msg_mugh9ou5_2d3c42b8-edb6-457d-ba16-57970d79012f",
+      "type": "tool",
+      "tool": "Read",
+      "callId": "toolu_b6c6e0ea5351479ab385a439",
+      "status": "completed",
+      "filePath": "/private/tmp/anyagent-opencode-go.aBEA0z/project/README.md"
+    },
+    {
+      "partId": "part_mugh9vov_07a16942-69e1-425c-a522-9563e54d6d06",
+      "messageId": "msg_mugh9tkv_473543cf-5e39-4b37-bc67-d743836d69c6",
+      "type": "text",
+      "text": "TOOL_READ_DDA_OK"
+    }
+  ],
+  "uiObservations": [
+    "Read tool row and final text visible in original conversation",
+    "Like persisted after switching to another Task and back",
+    "Dislike and withdrawal on previous response were visible, but intermediate native feedback states were not captured as durable snapshot"
+  ]
+}

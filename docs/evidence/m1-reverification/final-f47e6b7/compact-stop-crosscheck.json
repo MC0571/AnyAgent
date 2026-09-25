@@ -1,0 +1,49 @@
+{
+  "productCodeCommit": "f47e6b7679f199d82d2f78fc8534aa417b110367",
+  "environment": "macOS arm64; isolated App home and project /tmp/anyagent-opencode-go.aBEA0z",
+  "nativeCliVersion": "0.16.9",
+  "adapterVersion": "m1.2",
+  "model": "opencode-go-messages/qwen3.8-flash",
+  "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+  "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+  "nativeSessionId": "sess_18b475fb-0313-4a58-888d-f753f46c695f",
+  "compact": {
+    "uiCommand": "/compact PR25_F47: Keep the attachment marker context.",
+    "productOperationId": "compact_ae22e6bb-bcea-4348-91ee-9a0ffc9a8746",
+    "status": "completed",
+    "acceptedEvidence": "M0 session/compact accepted ACK",
+    "terminalEvidence": "Native compaction lifecycle is success.",
+    "businessInputCountBeforeAndAfterCompact": 6,
+    "businessExecutionCountBeforeAndAfterCompact": 6
+  },
+  "continuation": {
+    "prompt": "PR25_F47_AFTER_COMPACT: Reply exactly COMPACT_F47_OK.",
+    "productInputId": "input_95ea1698-58bc-49c7-a10a-f14a20ff8441",
+    "productInputStatus": "completed",
+    "nativeQueueInputId": "queue_input_95ea1698-58bc-49c7-a10a-f14a20ff8441",
+    "nativeInputStatus": "promoted",
+    "nativeUserMessageId": "msg_mugitape_ae84f03b-a34e-4685-9f2f-454aad0b40c0",
+    "nativeTurnId": "turn_9233b4a6-91cb-4ec6-992e-358210002735",
+    "answer": "COMPACT_F47_OK"
+  },
+  "stop": {
+    "promptMarker": "PR25_F47_STOP",
+    "productInputId": "input_44e1a0fa-dbb8-4c2d-9c48-3fe4921bd312",
+    "productInputStatus": "stopped",
+    "productExecutionId": "execution_8871806a-3420-4173-945d-81e28f7cd4d0",
+    "productExecutionStatus": "stopped",
+    "productStopRequestId": "stop_cc8eb6a5-9964-4792-a76e-b95c1e8ea4e2",
+    "stopRequestStatus": "confirmed",
+    "deliveryStatus": "delivered",
+    "deliveryEvidenceId": "ccb162ff-8ae4-480d-a15a-fd565ffd65d3",
+    "nativeStopEvidenceId": "27d5d501-e701-4225-a456-ad0329417fd3",
+    "nativeUserMessageId": "msg_mugitupl_cef7e5fc-02d2-4277-a107-0b49e2839078",
+    "nativeTurnId": "turn_89544518-bb37-4afc-b0d5-275c87f8d827",
+    "nativeTerminalEventType": "turn_complete",
+    "nativeTerminalResultType": "cancelled",
+    "nativeTerminalSequence": 383,
+    "nativeUserHistoryDisposition": "withdrawn_after_stop",
+    "uiObservation": "After clicking Request stop in the original conversation, a transient request-submitted notice appeared; the final message showed stopped and confirmed with no answer body."
+  },
+  "observationLayer": "formal macOS App UI plus selected same-scenario product and native SQLite; no repository screenshot file"
+}

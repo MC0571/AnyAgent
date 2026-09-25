@@ -1,0 +1,13 @@
+{
+  "productCodeCommit": "f47e6b7679f199d82d2f78fc8534aa417b110367",
+  "nativeCliVersion": "0.16.9",
+  "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+  "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+  "nativeSessionId": "sess_18b475fb-0313-4a58-888d-f753f46c695f",
+  "command": "/plugins status",
+  "uiObservation": "Original Composer opened the native plugin status dialog; node-repl-host@zcode-plugins-official 0.6.0 and browser-use@zcode-plugins-official 0.5.1 were listed as enabled.",
+  "productInputCountBeforeAndAfterCommand": 6,
+  "productExecutionCountBeforeAndAfterCommand": 6,
+  "scope": "Read-only status command; other supported slash actions and failure paths are not covered.",
+  "observationLayer": "formal macOS App UI plus selected product SQLite counts; no repository screenshot file"
+}
