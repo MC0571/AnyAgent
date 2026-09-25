@@ -1,0 +1,82 @@
+{
+  "testedProductCommit": "5b2a386152b85bf64ebc8d8f28afe35fe1a249e6",
+  "isolation": {
+    "home": "/tmp/anyagent-opencode-go.aBEA0z/home",
+    "project": "/tmp/anyagent-opencode-go.aBEA0z/m2-final-project"
+  },
+  "productRounds": [
+    {
+      "marker": "M2_RC_5B2_NAV_RUNNING_926",
+      "taskId": "task_da128efe-ac23-4d02-82de-f72aee558285",
+      "participantId": "participant_15d3a79f-ad2d-400b-a788-cdd46552c9bb",
+      "sessionId": "session_0f21ac0b-77a2-48de-8aed-22d2c220fbf8",
+      "inputId": "input_4ea8aa8f-7513-4a9c-b369-dcd3e60c27bd",
+      "inputStatus": "completed",
+      "executionId": "execution_86215f0b-c21f-4d30-b43b-4a434fda7f05",
+      "executionStatus": "completed",
+      "engineId": "zcode",
+      "nativeSessionId": "sess_7add0d96-d4b1-44d1-a180-f0882a7f0e9a",
+      "nativeInput": {
+        "id": "queue_input_4ea8aa8f-7513-4a9c-b369-dcd3e60c27bd",
+        "session_id": "sess_7add0d96-d4b1-44d1-a180-f0882a7f0e9a",
+        "status": "promoted",
+        "admitted_sequence": 3,
+        "promoted_sequence": 3
+      },
+      "eventSummary": [
+        {
+          "type": "execution.started",
+          "first": 1790360847687,
+          "n": 1
+        },
+        {
+          "type": "input.accepted",
+          "first": 1790360847687,
+          "n": 1
+        },
+        {
+          "type": "message.delta",
+          "first": 1790360871080,
+          "n": 33
+        },
+        {
+          "type": "execution.completed",
+          "first": 1790360879603,
+          "n": 1
+        }
+      ]
+    },
+    {
+      "marker": "M2_RC_5B2_TOOLBAR_FAKE_R1_926",
+      "taskId": "task_b2fb5abb-80cc-4c73-a89e-d71c720b5ff8",
+      "participantId": "participant_fb6cd680-8584-43e3-b849-e6596d697d06",
+      "sessionId": "session_1475fd45-c3bf-4d9b-88b1-e2f238d6df01",
+      "inputId": "input_1e85578c-e2dc-4c69-8c1a-25e335b82f7f",
+      "inputStatus": "completed",
+      "executionId": "execution_3ec008cb-42ba-40dd-bae3-7252ffde666e",
+      "executionStatus": "completed",
+      "engineId": "fake"
+    },
+    {
+      "marker": "M2_RC_5B2_PROJECT_BUTTON_FAKE_R1_926",
+      "taskId": "task_27597f43-94ce-494f-a5f3-34ed7f68b28f",
+      "participantId": "participant_6d54ca75-92e1-435d-a6a9-146b22412695",
+      "sessionId": "session_32b6a25a-bc90-40cf-aed0-8cff3520d279",
+      "inputId": "input_452368ef-e3bd-43fd-b7f4-ae3865be6a2c",
+      "inputStatus": "completed",
+      "executionId": "execution_49c0c270-1744-4c25-9b69-fbd424280d89",
+      "executionStatus": "completed",
+      "engineId": "fake"
+    }
+  ],
+  "m0FlagOff": {
+    "flag": "ANYAGENT_M1_WORKBENCH=0",
+    "electronProfile": "/tmp/anyagent-opencode-go.aBEA0z/electron-final-m0",
+    "marker": "M2_RC_5B2_M0_FLAG_OFF_926",
+    "result": "M0_5B2_OK_926",
+    "nativeSessionId": "sess_b64301c7-e44a-4aed-8ec7-2a5fe79b6183",
+    "nativeInputId": "queue_01a0d9d6-1932-72c4-93e1-fee13ac48c99",
+    "nativeUserMessageId": "msg_muhargbs_1b236263-1b1f-4ffe-9c59-31168d6ae732",
+    "nativeAssistantMessageId": "msg_muhargc3_6e73222d-2de1-4327-8ea3-bfef09d61d3e"
+  }
+}
