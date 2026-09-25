@@ -373,7 +373,8 @@ export interface EngineAdapter {
   getCapabilities(): EngineCapabilitySnapshot;
   /** Recheck conditional availability when the adapter can actively probe it. */
   refreshCapabilities?(): Promise<EngineCapabilitySnapshot>;
-  createSession(): Promise<EngineSessionRef>;
+  /** Synchronous Host qualification immediately before native Session creation. */
+  createSession(input?: { readonly beforeDispatch?: () => void }): Promise<EngineSessionRef>;
   /** Reattach to an existing native Session; this must never create or rebind a Session. */
   resumeSession?(input: {
     readonly session: EngineSessionRef;

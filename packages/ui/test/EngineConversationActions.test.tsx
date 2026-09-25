@@ -595,6 +595,7 @@ test("product conversation forks into a fresh Task and displays only its verifie
     updatedAt: 1_000,
     closedAt: null,
     closeReason: null,
+    currentAuthorization: { status: "current", reason: null, observedAt: 1_000 },
     engine,
     currentEngine: engine,
     environment: { id: "env", kind: "workspace", workDirectory: "/tmp/anyagent-ui" },

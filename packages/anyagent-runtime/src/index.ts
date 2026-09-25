@@ -18,7 +18,7 @@ import {
   type EngineSessionRef,
   type EngineUserInputRef,
 } from "@anyagent/engine-contract";
-import { RuntimeStore, type StoredRecord } from "./store.js";
+import { RuntimeStore, type StoredHostAuthorization, type StoredRecord } from "./store.js";
 import type {
   CompactSession,
   ApplyFileRewind,
@@ -37,6 +37,7 @@ import type {
   RuntimeChange,
   RuntimeCredentialSource,
   RuntimeCurrentEngineProjection,
+  RuntimeCurrentAuthorizationProjection,
   RuntimeEngineProjection,
   RuntimeEnvironment,
   RuntimeEvent,
@@ -409,6 +410,7 @@ export class TaskRuntime {
 
   constructor(options: CreateTaskRuntimeOptions) {
     this.#store = new RuntimeStore(options.databasePath);
+    this.#store.backfillHostAuthorizationsOnce();
     this.#engines = options.engines;
     this.#engineForEnvironment = options.engineForEnvironment;
     this.#stageAttachment = options.stageAttachment;
@@ -455,6 +457,60 @@ export class TaskRuntime {
     this.#assertOpen();
     const record = this.#store.get<TaskData>("task", taskId);
     return record ? this.#taskProjection(record) : null;
+  }
+
+  /** Register an opaque Host-issued grant in this Runtime's current authority. */
+  registerHostAuthorization(
+    authorization: RuntimeAuthorization,
+  ): RuntimeCurrentAuthorizationProjection {
+    this.#assertOpen();
+    if (
+      authorization.issuer !== "host" ||
+      !authorization.id.trim() ||
+      !authorization.environmentId.trim()
+    )
+      throw new RuntimeEligibilityError(
+        "Host authorization identity is invalid.",
+        "authorization-required",
+      );
+    if (
+      !this.#store.getHostAuthorization(authorization.id) &&
+      this.#store.hasTaskAuthorization(authorization.id)
+    )
+      throw new RuntimeEligibilityError(
+        "Current Host authorization is missing; it cannot be restored from a Task snapshot.",
+        "authorization-required",
+      );
+    const stored = this.#store.registerHostAuthorization(authorization);
+    return this.#hostAuthorizationProjection(stored);
+  }
+
+  /** Current status is Host-owned and is not exposed through the renderer RPC. */
+  getHostAuthorizationStatus(authorizationId: string): RuntimeCurrentAuthorizationProjection {
+    this.#assertOpen();
+    return this.#hostAuthorizationProjection(this.#store.getHostAuthorization(authorizationId));
+  }
+
+  /** Revoke the current Host grant without changing any Task's historical snapshot or history. */
+  revokeHostAuthorization(
+    authorizationId: string,
+    reason: string,
+  ): RuntimeCurrentAuthorizationProjection {
+    this.#assertOpen();
+    if (!authorizationId.trim() || !reason.trim())
+      throw new RuntimeEligibilityError(
+        "Host authorization revocation requires an ID and reason.",
+        "invalid-request",
+      );
+    const authorization = this.#store.revokeHostAuthorization(
+      authorizationId,
+      this.#now(),
+      reason.trim(),
+    );
+    for (const task of this.#store.list<TaskData>("task")) {
+      if (task.data.authorization.id === authorizationId) this.#publish(task.id, "task", task.id);
+    }
+    return this.#hostAuthorizationProjection(authorization);
   }
 
   /** Run a Host-owned read against the current native Session only while its Task grant is valid. */
@@ -1078,9 +1134,17 @@ export class TaskRuntime {
               "This Engine cannot attach the imported Session.",
               "unsupported",
             );
+          const checkAuthorization = () =>
+            this.#validateEnvironmentAndAuthorization(
+              input.environment,
+              input.authorization,
+              "session.create",
+            );
           const nativeSession = await engine.resumeSession({
             session: input.nativeSessionId as EngineSessionRef,
+            beforeDispatch: checkAuthorization,
           });
+          checkAuthorization();
           if (nativeSession !== input.nativeSessionId)
             throw new RuntimeEligibilityError(
               "Import recovery changed the native Session identity.",
@@ -1210,6 +1274,13 @@ export class TaskRuntime {
     },
   ): Promise<RuntimeTask> {
     this.#assertOpen();
+    this.#validateEnvironmentAndAuthorization(
+      input.environment,
+      input.authorization,
+      "session.create",
+      false,
+    );
+    this.registerHostAuthorization(input.authorization);
     const engine =
       this.#engineForEnvironment?.(input.engineId, input.environment) ??
       this.#engines.get(input.engineId);
@@ -1263,6 +1334,7 @@ export class TaskRuntime {
       environmentId: environment.id,
     };
     this.#store.transaction(() => {
+      this.#assertHostAuthorizationCurrent(authorization);
       this.#store.insert(
         this.#record("task", taskId, taskId, null, null, taskData, taskData.status, createdAt),
       );
@@ -1308,7 +1380,10 @@ export class TaskRuntime {
         snapshot.adapterVersion,
       );
       const nativeSessionId = await (creation?.createNativeSession(engine) ??
-        engine.createSession());
+        engine.createSession({
+          beforeDispatch: () =>
+            this.#validateEnvironmentAndAuthorization(environment, authorization, "session.create"),
+        }));
       this.#liveSessions.set(sessionId, nativeSessionId);
       const activeSession: RuntimeSession = {
         ...session,
@@ -4776,10 +4851,9 @@ export class TaskRuntime {
     ) {
       throw new RuntimeEligibilityError("Authorization does not belong to this Task environment.");
     }
+    this.#assertHostAuthorizationCurrent(grant);
     if (!grant.scopes.includes(scope))
       throw new RuntimeEligibilityError(`Authorization lacks ${scope} scope.`);
-    if (grant.expiresAt !== null && this.#now() >= grant.expiresAt)
-      throw new RuntimeEligibilityError("Authorization has expired.");
     if (
       session.data.projection.status !== "active" &&
       !(allowUnknownSession && session.data.projection.status === "unknown") &&
@@ -5026,6 +5100,7 @@ export class TaskRuntime {
     environment: RuntimeEnvironment,
     authorization: RuntimeAuthorization,
     scope: RuntimeAuthorizationScope,
+    requireCurrent = true,
   ): void {
     if (!environment.id || authorization.environmentId !== environment.id)
       throw new RuntimeEligibilityError("Authorization and Task environment do not match.");
@@ -5037,7 +5112,60 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError(`Host authorization must include ${scope}.`);
     }
     if (authorization.expiresAt !== null && this.#now() >= authorization.expiresAt)
-      throw new RuntimeEligibilityError("Authorization has expired.");
+      throw new RuntimeEligibilityError("Authorization has expired.", "authorization-required");
+    if (requireCurrent) this.#assertHostAuthorizationCurrent(authorization);
+  }
+
+  #hostAuthorizationProjection(
+    stored: StoredHostAuthorization | null,
+    snapshot?: RuntimeAuthorization,
+  ): RuntimeCurrentAuthorizationProjection {
+    const observedAt = this.#now();
+    if (!stored)
+      return {
+        status: "missing",
+        reason: "Current Host authorization is missing; this Task is read-only.",
+        observedAt,
+      };
+    if (
+      snapshot &&
+      (snapshot.issuer !== "host" ||
+        snapshot.id !== stored.id ||
+        snapshot.environmentId !== stored.environmentId ||
+        snapshot.expiresAt !== stored.expiresAt ||
+        JSON.stringify([...snapshot.scopes].sort()) !== JSON.stringify([...stored.scopes].sort()))
+    )
+      return {
+        status: "invalid",
+        reason:
+          "Current Host authorization does not match the Task snapshot; this Task is read-only.",
+        observedAt,
+      };
+    if (stored.revokedAt !== null)
+      return {
+        status: "revoked",
+        reason: `Authorization was revoked by the Host. Reason: “${stored.revokeReason?.trim() || "No reason was recorded"}”. This Task is read-only.`,
+        observedAt,
+      };
+    if (stored.expiresAt !== null && observedAt >= stored.expiresAt)
+      return {
+        status: "expired",
+        reason: "Authorization has expired; this Task is read-only.",
+        observedAt,
+      };
+    return { status: "current", reason: null, observedAt };
+  }
+
+  #assertHostAuthorizationCurrent(authorization: RuntimeAuthorization): void {
+    const projection = this.#hostAuthorizationProjection(
+      this.#store.getHostAuthorization(authorization.id),
+      authorization,
+    );
+    if (projection.status !== "current")
+      throw new RuntimeEligibilityError(
+        projection.reason ?? "Current Host authorization is not valid.",
+        "authorization-required",
+      );
   }
 
   async #capabilities(engine: EngineAdapter): Promise<EngineCapabilitySnapshot> {
@@ -5398,6 +5526,10 @@ export class TaskRuntime {
       ...(record.data.forkedFrom ? { forkedFrom: record.data.forkedFrom } : {}),
       ...(record.data.sharedContext ? { sharedContext: record.data.sharedContext } : {}),
       engine: record.data.engine,
+      currentAuthorization: this.#hostAuthorizationProjection(
+        this.#store.getHostAuthorization(record.data.authorization.id),
+        record.data.authorization,
+      ),
       currentEngine: this.#engines.has(record.data.engineId)
         ? this.#currentEngineProjection(this.#engineFor(record.data))
         : this.#unknownEngineProjection(

@@ -17,6 +17,7 @@ import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
 import { createZCodeAgentConnectionScope } from "../zcode-agent/zcodeAgentConnectionScope.js";
 import { createSharedContextImporter } from "./sharedContextImporter.js";
 import { createZCodeAdapter } from "./zcodeAdapter.js";
+import { createAnyAgentHostAuthorizationControl } from "./hostAuthorizationControl.js";
 import type { IAnyAgentService } from "./anyAgentService.js";
 
 /** One Host-owned Runtime behind the desktop product channel. */
@@ -28,6 +29,7 @@ export function createAnyAgentService(
   conversationShareService?: IConversationShareService,
 ): {
   service: IAnyAgentService;
+  host: ReturnType<typeof createAnyAgentHostAuthorizationControl>;
   close(): void;
 } {
   const workDirectory = getConversationWorkspaceDir();
@@ -64,6 +66,7 @@ export function createAnyAgentService(
     string,
     { fake: FakeEngine; zcode: ReturnType<typeof createZCodeAdapter> }
   >();
+  let runtime: ReturnType<typeof createTaskRuntime>;
   function enginesFor(target: RuntimeEnvironment) {
     let engines = enginesByEnvironment.get(target.id);
     if (!engines) {
@@ -92,7 +95,7 @@ export function createAnyAgentService(
   }
   const defaultEngines = enginesFor(environment);
   function hostAuthorization(environmentId: string): RuntimeAuthorization {
-    return {
+    const authorization: RuntimeAuthorization = {
       id: `authorization_${randomUUID()}`,
       environmentId,
       issuer: "host",
@@ -110,8 +113,10 @@ export function createAnyAgentService(
         "execution.interrupt",
       ],
     };
+    runtime.registerHostAuthorization(authorization);
+    return authorization;
   }
-  const runtime = createTaskRuntime({
+  runtime = createTaskRuntime({
     databasePath,
     engines: new Map<string, EngineAdapter>([
       ["fake", defaultEngines.fake],
@@ -384,6 +389,7 @@ export function createAnyAgentService(
   };
   return {
     service,
+    host: createAnyAgentHostAuthorizationControl(runtime),
     close() {
       unsubscribe();
       changes.dispose();

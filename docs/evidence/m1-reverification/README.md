@@ -2,6 +2,12 @@
 
 本次分层整理所据产品候选：`f47e6b7679f199d82d2f78fc8534aa417b110367`，当时基于 `origin/main` 的 `644120db21f654edbf40b4008df92294772a08cc`；整理前 PR 证据 head 为 `f66b629646446b504e452f9e31fccdf5b9906d33`。本候选已有[增量原生桌面与检查记录](final-f47e6b7/README.md)，但尚未完成全量必测回归。上一次较完整的桌面证据对应 `432eb7075024639b1e5e9f0692c20666f85d7fa7`，见[该候选原生桌面与检查证据](final-432eb70/README.md)；后续 `dda479f031212729dfcb289a983161e32686e872` 的[冷恢复增量复验](final-dda479f/README.md)保留原提交归属。较早 `44cfb92096238882c24c87315b271a2d8428aa4a` 的[网页拾取证据](final-44cfb92/README.md)、`07bced37c5e82e1a9413b305dc2f0fa0c2358d85` 的[分享、队列与恢复证据](final-07bced3/README.md)、`b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34` 的[集成证据](final-b0fc0e9/README.md)、`db192db555f1ef950052f528595ad3d055562ef9` 的[桌面证据](final-db192db/README.md)以及更早提交的截图保留原归属。PR #25 已在独立集成审阅后合并为 `d813b84318aa554c65c162e533c079ba9ed16bdc`；Milestone #2 保持 open，本记录不表示最终 RC 已通过。
 
+## PR #28 合并后的当前增量：授权撤销
+
+PR #28 已合并至 main `480d92dd5c02ca84628fab1c09ea4ebe7ab304e5`。授权撤销分支的被测产品提交为 `576a382522e63627d2e586f5664a6f0b0b2ca3b8`（功能提交 `3ee852d` 与导入恢复补修 `576a382`，中间合并了该 main）。Host 在现有产品 SQLite 中持久化每个授权的当前状态，并在创建 Session、恢复、派发及相关异步等待后的原生发送点重新核验；Renderer 只读展示，不取得撤销写权。迁移时只为有明确既有授权的 Task 一次性回填；缺失记录关闭派发资格。撤销后既有历史仍可读，旧能力快照不被改写。
+
+本机 macOS arm64、Node 24.14.0、pnpm 10.33.2 上，`pnpm --dir packages/anyagent-engine test` 9/9、`pnpm --dir packages/anyagent-runtime test` 67/67、Service/Adapter/附件服务测试 83/83、UI 组件测试 33/33、原生映射测试 5/5 通过；`pnpm typecheck`、bootstrap typecheck、`pnpm lint`（65 条既有 warning、0 error）、`pnpm architecture:check -- --changed`、`pnpm build:bootstrap`、ADR 索引、受改文件格式和差异检查通过。原生映射测试须先构建固定 CLI 工作区依赖。本机结果，无适用远端 CI。Runtime 与 Adapter 定向用例注入撤销发生于能力刷新和原生建会话命令之间，断言原生命令零派发；导入 Session 的延迟恢复也验证零派发与失败态，Host 测试核对状态写权边界。独立 reviewer 曾发现导入恢复漏传派发前 guard 的 P2，`576a382` 修复后补审确认关闭，无剩余 P1/P2/P3 合并阻断。这是 M1 Contract 的自动化证据，尚未作为最终 RC 的真实 CLI 桌面授权失效组合路径或视觉证据。真实断线后的副作用对账、运行中 compact 和最终 RC 桌面组合路径仍需单独收口。
+
 ## PR #27 合并后当前增量：Goal 冷恢复
 
 PR #27 已合并至 main `5456321868fd57adee4504f1abdfc99ebe58a042`。后续 Goal 分支的产品候选 `7a4eaf68053bee5d22d75fe92a98e767968e72a1` 已补原生 `/goal` 控制与冷恢复订阅／对账修复。[本候选证据](final-7a4eaf6/README.md)明确区分：完整三轮、退出重启、原 Task／原生 Session 显式恢复的真实 CLI 桌面测试实际发生于 `7d766707c82b24d8dd105ba7262505160baea3c2`；其后仅修改了对账后未恢复正文的 UI 提示，并在 `7a4eaf6` 上复测该提示。双 SQLite 核对产品身份和三条原生 Goal Input；没有在仓库保存该候选窗口截图，所以最终 RC 视觉证据仍待补齐。当前增量不改变 M0 Verified 的历史事实，也不把运行中 `/compact`、独立授权撤销或断线副作用对账标为通过。

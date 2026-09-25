@@ -101,7 +101,9 @@ class ManualEngine implements EngineAdapter {
   ) as Record<EngineCapability, CapabilityStatus>;
   #nextSession = 0;
   createSessionCalls = 0;
+  beforeCreateSessionDispatch: (() => Promise<void>) | null = null;
   readonly resumeCalls: Parameters<NonNullable<EngineAdapter["resumeSession"]>>[0][] = [];
+  beforeResumeSessionDispatch: (() => Promise<void>) | null = null;
   resumeResult: EngineSessionRef | null = null;
   resumeHandler: (() => Promise<void>) | null = null;
   readonly reconcileCalls: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0][] = [];
@@ -163,7 +165,11 @@ class ManualEngine implements EngineAdapter {
     this.capabilities[capability] = status;
   }
 
-  async createSession(): Promise<EngineSessionRef> {
+  async createSession(
+    input: { readonly beforeDispatch?: () => void } = {},
+  ): Promise<EngineSessionRef> {
+    await this.beforeCreateSessionDispatch?.();
+    input.beforeDispatch?.();
     this.createSessionCalls++;
     const session = `native-session-${++this.#nextSession}` as EngineSessionRef;
     this.sessions.push(session);
@@ -173,6 +179,7 @@ class ManualEngine implements EngineAdapter {
   async resumeSession(
     input: Parameters<NonNullable<EngineAdapter["resumeSession"]>>[0],
   ): Promise<EngineSessionRef> {
+    await this.beforeResumeSessionDispatch?.();
     input.beforeDispatch?.();
     this.resumeCalls.push(input);
     if (!this.sessions.includes(input.session))
@@ -2000,6 +2007,51 @@ test("Runtime adopts a Host-authorized native Session once under a new product T
   }
 });
 
+test("revocation during imported Session recovery blocks native resume and adoption", async () => {
+  const engine = new ManualEngine();
+  const nativeSessionId = "share-import-revoked-session" as EngineSessionRef;
+  engine.sessions.push(nativeSessionId);
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const grant = { ...authorization, id: "grant-revoked-import" };
+    let entered!: () => void;
+    let release!: () => void;
+    const dispatchEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const heldDispatch = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    engine.beforeResumeSessionDispatch = async () => {
+      entered();
+      await heldDispatch;
+    };
+    const adoption = runtime.adoptImportedSession({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+      nativeSessionId,
+      sharedContext: {
+        contextId: "shared-context-revoked",
+        title: "Revoked import",
+        shareUrl: "https://example.test/share/revoked",
+      },
+    });
+    await dispatchEntered;
+    runtime.revokeHostAuthorization(grant.id, "revoked during imported Session recovery");
+    release();
+    await assert.rejects(adoption, /revoked during imported Session recovery/i);
+    assert.equal(engine.resumeCalls.length, 0);
+    assert.equal(runtime.listTasks()[0]?.session.status, "failed");
+    assert.equal(runtime.listTasks()[0]?.currentAuthorization.status, "revoked");
+  } finally {
+    runtime.close();
+  }
+});
+
 test("Session compaction requires Task ownership and scope, records native terminal outcomes only", async () => {
   const engine = new ManualEngine();
   const runtime = createTaskRuntime({
@@ -2570,6 +2622,211 @@ test("Adapter dispatch rechecks an authorization that expires while it waits", a
     await assert.rejects(submission, /expired/i);
     assert.equal(engine.runs.length, 0);
     assert.equal(runtime.getHistory(task.id)?.inputs[0]?.status, "rejected");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Host grant revocation is migrated, persisted, Task-scoped, and preserves readable history", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-host-grant-revocation-"));
+  const databasePath = join(directory, "anyagent-m1.sqlite");
+  const engine = new ManualEngine();
+  const grant = { ...authorization, id: "grant-legacy-revocation" };
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+  });
+  let taskId = "";
+  let participantId = "";
+  let sessionId = "";
+  try {
+    const legacyTask = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+    });
+    taskId = legacyTask.id;
+    participantId = legacyTask.participant.id;
+    sessionId = legacyTask.session.id;
+    await runtime.submitInput({
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: grant.id,
+      text: "saved before grant migration",
+    });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "legacy-grant-accepted" },
+    });
+    await until(() => runtime.getHistory(taskId)!.executions.length === 1);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "saved history",
+      evidence: { source: "engine", evidenceId: "legacy-grant-completed" },
+    });
+    await until(() => runtime.getHistory(taskId)!.executions[0]!.status === "completed");
+    engine.closeEvents(0);
+    runtime.close();
+
+    // Recreate the pre-revocation schema state: Task snapshots exist, the grant
+    // authority table and its one-time migration marker do not.
+    const legacyDatabase = new DatabaseSync(databasePath);
+    legacyDatabase.exec(
+      "DROP TABLE runtime_authorizations; DELETE FROM runtime_meta WHERE key = 'host_authorization_backfill_v1';",
+    );
+    legacyDatabase.close();
+
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", engine]]),
+    });
+    assert.equal(runtime.getTask(taskId)?.currentAuthorization.status, "current");
+    assert.equal(runtime.getHistory(taskId)?.inputs[0]?.text, "saved before grant migration");
+
+    const unrelatedGrant = { ...authorization, id: "grant-unrelated-task" };
+    const unrelatedTask = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: unrelatedGrant,
+    });
+    const revoked = runtime.revokeHostAuthorization(grant.id, "Host policy changed");
+    assert.equal(revoked.status, "revoked");
+    assert.match(revoked.reason ?? "", /Host policy changed/);
+    assert.equal(runtime.getTask(taskId)?.currentAuthorization.status, "revoked");
+    assert.match(runtime.getTask(taskId)?.currentAuthorization.reason ?? "", /Host policy changed/);
+    assert.equal(runtime.getTask(unrelatedTask.id)?.currentAuthorization.status, "current");
+    assert.equal(runtime.getHistory(taskId)?.executions[0]?.result, "saved history");
+    await assert.rejects(
+      runtime.submitInput({
+        taskId,
+        participantId,
+        sessionId,
+        authorizationId: grant.id,
+        text: "must not dispatch after revocation",
+      }),
+      /revoked/i,
+    );
+    await runtime.submitInput({
+      taskId: unrelatedTask.id,
+      participantId: unrelatedTask.participant.id,
+      sessionId: unrelatedTask.session.id,
+      authorizationId: unrelatedTask.authorizationId,
+      text: "unrelated grant remains usable",
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.input, "unrelated grant remains usable");
+    runtime.close();
+
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", engine]]),
+    });
+    assert.equal(runtime.getTask(taskId)?.currentAuthorization.status, "revoked");
+    assert.equal(runtime.getHistory(taskId)?.executions[0]?.result, "saved history");
+    runtime.close();
+
+    const missingGrantDatabase = new DatabaseSync(databasePath);
+    missingGrantDatabase.prepare("DELETE FROM runtime_authorizations WHERE id = ?").run(grant.id);
+    missingGrantDatabase.close();
+
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", engine]]),
+    });
+    assert.equal(runtime.getTask(taskId)?.currentAuthorization.status, "missing");
+    assert.throws(
+      () => runtime.registerHostAuthorization(grant),
+      /cannot be restored from a Task snapshot/i,
+    );
+    await assert.rejects(
+      runtime.submitInput({
+        taskId,
+        participantId,
+        sessionId,
+        authorizationId: grant.id,
+        text: "missing current authority fails closed",
+      }),
+      /current Host authorization.*missing/i,
+    );
+    assert.equal(runtime.getHistory(taskId)?.executions[0]?.result, "saved history");
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("revocation while native dispatch is waiting blocks dispatch at the Host guard", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const grant = { ...authorization, id: "grant-revocation-dispatch-race" };
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+    });
+    let entered!: () => void;
+    let release!: () => void;
+    const dispatchEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const heldDispatch = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    engine.beforeRunDispatch = async () => {
+      entered();
+      await heldDispatch;
+    };
+    const submission = runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "wait for revoke before native dispatch",
+    });
+    await dispatchEntered;
+    runtime.revokeHostAuthorization(grant.id, "revoked during dispatch wait");
+    release();
+    await assert.rejects(submission, /revoked during dispatch wait/i);
+    assert.equal(engine.runs.length, 0);
+    assert.equal(runtime.getHistory(task.id)?.inputs[0]?.status, "rejected");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("revocation while Session creation waits prevents native create dispatch", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const grant = { ...authorization, id: "grant-revocation-create-race" };
+    let entered!: () => void;
+    let release!: () => void;
+    const dispatchEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const heldDispatch = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    engine.beforeCreateSessionDispatch = async () => {
+      entered();
+      await heldDispatch;
+    };
+    const creation = runtime.createTask({ engineId: "manual", environment, authorization: grant });
+    await dispatchEntered;
+    runtime.revokeHostAuthorization(grant.id, "revoked before native Session create");
+    release();
+    await assert.rejects(creation, /revoked before native Session create/i);
+    assert.equal(engine.createSessionCalls, 0);
+    assert.equal(engine.sessions.length, 0);
+    assert.equal(runtime.listTasks()[0]?.session.status, "failed");
   } finally {
     runtime.close();
   }

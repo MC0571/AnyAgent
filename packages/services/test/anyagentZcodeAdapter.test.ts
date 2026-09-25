@@ -507,6 +507,36 @@ function completeNativeSource(fixture: ReturnType<typeof harness>) {
   });
 }
 
+test("ZCode rechecks authorization after capability refresh before native Session creation", async () => {
+  let enterRefresh!: () => void;
+  let releaseRefresh!: () => void;
+  const refreshEntered = new Promise<void>((resolve) => {
+    enterRefresh = resolve;
+  });
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let revoked = false;
+  const fixture = harness({
+    readConfigurationVersion: async () => {
+      enterRefresh();
+      await refreshGate;
+      return "test-configuration";
+    },
+  });
+  const creation = fixture.adapter.createSession({
+    beforeDispatch: () => {
+      if (revoked) throw new Error("authorization revoked before native create");
+    },
+  });
+  await refreshEntered;
+  revoked = true;
+  releaseRefresh();
+  await assert.rejects(creation, /authorization revoked before native create/);
+  assert.equal(fixture.commands.filter((command) => command.type === "createSession").length, 0);
+  fixture.adapter.dispose();
+});
+
 test("ZCode cold resume keeps the Session ID and reconciliation requires native terminal provenance", async () => {
   const states = [
     { state: "completedSuccess", expected: "unknown" },
