@@ -2940,6 +2940,133 @@ test("CLI lifecycle loss ends an acknowledged run with unknown evidence", async 
   fixture.adapter.dispose();
 });
 
+test("a live Host reconciles a disconnected original run before accepting another turn", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-live-reconnect-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const effectPath = join(directory, "native-dispatch-effect.txt");
+  const fixture = harness({
+    onSendText: () => appendFile(effectPath, "native-command-dispatched\n"),
+  });
+  const runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "live-reconnect-grant",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const source = await runtime.submitInput({
+      ...identity,
+      text: "perform a tool operation once",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    const nativeCommandId = fixture.commands.find((entry) => entry.type === "sendText")!.commandId;
+    const nativeTurnId = "live-reconnect-turn";
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "live-reconnect-start",
+        seq: 1,
+        sessionId: "native-session",
+        turnId: nativeTurnId,
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+      },
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "started");
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    fixture.disconnect();
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "unknown");
+    assert.equal(runtime.getHistory(task.id)?.inputs[0]?.status, "unknown");
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "must wait for reconciliation",
+        submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+      }),
+      /unknown|unresolved/i,
+    );
+    assert.equal(
+      (await runtime.reconcileExecution({ ...identity, executionId })).status,
+      "unknown",
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-command-dispatched\n");
+
+    // A late stream event from the detached client is not terminal evidence for the Host.
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "late-terminal-after-disconnect",
+        seq: 2,
+        sessionId: "native-session",
+        turnId: nativeTurnId,
+        timestamp: 2,
+        type: "turn.completed",
+        payload: { inputId: "native-input", resultType: "success", response: "late" },
+      },
+    });
+    assert.equal(runtime.getHistory(task.id)?.executions[0]?.status, "unknown");
+
+    fixture.rows.push({
+      rowId: 1,
+      kind: "turnHeader",
+      turnId: "hydrated-live-reconnect-turn",
+      sourceCommandId: nativeCommandId,
+      state: "completedSuccess",
+      nativeTerminalEvidence: {
+        eventId: "native-live-reconnect-terminal",
+        eventType: "turn_complete",
+        sourceCommandId: nativeCommandId,
+        turnId: nativeTurnId,
+        resultType: "success",
+      },
+    });
+    const reconciled = await runtime.reconcileExecution({ ...identity, executionId });
+    assert.equal(reconciled.status, "completed");
+    assert.equal(reconciled.id, executionId);
+    assert.equal(runtime.getHistory(task.id)?.inputs[0]?.id, source.id);
+    assert.equal(fixture.rowQueries.at(-1)?.nativeTerminalSourceCommandId, nativeCommandId);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-command-dispatched\n");
+
+    await runtime.submitInput({
+      ...identity,
+      text: "new authorized turn after reconciliation",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 2);
+    assert.equal(
+      await readFile(effectPath, "utf8"),
+      "native-command-dispatched\nnative-command-dispatched\n",
+    );
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("disconnected ZCode work stays unknown until its original native terminal is reconciled", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-disconnect-"));
   const databasePath = join(directory, "runtime.sqlite");
