@@ -26,6 +26,8 @@ import type {
   TaskHistory,
   TaskLifecycleRequest,
   ReconcileExecution,
+  ReconcileInput,
+  RuntimeInput,
   RuntimeExecution,
   RuntimeStopRequest,
 } from "@anyagent/runtime/types";
@@ -53,6 +55,7 @@ export interface IAnyAgentService {
   ): Promise<TaskSkillReferenceCatalog>;
   restoreTaskSession(input: TaskLifecycleRequest): Promise<RuntimeTask>;
   reconcileExecution(input: ReconcileExecution): Promise<RuntimeExecution>;
+  reconcileInput(input: ReconcileInput): Promise<RuntimeInput>;
   /** Read-only feedback projection from the native Session, not a second product authority. */
   getAssistantFeedback(
     taskId: string,

@@ -10,7 +10,6 @@ import type {
   EngineUserInputPresentation,
 } from "@anyagent/engine-contract";
 import type {
-  SubmitInput,
   RuntimeAttachmentStageRequest,
   RuntimeCompactOperation,
   RuntimeFileRewindOperation,
@@ -30,6 +29,7 @@ export type {
   SetAssistantFeedback,
   RuntimeAssistantFeedbackResult,
   ReconcileExecution,
+  ReconcileInput,
   TaskLifecycleRequest,
   SubmitInput,
 } from "./runtime-operation-types.js";

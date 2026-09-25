@@ -40,6 +40,11 @@ export interface ReconcileExecution extends TaskLifecycleRequest {
   readonly executionId: string;
 }
 
+/** Reconcile a persisted Input whose dispatch receipt was lost before Execution acceptance. */
+export interface ReconcileInput extends TaskLifecycleRequest {
+  readonly inputId: string;
+}
+
 export interface SubmitInput {
   readonly taskId: string;
   readonly participantId: string;

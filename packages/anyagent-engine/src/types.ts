@@ -3,8 +3,11 @@ import type {
   EngineFileRewindPreview,
   EngineFileRewindReceipt,
 } from "./file-workspace.js";
-import type { EngineExecutionReconciliation } from "./execution-reconciliation.js";
-export type { EngineExecutionReconciliation } from "./execution-reconciliation.js";
+import type {
+  EngineExecutionReconciliation,
+  EngineInputReconciliation,
+} from "./execution-reconciliation.js";
+export type * from "./execution-reconciliation.js";
 export type {
   EngineFileChanges,
   EngineFileRewindPreview,
@@ -384,6 +387,14 @@ export interface EngineAdapter {
     /** Synchronous Host qualification immediately before the native read. */
     readonly beforeDispatch?: () => void;
   }): Promise<EngineExecutionReconciliation>;
+  /** Query a possibly delivered Input by its persisted command ID without resending it. */
+  reconcileInput?(input: {
+    readonly session: EngineSessionRef;
+    /** The stable product command ID supplied to run for this Input. */
+    readonly commandId: string;
+    /** Synchronous Host qualification immediately before the native read. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineInputReconciliation>;
   /** Create a distinct native child Session from a proven source Execution. */
   forkSession?(input: {
     readonly session: EngineSessionRef;
@@ -408,7 +419,7 @@ export interface EngineAdapter {
   run(input: {
     readonly session: EngineSessionRef;
     readonly input: string;
-    /** Stable product command identity for a persisted queued Input. */
+    /** Stable product command identity for a persisted Input, including its first dispatch. */
     readonly commandId?: string;
     readonly submissionConfig?: EngineJsonObject;
     readonly attachments?: readonly EngineAttachment[];

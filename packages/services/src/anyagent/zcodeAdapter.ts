@@ -13,6 +13,7 @@ import type {
   EngineEvent,
   EngineEventPayload,
   EngineExecutionRef,
+  EngineInputReconciliation,
   EngineFileRewindPreview,
   EngineApprovalPresentation,
   EngineApprovalOptionPresentation,
@@ -1320,6 +1321,32 @@ export function createZCodeAdapter(options: {
         `The native turn row is ${header.state}, but rowsRange provides no sourceCommandId-bound native terminal event matching this outcome; outcome is unconfirmed.`,
         evidence,
       );
+    },
+    async reconcileInput({
+      session,
+      commandId,
+      beforeDispatch,
+    }): Promise<EngineInputReconciliation> {
+      const result = await this.reconcileExecution!({
+        session,
+        executionId: commandId as EngineExecutionRef,
+        beforeDispatch,
+      });
+      if (result.status === "unknown") return result;
+      if (result.status === "running")
+        return {
+          status: "unknown",
+          reason: "The native turn may still be running; its terminal outcome is unconfirmed.",
+          evidence: result.evidence,
+        };
+      return {
+        ...result,
+        evidence: {
+          ...result.evidence,
+          detail: `${result.evidence.detail ?? "Native terminal outcome is confirmed."} Tool, approval, and file-change history was not reconstructed; inspect the native Session and workspace before treating side effects as audited.`,
+        },
+        nativeExecutionId: commandId as EngineExecutionRef,
+      };
     },
     async forkSession({
       session,

@@ -61,6 +61,7 @@ import type {
   StageRuntimeAttachmentInput,
   SetAssistantFeedback,
   TaskLifecycleRequest,
+  ReconcileInput,
   TaskHistory,
 } from "./types.js";
 
@@ -123,6 +124,9 @@ type InputData = Mutable<RuntimeInput> & {
   readonly idempotencyKey?: string;
   readonly requestedDelivery?: SubmitInput["delivery"];
   nativeExecutionId: string | null;
+  /** Older persisted Input rows may predate a Host-owned native command identity. */
+  nativeCommandId?: string | null;
+  /** Historical key retained for revision Inputs written before nativeCommandId existed. */
   nativeRevisionCommandId?: string;
 };
 interface AttachmentData {
@@ -618,6 +622,216 @@ export class TaskRuntime {
     });
   }
 
+  /** Reconcile an unknown Input whose native dispatch receipt was lost. */
+  reconcileInput(input: ReconcileInput): Promise<RuntimeInput> {
+    this.#assertOpen();
+    return this.#withCommandLock(`input.reconcile:${input.inputId}`, async () => {
+      const { task, session } = this.#qualify(
+        input.taskId,
+        input.participantId,
+        input.sessionId,
+        input.authorizationId,
+        "execution.run",
+        true,
+        true,
+      );
+      const inputRecord = this.#require<InputData>("input", input.inputId);
+      const commandId =
+        inputRecord.data.nativeCommandId ?? inputRecord.data.nativeRevisionCommandId ?? null;
+      if (
+        inputRecord.taskId !== task.id ||
+        inputRecord.sessionId !== session.id ||
+        inputRecord.data.participantId !== input.participantId ||
+        inputRecord.data.status !== "unknown" ||
+        !commandId
+      )
+        throw new RuntimeEligibilityError(
+          "Input reconciliation requires an unknown Input with a persisted native command identity owned by this Task, participant, and Session.",
+          "ownership",
+        );
+      if (
+        this.#store
+          .list<ExecutionData>("execution", task.id)
+          .some((record) => record.data.inputId === inputRecord.id)
+      )
+        throw new RuntimeEligibilityError(
+          "This Input already has an Execution; reconcile that Execution instead.",
+          "ownership",
+        );
+      const nativeSessionId = session.data.nativeSessionId;
+      if (!nativeSessionId)
+        throw new RuntimeEligibilityError(
+          "The native Session identity is unavailable.",
+          "ownership",
+        );
+
+      const engine = this.#engineFor(task.data);
+      if (!engine.reconcileInput)
+        throw new RuntimeEligibilityError(
+          "This Engine cannot reconcile an Input whose dispatch receipt was lost.",
+          "unsupported",
+        );
+      const snapshot = await this.#capabilities(engine);
+      this.#assertCapability(
+        snapshot,
+        task.data.engineId,
+        task.data.environment.id,
+        "execution.reconcile",
+        task.data.engine.configurationVersion,
+        task.data.engine.adapterVersion,
+      );
+      const beforeReconcile = () => {
+        const latest = this.#qualify(
+          input.taskId,
+          input.participantId,
+          input.sessionId,
+          input.authorizationId,
+          "execution.run",
+          true,
+          true,
+        );
+        const currentInput = this.#require<InputData>("input", input.inputId);
+        if (
+          latest.task.id !== task.id ||
+          latest.session.data.nativeSessionId !== nativeSessionId ||
+          currentInput.taskId !== task.id ||
+          currentInput.sessionId !== session.id ||
+          currentInput.data.participantId !== input.participantId ||
+          currentInput.data.status !== "unknown" ||
+          (currentInput.data.nativeCommandId ?? currentInput.data.nativeRevisionCommandId) !==
+            commandId ||
+          this.#store
+            .list<ExecutionData>("execution", task.id)
+            .some((record) => record.data.inputId === inputRecord.id)
+        )
+          throw new RuntimeEligibilityError(
+            "Input ownership or state changed before native reconciliation.",
+            "ownership",
+          );
+        this.#assertCapability(
+          this.#clone(engine.getCapabilities()),
+          task.data.engineId,
+          task.data.environment.id,
+          "execution.reconcile",
+          task.data.engine.configurationVersion,
+          task.data.engine.adapterVersion,
+        );
+      };
+      beforeReconcile();
+      const result = await engine.reconcileInput({
+        session: nativeSessionId as EngineSessionRef,
+        commandId,
+        beforeDispatch: beforeReconcile,
+      });
+      const observedAt = this.#now();
+      if (result.status === "unknown") {
+        beforeReconcile();
+        const currentInput = this.#require<InputData>("input", input.inputId);
+        currentInput.data.error = result.reason;
+        this.#save(
+          "input",
+          currentInput.id,
+          task.id,
+          session.id,
+          currentInput.id,
+          currentInput.data,
+          currentInput.data.status,
+          currentInput.createdAt,
+          observedAt,
+        );
+        this.#addIssue(
+          task.id,
+          session.id,
+          "stream-ended-unknown",
+          result.evidence?.evidenceId ?? null,
+          `Native Input reconciliation remains unknown: ${result.reason}`,
+        );
+        this.#publish(task.id, "input", input.inputId);
+        return this.#publicInput(currentInput.data);
+      }
+      if (result.evidence.source !== "engine" || !result.nativeExecutionId.trim())
+        throw new RuntimeEligibilityError(
+          "Input reconciliation did not include a native Execution identity and Engine evidence.",
+          "result-unknown",
+        );
+
+      const executionId = this.#newId("execution");
+      const nativeExecutionId = result.nativeExecutionId;
+      const executionData: ExecutionData = {
+        id: executionId,
+        taskId: task.id,
+        participantId: input.participantId,
+        sessionId: session.id,
+        inputId: input.inputId,
+        ...(inputRecord.data.revisionOf ? { revisionOf: inputRecord.data.revisionOf } : {}),
+        status: result.status,
+        acceptedAt: observedAt,
+        startedAt: null,
+        terminalAt: observedAt,
+        result: result.status === "completed" ? result.result : null,
+        error: result.status === "failed" ? result.error : null,
+        reconciledAt: observedAt,
+        reconciliationReason:
+          "Native terminal outcome is confirmed, but tool, approval, and file-change history was not reconstructed. Inspect the native Session and workspace before treating side effects as audited.",
+        reconciliationEvidence: result.evidence,
+        nativeExecutionId,
+      };
+      this.#pendingChanges = [];
+      try {
+        this.#store.transaction(() => {
+          beforeReconcile();
+          if (this.#findExecution(session.id, nativeExecutionId))
+            throw new RuntimeEligibilityError(
+              "The native Execution identity is already assigned to another product Execution.",
+              "ownership",
+            );
+          this.#store.insert(
+            this.#record(
+              "execution",
+              executionId,
+              task.id,
+              session.id,
+              input.inputId,
+              executionData,
+              executionData.status,
+              observedAt,
+              observedAt,
+              String(nativeExecutionId),
+              executionId,
+            ),
+          );
+          const currentInput = this.#require<InputData>("input", input.inputId);
+          currentInput.data.nativeExecutionId = nativeExecutionId;
+          currentInput.data.status = result.status;
+          currentInput.data.acceptedAt = observedAt;
+          currentInput.data.terminalAt = observedAt;
+          currentInput.data.error = result.status === "failed" ? result.error : null;
+          this.#save(
+            "input",
+            currentInput.id,
+            task.id,
+            session.id,
+            currentInput.id,
+            currentInput.data,
+            currentInput.data.status,
+            currentInput.createdAt,
+            observedAt,
+          );
+          this.#publish(task.id, "execution", executionId);
+          this.#publish(task.id, "input", currentInput.id);
+        });
+      } catch (error) {
+        this.#pendingChanges = null;
+        throw error;
+      }
+      const changes = this.#pendingChanges;
+      this.#pendingChanges = null;
+      for (const change of changes ?? [])
+        this.#dispatchChange(change.taskId, change.kind, change.entityId);
+      return this.#publicInput(this.#require<InputData>("input", input.inputId).data);
+    });
+  }
+
   /** Reconcile one persisted unknown Execution using its original ownership and native handle. */
   reconcileExecution(input: ReconcileExecution): Promise<RuntimeExecution> {
     this.#assertOpen();
@@ -691,8 +905,15 @@ export class TaskRuntime {
         if (
           latest.task.id !== execution.taskId ||
           latest.session.data.nativeSessionId !== nativeSessionId ||
+          currentExecution.taskId !== task.id ||
+          currentExecution.sessionId !== session.id ||
+          currentExecution.data.participantId !== input.participantId ||
+          currentExecution.data.inputId !== sourceInput.id ||
           currentExecution.data.status !== "unknown" ||
           currentExecution.data.nativeExecutionId !== execution.data.nativeExecutionId ||
+          currentInput.taskId !== task.id ||
+          currentInput.sessionId !== session.id ||
+          currentInput.data.participantId !== input.participantId ||
           currentInput.data.status !== "unknown"
         )
           throw new RuntimeEligibilityError(
@@ -737,7 +958,8 @@ export class TaskRuntime {
           executionData.error = reason;
           inputData.error = reason;
         } else {
-          executionData.reconciliationReason = undefined;
+          executionData.reconciliationReason =
+            "Native terminal outcome is confirmed, but events missed before reconciliation, including tool and file-change effects, were not reconstructed. Inspect the native Session and workspace before retrying or treating side effects as audited.";
           inputData.error = null;
           executionData.status = result.status;
           executionData.terminalAt = observedAt;
@@ -760,6 +982,7 @@ export class TaskRuntime {
       this.#pendingChanges = [];
       try {
         this.#store.transaction(() => {
+          beforeReconcile();
           this.#save(
             "execution",
             execution.id,
@@ -1636,6 +1859,11 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError(
         "Revision requires a completed Execution, or a failed Execution for retry, owned by this Task.",
       );
+    if (input.kind === "retry" && sourceExecution.data.reconciledAt !== undefined)
+      throw new RuntimeEligibilityError(
+        "Retry cannot safely replay an Execution whose native tool or file-change history was not reconstructed.",
+        "unsupported",
+      );
     if (
       input.kind === "retry" &&
       this.#store
@@ -1844,6 +2072,7 @@ export class TaskRuntime {
         this.#assertNoActiveCompact(task.id, session.id);
         this.#assertNoActiveFileRewind(task.id, session.id);
         queuedRecord.data.status = "received";
+        queuedRecord.data.nativeCommandId ??= promotedInputId;
         delete queuedRecord.data.queuePosition;
         queuedRecord.data.error = null;
         data = queuedRecord.data;
@@ -1930,6 +2159,8 @@ export class TaskRuntime {
           terminalAt: null,
           error: null,
           nativeExecutionId: null,
+          nativeCommandId: revision?.commandId ?? id,
+          ...(revision ? { nativeRevisionCommandId: revision.commandId } : {}),
         };
         this.#store.insert(
           this.#record(
@@ -2023,6 +2254,11 @@ export class TaskRuntime {
               "The source Execution changed before revision dispatch.",
               "ownership",
             );
+          if (revision.kind === "retry" && source.data.reconciledAt !== undefined)
+            throw new RuntimeEligibilityError(
+              "Retry cannot safely replay an Execution whose native tool or file-change history was not reconstructed.",
+              "unsupported",
+            );
           if (
             revision.kind === "retry" &&
             this.#store
@@ -2061,10 +2297,11 @@ export class TaskRuntime {
         }
       };
       checkDispatch();
+      const dispatchInput = this.#require<InputData>("input", id).data;
       const run = await engine.run({
         session: nativeSessionId as EngineSessionRef,
         input: input.text,
-        ...(promotedInputId || input.delivery === "queue" ? { commandId: id } : {}),
+        commandId: dispatchInput.nativeCommandId ?? dispatchInput.nativeRevisionCommandId ?? id,
         beforeDispatch: checkDispatch,
         ...(submissionConfig ? { submissionConfig } : {}),
         ...(resolvedAttachments ? { attachments: resolvedAttachments } : {}),
@@ -4858,6 +5095,7 @@ export class TaskRuntime {
   #publicInput(data: InputData): RuntimeInput {
     const {
       nativeExecutionId: _nativeExecutionId,
+      nativeCommandId: _nativeCommandId,
       nativeRevisionCommandId: _nativeRevisionCommandId,
       authorizationId: _authorizationId,
       idempotencyKey: _idempotencyKey,

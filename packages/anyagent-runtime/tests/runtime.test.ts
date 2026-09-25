@@ -108,6 +108,11 @@ class ManualEngine implements EngineAdapter {
     status: "unknown",
     reason: "no native evidence configured",
   };
+  reconcileHandler:
+    | ((
+        input: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0],
+      ) => Promise<EngineExecutionReconciliation>)
+    | null = null;
   readonly forkCalls: Parameters<NonNullable<EngineAdapter["forkSession"]>>[0][] = [];
   forkFailure: Error | null = null;
   readonly compactCalls: Parameters<NonNullable<EngineAdapter["compactSession"]>>[0][] = [];
@@ -179,7 +184,7 @@ class ManualEngine implements EngineAdapter {
   ): Promise<EngineExecutionReconciliation> {
     input.beforeDispatch?.();
     this.reconcileCalls.push(input);
-    return this.reconcileResult;
+    return this.reconcileHandler ? this.reconcileHandler(input) : this.reconcileResult;
   }
 
   async forkSession(input: Parameters<NonNullable<EngineAdapter["forkSession"]>>[0]) {
@@ -661,6 +666,80 @@ test("Runtime restart holds queued text until original reconciliation, native re
     await until(() => engine.runs.length === 2);
     assert.equal(engine.runs[1]?.input, "B");
     assert.equal(engine.runs[1]?.commandId, queuedId);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Execution reconciliation rechecks authorization after a delayed native read", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-reconcile-expiry-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let now = 1;
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+  });
+  try {
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: { ...authorization, id: "reconcile-expiring-grant", expiresAt: 20 },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "tool side effect may have occurred" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "reconcile-expiry-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "reconcile-expiry-started" },
+    });
+    await until(() => runtime.getHistory(task.id)?.executions[0]?.status === "started");
+    runtime.close();
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", engine]]),
+      now: () => now,
+    });
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    engine.setCapability("execution.reconcile", {
+      support: "supported",
+      availability: "available",
+    });
+    let nativeReadStarted!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      nativeReadStarted = resolve;
+    });
+    let finishNativeRead!: () => void;
+    const nativeRead = new Promise<void>((resolve) => {
+      finishNativeRead = resolve;
+    });
+    engine.reconcileHandler = async () => {
+      nativeReadStarted();
+      await nativeRead;
+      return {
+        status: "completed",
+        result: "late terminal",
+        evidence: { source: "engine", evidenceId: "reconcile-expiry-terminal" },
+      };
+    };
+    const reconcile = runtime.reconcileExecution({ ...identity, executionId });
+    await readStarted;
+    now = 21;
+    finishNativeRead();
+    await assert.rejects(reconcile, /Authorization has expired/i);
+    assert.equal(runtime.getHistory(task.id)?.executions[0]?.status, "unknown");
+    assert.equal(runtime.getHistory(task.id)?.inputs[0]?.status, "unknown");
+    assert.equal(engine.runs.length, 1);
   } finally {
     runtime.close();
     await rm(directory, { recursive: true, force: true });

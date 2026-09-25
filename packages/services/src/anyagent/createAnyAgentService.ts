@@ -238,6 +238,9 @@ export function createAnyAgentService(
     async reconcileExecution(input) {
       return runtime.reconcileExecution(input);
     },
+    async reconcileInput(input) {
+      return runtime.reconcileInput(input);
+    },
     async getAssistantFeedback(taskId) {
       const task = runtime.getTask(taskId);
       if (!task || task.engine.engineId !== "zcode" || !task.session.nativeSessionId)

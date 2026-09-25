@@ -22,6 +22,7 @@ export type {
   EngineEventPayload,
   EngineExecutionRef,
   EngineExecutionReconciliation,
+  EngineInputReconciliation,
   EngineEvidence,
   EngineFileChanges,
   EngineFileRewindPreview,

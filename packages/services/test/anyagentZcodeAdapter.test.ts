@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -2841,7 +2842,7 @@ test("disconnected ZCode work stays unknown until its original native terminal i
         environmentId: environment.id,
         issuer: "host",
         expiresAt: null,
-        scopes: ["session.create", "execution.run"],
+        scopes: ["session.create", "execution.run", "execution.revise"],
       },
     });
     const identity = {
@@ -2904,28 +2905,28 @@ test("disconnected ZCode work stays unknown until its original native terminal i
         kind: "turnHeader",
         turnId: "hydrated-disconnect-turn",
         sourceCommandId: nativeCommandId,
-        state: "completedSuccess",
+        state: "failed",
         nativeTerminalEvidence: {
           eventId: "native-disconnect-terminal",
           eventType: "turn_complete",
           sourceCommandId: nativeCommandId,
           turnId: "disconnect-original-turn",
-          resultType: "success",
+          resultType: "error",
         },
       },
       {
         rowId: 2,
         kind: "assistantText",
         turnId: "hydrated-disconnect-turn",
-        text: "one write finished",
+        text: "tool effect happened before failure",
       },
     );
     const reconciled = await runtime.reconcileExecution({ ...identity, executionId });
-    assert.equal(reconciled.status, "completed");
-    assert.equal(reconciled.result, "one write finished");
+    assert.equal(reconciled.status, "failed");
+    assert.match(reconciled.reconciliationReason ?? "", /were not reconstructed/i);
     assert.equal(
       runtime.getHistory(task.id)?.inputs.find((input) => input.id === original.id)?.status,
-      "completed",
+      "failed",
     );
     assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
     assert.equal(await readFile(effectPath, "utf8"), "native-command-dispatched\n");
@@ -2937,6 +2938,11 @@ test("disconnected ZCode work stays unknown until its original native terminal i
     await runtime.restoreTaskSession(identity);
     assert.deepEqual(fixture.resumeCalls, ["native-session"]);
     assert.equal(fixture.commands.filter((entry) => entry.type === "createSession").length, 1);
+    await assert.rejects(
+      runtime.reviseTurn({ ...identity, sourceExecutionId: executionId, kind: "retry" }),
+      /was not reconstructed/i,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
     await runtime.submitInput({
       ...identity,
       text: "a distinct next business turn",
@@ -2946,6 +2952,362 @@ test("disconnected ZCode work stays unknown until its original native terminal i
     assert.equal(
       await readFile(effectPath, "utf8"),
       "native-command-dispatched\nnative-command-dispatched\n",
+    );
+  } finally {
+    runtime.close();
+    adapter.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("lost ZCode sendText ACK stays unknown and reconciles only its original Input", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-lost-input-ack-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const effectPath = join(directory, "native-side-effect.txt");
+  const fixture = harness({
+    onSendText: async () => {
+      await appendFile(effectPath, "native-effect-once\n");
+      throw new Error("connection lost after native dispatch");
+    },
+  });
+  let adapter = fixture.adapter;
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["zcode", adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "lost-ack-host-grant",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run", "execution.revise"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "perform an isolated side effect once",
+        submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+      }),
+      /connection lost after native dispatch/i,
+    );
+    const input = runtime.getHistory(task.id)!.inputs[0]!;
+    const command = fixture.commands.find((entry) => entry.type === "sendText");
+    assert.ok(command);
+    assert.equal(command.commandId, input.id);
+    assert.equal(input.status, "unknown");
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 0);
+    assert.equal(await readFile(effectPath, "utf8"), "native-effect-once\n");
+
+    runtime.close();
+    adapter.dispose();
+    adapter = fixture.createFreshAdapter();
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["zcode", adapter]]) });
+    await assert.rejects(
+      runtime.reconcileInput({
+        ...identity,
+        participantId: "another-participant",
+        inputId: input.id,
+      }),
+      /ownership/i,
+    );
+    await assert.rejects(runtime.restoreTaskSession(identity), /unresolved native work/i);
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "must not be resent while the first Input is unknown",
+        submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+      }),
+      /Session is unknown/i,
+    );
+    const unresolved = await runtime.reconcileInput({ ...identity, inputId: input.id });
+    assert.equal(unresolved.status, "unknown");
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 0);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-effect-once\n");
+
+    fixture.rows.push({
+      rowId: 1,
+      kind: "turnHeader",
+      turnId: "lost-ack-still-running-turn",
+      sourceCommandId: command.commandId,
+      state: "running",
+    });
+    const stillRunning = await runtime.reconcileInput({ ...identity, inputId: input.id });
+    assert.equal(stillRunning.status, "unknown");
+    assert.match(stillRunning.error ?? "", /does not prove.*still live/i);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 0);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-effect-once\n");
+
+    fixture.rows.length = 0;
+    const absent = await runtime.reconcileInput({ ...identity, inputId: input.id });
+    assert.equal(absent.status, "unknown");
+    assert.match(absent.error ?? "", /no native turn header/i);
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 0);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-effect-once\n");
+
+    fixture.rows.push(
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "lost-ack-hydrated-turn",
+        sourceCommandId: command.commandId,
+        state: "failed",
+        nativeTerminalEvidence: {
+          eventId: "lost-ack-native-terminal",
+          eventType: "turn_complete",
+          sourceCommandId: command.commandId,
+          turnId: "lost-ack-native-turn",
+          resultType: "error",
+        },
+      },
+      {
+        rowId: 2,
+        kind: "assistantText",
+        turnId: "lost-ack-hydrated-turn",
+        text: "native operation finished once",
+      },
+    );
+    const reconciled = await runtime.reconcileInput({ ...identity, inputId: input.id });
+    assert.equal(reconciled.status, "failed");
+    const execution = runtime.getHistory(task.id)?.executions[0];
+    assert.equal(execution?.status, "failed");
+    assert.equal(execution?.inputId, input.id);
+    assert.equal(execution?.taskId, task.id);
+    assert.equal(execution?.participantId, task.participant.id);
+    assert.equal(execution?.sessionId, task.session.id);
+    assert.match(execution?.error ?? "", /Native turn failed/i);
+    assert.equal(execution?.reconciliationEvidence?.source, "engine");
+    assert.match(execution?.reconciliationReason ?? "", /history was not reconstructed/i);
+    assert.match(execution?.reconciliationEvidence?.detail ?? "", /history was not reconstructed/i);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-effect-once\n");
+    await runtime.restoreTaskSession(identity);
+    await assert.rejects(
+      runtime.reviseTurn({
+        ...identity,
+        sourceExecutionId: execution!.id,
+        kind: "retry",
+      }),
+      /native tool or file-change history was not reconstructed/i,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-effect-once\n");
+    assert.deepEqual(
+      fixture.rowQueries.map((query) => query.nativeTerminalSourceCommandId),
+      [input.id, input.id, input.id, input.id],
+    );
+    await assert.rejects(
+      runtime.reconcileInput({ ...identity, inputId: input.id }),
+      /unknown Input/i,
+    );
+    runtime.close();
+    adapter.dispose();
+    const legacyDatabase = new DatabaseSync(databasePath);
+    try {
+      const stored = legacyDatabase
+        .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+        .get("execution", execution!.id) as { data: string } | undefined;
+      assert.ok(stored);
+      const legacyExecution = JSON.parse(stored.data) as Record<string, unknown>;
+      assert.equal(typeof legacyExecution.reconciledAt, "number");
+      delete legacyExecution.reconciliationReason;
+      legacyDatabase
+        .prepare("UPDATE runtime_records SET data = ? WHERE kind = ? AND id = ?")
+        .run(JSON.stringify(legacyExecution), "execution", execution!.id);
+    } finally {
+      legacyDatabase.close();
+    }
+    adapter = fixture.createFreshAdapter();
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["zcode", adapter]]) });
+    await runtime.restoreTaskSession(identity);
+    await assert.rejects(
+      runtime.reviseTurn({ ...identity, sourceExecutionId: execution!.id, kind: "retry" }),
+      /native tool or file-change history was not reconstructed/i,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "native-effect-once\n");
+  } finally {
+    runtime.close();
+    adapter.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("legacy unknown retry reconciles with nativeRevisionCommandId and keeps revision ownership", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-zcode-legacy-revision-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const rows: NativeAssistantRow[] = [];
+  const fixture = harness({ rows, revisionSendFails: true, revisionQueryUnknown: true });
+  let adapter = fixture.adapter;
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["zcode", adapter]]),
+  });
+  const emit = (eventId: string, seq: number, turnId: string, type: string, payload: unknown) =>
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId,
+        seq,
+        sessionId: "native-session",
+        turnId,
+        timestamp: seq,
+        type,
+        payload,
+      },
+    });
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment: {
+        id: "local:/tmp/workspace",
+        kind: "workspace",
+        workDirectory: "/tmp/workspace",
+      },
+      authorization: {
+        id: "legacy-revision-host-grant",
+        environmentId: "local:/tmp/workspace",
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run", "execution.revise"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const sourceInput = await runtime.submitInput({
+      ...identity,
+      text: "source turn to retry",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    emit("legacy-source-start", 1, "legacy-source-turn", "turn.started", {
+      inputId: "native-input",
+    });
+    emit("legacy-source-failure", 2, "legacy-source-turn", "turn.completed", {
+      inputId: "native-input",
+      resultType: "error",
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "failed");
+    const sourceExecution = runtime.getHistory(task.id)!.executions[0]!;
+    const sourceCommandId = fixture.commands.find((entry) => entry.type === "sendText")!.commandId;
+    rows.push(
+      {
+        rowId: 1,
+        kind: "turnHeader",
+        turnId: "legacy-source-turn",
+        sourceCommandId,
+        state: "failed",
+      },
+      {
+        rowId: 2,
+        kind: "assistantText",
+        turnId: "legacy-source-turn",
+        entityId: "legacy-retry-target",
+        actions: { canRetry: true },
+      },
+    );
+    await assert.rejects(
+      runtime.reviseTurn({
+        ...identity,
+        kind: "retry",
+        sourceExecutionId: sourceExecution.id,
+      }),
+      /unknown/i,
+    );
+    const attemptedInput = runtime.getHistory(task.id)!.inputs[1]!;
+    assert.equal(attemptedInput.status, "unknown");
+    assert.deepEqual(attemptedInput.revisionOf, {
+      kind: "retry",
+      inputId: sourceInput.id,
+      executionId: sourceExecution.id,
+    });
+    const revisionCommand = fixture.commands.find((entry) => entry.type === "retryTurn")!;
+    assert.notEqual(revisionCommand.commandId, attemptedInput.id);
+
+    runtime.close();
+    adapter.dispose();
+    const legacyDatabase = new DatabaseSync(databasePath);
+    try {
+      const stored = legacyDatabase
+        .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+        .get("input", attemptedInput.id) as { data: string } | undefined;
+      assert.ok(stored);
+      const legacyInput = JSON.parse(stored.data) as Record<string, unknown>;
+      assert.equal(legacyInput.nativeCommandId, revisionCommand.commandId);
+      assert.equal(legacyInput.nativeRevisionCommandId, revisionCommand.commandId);
+      delete legacyInput.nativeCommandId;
+      legacyDatabase
+        .prepare("UPDATE runtime_records SET data = ? WHERE kind = ? AND id = ?")
+        .run(JSON.stringify(legacyInput), "input", attemptedInput.id);
+    } finally {
+      legacyDatabase.close();
+    }
+
+    adapter = fixture.createFreshAdapter();
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["zcode", adapter]]) });
+    const unresolved = await runtime.reconcileInput({ ...identity, inputId: attemptedInput.id });
+    assert.equal(unresolved.status, "unknown");
+    assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "retryTurn").length, 1);
+    assert.equal(
+      fixture.rowQueries.at(-1)?.nativeTerminalSourceCommandId,
+      revisionCommand.commandId,
+    );
+
+    rows.push(
+      {
+        rowId: 3,
+        kind: "turnHeader",
+        turnId: "legacy-retry-native-turn",
+        sourceCommandId: revisionCommand.commandId,
+        state: "completedSuccess",
+        nativeTerminalEvidence: {
+          eventId: "legacy-retry-terminal",
+          eventType: "turn_complete",
+          sourceCommandId: revisionCommand.commandId,
+          turnId: "legacy-retry-native-turn",
+          resultType: "success",
+        },
+      },
+      {
+        rowId: 4,
+        kind: "assistantText",
+        turnId: "legacy-retry-native-turn",
+        text: "the original retry completed",
+      },
+    );
+    const reconciled = await runtime.reconcileInput({ ...identity, inputId: attemptedInput.id });
+    assert.equal(reconciled.status, "completed");
+    const history = runtime.getHistory(task.id)!;
+    assert.equal(history.executions.length, 2);
+    assert.deepEqual(history.executions[1]?.revisionOf, attemptedInput.revisionOf);
+    assert.equal(history.executions[1]?.inputId, attemptedInput.id);
+    assert.equal(history.inputs[1]?.revisionOf?.inputId, sourceInput.id);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "retryTurn").length, 1);
+    assert.equal(
+      fixture.rowQueries.at(-1)?.nativeTerminalSourceCommandId,
+      revisionCommand.commandId,
     );
   } finally {
     runtime.close();
