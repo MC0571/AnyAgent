@@ -5141,6 +5141,12 @@ test("unknown native Session and Execution require explicit identity-bound recov
         true,
       );
     }, "unknown Session should show explicit recovery controls while blocking composer actions");
+    assert.doesNotMatch(
+      container.textContent ?? "",
+      /处理失败，请刷新状态后重试/u,
+      "a disconnected unknown Execution must not be presented as a confirmed failure",
+    );
+    assert.match(container.textContent ?? "", /发送状态暂时无法确认/u);
     assert.equal(restoreRequests.length, 0, "history selection must not restore automatically");
     assert.equal(reconcileRequests.length, 0, "history selection must not reconcile automatically");
 
