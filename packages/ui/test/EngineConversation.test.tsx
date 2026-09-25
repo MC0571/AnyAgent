@@ -2892,6 +2892,7 @@ test("an active ZCode Harness task switches models within its Session and submit
   let createTaskError: Error | null = null;
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
   const goalStatusLookups: Array<Record<string, unknown>> = [];
+  const pluginCatalogLookups: Array<Record<string, unknown>> = [];
   let rejectNextGoalStatusRead: ((error: Error) => void) | null = null;
   let delayNextGoalStatusRead = false;
   const nativeSkillCatalogLookups: Array<Record<string, unknown>> = [];
@@ -3003,6 +3004,21 @@ test("an active ZCode Harness task switches models within its Session and submit
         status: "active" as const,
         tokensUsed: 24,
         tokenBudget: 100,
+      };
+    },
+    getTaskPluginCatalog: async (input: Record<string, unknown>) => {
+      pluginCatalogLookups.push(input);
+      return {
+        plugins: [
+          {
+            id: "sample-plugin",
+            name: "Sample Plugin",
+            enabled: true,
+            source: "marketplace",
+            marketplace: "local",
+            version: "1.0.0",
+          },
+        ],
       };
     },
     setAssistantFeedback: async (input: Record<string, unknown>) => {
@@ -3207,7 +3223,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     };
     await chooseConfig("chat-mode-select-trigger", "chat-mode-select-item-edit");
     await chooseConfig("chat-thought-level-select-trigger", "chat-thought-level-select-item-low");
-    const input = container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]') as
+    let input = container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]') as
       | (HTMLElement & {
           __zcodeLexicalInputE2E?: {
             setText: (value: string) => void;
@@ -3474,7 +3490,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       () =>
         assert.ok(
           document.body.textContent?.includes(
-            "固定 CLI 命令暂不支持：/login、/logout、/expert、/dwf、/fork、/mcp、/plugins、/resume、/rewind、/goal",
+            "固定 CLI 命令暂不支持：/login、/logout、/expert、/dwf、/fork、/mcp、/resume、/rewind、/goal",
           ),
         ),
       "/help should distinguish the fixed M0 catalog from M1-supported commands",
@@ -3511,6 +3527,46 @@ test("an active ZCode Harness task switches models within its Session and submit
     );
     await waitFor(() => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""));
 
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/plugins"));
+    await waitFor(() => assert.ok(container.querySelector('[data-option-id="app-slash:plugins"]')));
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-option-id="app-slash:plugins"]')!
+        .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    );
+    await waitFor(() => assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/plugins "));
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/plugins list"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(pluginCatalogLookups.length, 1));
+    assert.deepEqual(pluginCatalogLookups[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+    });
+    assert.equal(submissions.length, 0, "read-only CLI plugin listing must not create an Input");
+    await waitFor(() =>
+      assert.ok(document.body.querySelector('[data-testid="engine-cli-plugins"]')),
+    );
+    assert.match(document.body.textContent ?? "", /Sample Plugin.*sample-plugin.*已启用/s);
+    await waitFor(() => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""));
+    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    await waitFor(() =>
+      assert.equal(document.body.querySelector('[data-testid="engine-cli-plugins"]'), null),
+    );
+    await act(async () => root.render(appFor(taskId)));
+    assert.equal(
+      document.body.querySelector('[data-testid="engine-cli-plugins"]'),
+      null,
+      "an old Task plugin list must not reopen after A→B→A",
+    );
+    await waitFor(() =>
+      assert.ok(container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]')),
+    );
+    input = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as typeof input;
+
     const unsupportedNativeCommands = [
       ["/login setup", "M0 登录会启动共享账号与凭据流程"],
       ["/logout", "M0 退出登录会删除多个 Session 共用的凭据"],
@@ -3518,7 +3574,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       ["/dwf list", "M0 操作 CLI 动态工作流运行记录"],
       ["/fork latest", "M0 从工作区检查点分叉，M1 从指定产品 Execution 分叉"],
       ["/mcp status", "M0 管理 CLI 的 MCP 服务连接"],
-      ["/plugin list", "M0 修改后续 CLI Session 使用的插件配置"],
+      ["/plugin enable sample", "目前仅接通 /plugins list 和 /plugins status"],
       ["/continue", "M0 CLI Session ID 不能安全地映射并授权"],
       ["/rewind latest", "M0 恢复工作区检查点；M1 只支持绑定到指定产品 Execution"],
       ["/target pause", "M1 当前仅支持只读 /goal 查询"],

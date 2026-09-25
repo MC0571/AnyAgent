@@ -1,7 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- 单个 Task 的刷新、资格投影、身份校验与正式消息界面共享同一选中状态。 */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrainIcon } from "lucide-react";
-import type { IAnyAgentService, TaskSkillReference } from "@zcode/services";
+import type { IAnyAgentService, TaskPluginCatalog, TaskSkillReference } from "@zcode/services";
 import type {
   EngineCapability,
   EngineFileRewindPreview,
@@ -117,6 +117,7 @@ const rendererMappedSlashCommands = new Set([
   "model",
   "new",
   "plan",
+  "plugins",
   "skill",
   "variant",
 ]);
@@ -146,8 +147,8 @@ const unsupportedNativeSlashReasons = {
     zh: "M0 管理 CLI 的 MCP 服务连接；M1 没有对应的 Task 级 Host 路径来操作这份 CLI 配置。",
   },
   plugins: {
-    en: "M0 changes CLI plugin configuration for future CLI sessions; that is not the product Plugin manager or a Task Host action.",
-    zh: "M0 修改后续 CLI Session 使用的插件配置；这不等同于产品插件管理器，也没有对应的 Task Host 操作。",
+    en: "Only /plugins list and /plugins status are mapped; changing CLI plugin configuration still has no Task-scoped Host action.",
+    zh: "目前仅接通 /plugins list 和 /plugins status；修改 CLI 插件配置仍无 Task 级 Host 操作。",
   },
   resume: {
     en: "An M0 CLI Session id cannot safely identify and authorize a product Task, Participant, and Session.",
@@ -266,6 +267,9 @@ function formatEngineSlashHelp(
         ...(entry.name === "skill"
           ? ["M1 经 Host 读取当前 Task 的 Skill catalog，并在同一 Task 中提交命名 Skill 请求。"]
           : []),
+        ...(entry.name === "plugins"
+          ? ["M1 经 Host 只读查询当前工作区的 CLI 插件目录；enable、disable、uninstall 尚未接通。"]
+          : []),
         ...(!isMapped
           ? [
               unsupportedNativeSlashReasons[
@@ -309,6 +313,7 @@ function formatEngineSlashHelp(
   const supportedCommands = [...supportedNames].map((name) => `/${name}`);
   return [
     `M1 Engine 对话支持：${supportedCommands.join("、")}。`,
+    "其中 /plugins 仅支持 list/status 只读查询。",
     `固定 CLI 命令暂不支持：${unsupportedBuiltins.join("、")}。`,
     ...(customNames.length > 0
       ? [`ZCode CLI 自定义命令暂不支持：${customNames.join("、")}。`]
@@ -476,6 +481,11 @@ export function EngineConversation({
   const [loading, setLoading] = useState(true);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [pluginCatalog, setPluginCatalog] = useState<{
+    taskId: string;
+    catalog: TaskPluginCatalog;
+  } | null>(null);
+  useEffect(() => setPluginCatalog(null), [selectedTaskId]);
   const [pendingEditQueueItemId, setPendingEditQueueItemId] = useState<string | null>(null);
   const [restoreErrors, setRestoreErrors] = useState<Record<string, string>>({});
   const [reconcileErrors, setReconcileErrors] = useState<Record<string, string>>({});
@@ -1055,6 +1065,12 @@ export function EngineConversation({
         run: () =>
           toast(formatEngineSlashHelp("", nativeSlashCommands, locale), { variant: "info" }),
       },
+      {
+        value: "plugins",
+        description: "查看当前工作区 CLI 插件",
+        keywords: ["plugins", "插件", "list", "status"],
+        run: () => inputApiRef.current?.setText("/plugins "),
+      },
     ];
     return uiCommands;
   }, [
@@ -1372,7 +1388,49 @@ export function EngineConversation({
     let submitSuccessMessage: (() => string | null) | null = null;
 
     if (isZCodeHarness && slashCommand) {
-      if (slashCommand.name === "goal" && !slashCommand.args) {
+      if (
+        slashCommand.name === "plugins" &&
+        (!slashCommand.args || ["list", "status"].includes(slashCommand.args.toLowerCase()))
+      ) {
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
+          setNotice({ kind: "info", message: "/plugins 查询不接受附件或网页上下文；输入已保留。" });
+          return false;
+        }
+        if (busyAction) return false;
+        const target = visibleTask;
+        const editor = inputApiRef.current;
+        const requestVersion = requestVersionRef.current;
+        const actionId = `plugins-list:${target.id}:${requestVersion}`;
+        setBusyAction(actionId);
+        setNotice(null);
+        void (async () => {
+          try {
+            const catalog = await service.getTaskPluginCatalog({
+              taskId: target.id,
+              participantId: target.participant.id,
+              sessionId: target.session.id,
+              authorizationId: target.authorizationId,
+            });
+            if (
+              requestVersion !== requestVersionRef.current ||
+              selectedTaskIdRef.current !== target.id
+            )
+              return;
+            setPluginCatalog({ taskId: target.id, catalog });
+            if (inputApiRef.current === editor && editor?.getText().trim() === cleanText)
+              editor.clear();
+          } catch (error) {
+            if (
+              requestVersion === requestVersionRef.current &&
+              selectedTaskIdRef.current === target.id
+            )
+              setNotice({ kind: "error", message: errorText(error) });
+          } finally {
+            setBusyAction((current) => (current === actionId ? null : current));
+          }
+        })();
+        return false;
+      } else if (slashCommand.name === "goal" && !slashCommand.args) {
         if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
           setNotice({ kind: "info", message: "/goal 查询不接受附件或网页上下文；输入已保留。" });
           return false;
@@ -2470,6 +2528,41 @@ export function EngineConversation({
           )}
         </div>
       </div>
+      {visibleTask ? (
+        <Dialog
+          open={pluginCatalog?.taskId === visibleTask.id}
+          onOpenChange={(open) => {
+            if (!open) setPluginCatalog(null);
+          }}
+        >
+          <DialogContent
+            className="max-h-[85vh] max-w-xl overflow-y-auto"
+            data-testid="engine-cli-plugins"
+            aria-describedby={undefined}
+          >
+            <DialogHeader>
+              <DialogTitle>CLI 插件</DialogTitle>
+            </DialogHeader>
+            {pluginCatalog?.catalog.plugins.length ? (
+              <ul className="space-y-2 text-sm">
+                {pluginCatalog.catalog.plugins.map((plugin) => (
+                  <li key={plugin.id}>
+                    <span className="font-medium">{plugin.name}</span> · {plugin.id} ·{" "}
+                    {plugin.enabled ? "已启用" : "已停用"}
+                    <span className="block text-foreground-subtle">
+                      {plugin.source}/{plugin.marketplace}
+                      {plugin.version ? ` · ${plugin.version}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-foreground-subtle">未找到 CLI 插件。</p>
+            )}
+            <p className="text-xs text-foreground-subtle">只读目录；配置变更尚未接通此对话入口。</p>
+          </DialogContent>
+        </Dialog>
+      ) : null}
       {visibleTask ? (
         <Dialog open={inspectorOpen} onOpenChange={onInspectorOpenChange}>
           <DialogContent

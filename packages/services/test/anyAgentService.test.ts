@@ -798,6 +798,7 @@ test("Host Skill catalog reads require the matching active Task Session", async 
   setDataBaseDir(directory);
   const nativeCatalogReads: Array<Record<string, unknown>> = [];
   const nativeGoalReads: Array<Record<string, unknown>> = [];
+  const nativePluginReads: Array<Record<string, unknown>> = [];
   let nativeSessionSequence = 0;
   let catalogAuthority: "session" | "workspace" = "session";
   const host = createAnyAgentService({
@@ -825,6 +826,26 @@ test("Host Skill catalog reads require the matching active Task Session", async 
             enabled: true as const,
           },
         ],
+      };
+    },
+    listPlugins: async (params: Record<string, unknown>) => {
+      nativePluginReads.push(params);
+      return {
+        plugins: [
+          {
+            id: "sample",
+            name: "Sample",
+            enabled: true,
+            source: "marketplace",
+            marketplace: "local",
+            version: "1.0.0",
+            rootPath: "/secret/native/path",
+            skillRootCount: 0,
+            commandRootCount: 1,
+            mcpServerNames: [],
+          },
+        ],
+        diagnostics: [],
       };
     },
     readSession: async (params: Record<string, unknown>) => {
@@ -888,6 +909,24 @@ test("Host Skill catalog reads require the matching active Task Session", async 
       workspacePath: project,
       sessionId: first.session.nativeSessionId,
     });
+    await assert.rejects(
+      host.service.getTaskPluginCatalog({ ...identity, sessionId: second.session.id }),
+      /ownership do not match/i,
+    );
+    assert.equal(nativePluginReads.length, 0, "cross-Task Sessions must not query CLI plugins");
+    assert.deepEqual(await host.service.getTaskPluginCatalog(identity), {
+      plugins: [
+        {
+          id: "sample",
+          name: "Sample",
+          enabled: true,
+          source: "marketplace",
+          marketplace: "local",
+          version: "1.0.0",
+        },
+      ],
+    });
+    assert.deepEqual(nativePluginReads, [{ workspacePath: project }]);
     await assert.rejects(
       host.service.getTaskGoalStatus({ ...identity, sessionId: second.session.id }),
       /ownership do not match/i,

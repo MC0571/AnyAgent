@@ -53,6 +53,8 @@ export interface IAnyAgentService {
   getTaskSkillReferenceCatalog(
     input: TaskSkillReferenceCatalogRequest,
   ): Promise<TaskSkillReferenceCatalog>;
+  /** Effective CLI plugin catalog for the Task workspace, read under its current Session grant. */
+  getTaskPluginCatalog(input: TaskLifecycleRequest): Promise<TaskPluginCatalog>;
   /** Read-only ZCode Session goal projection; native storage remains authoritative. */
   getTaskGoalStatus(input: TaskLifecycleRequest): Promise<TaskGoalStatus | null>;
   restoreTaskSession(input: TaskLifecycleRequest): Promise<RuntimeTask>;
@@ -119,6 +121,17 @@ export interface IAnyAgentService {
 
 export interface TaskSkillReferenceCatalog {
   readonly skills: readonly TaskSkillReference[];
+}
+
+export interface TaskPluginCatalog {
+  readonly plugins: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly enabled: boolean;
+    readonly source: string;
+    readonly marketplace: string;
+    readonly version?: string;
+  }[];
 }
 
 export interface TaskGoalStatus {

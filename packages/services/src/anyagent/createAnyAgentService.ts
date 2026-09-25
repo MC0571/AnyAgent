@@ -232,6 +232,32 @@ export function createAnyAgentService(
         })),
       };
     },
+    async getTaskPluginCatalog(input) {
+      const catalog = await runtime.readQualifiedTaskSession(input, async (target) => {
+        if (target.engineId !== "zcode")
+          throw new RuntimeEligibilityError(
+            "CLI plugin catalogs are available only for ZCode Tasks.",
+            "unsupported",
+          );
+        const workspacePath = target.environment.workDirectory;
+        if (target.environment.kind !== "workspace" || !workspacePath)
+          throw new RuntimeEligibilityError(
+            "The Task does not have a local workspace for its CLI plugin catalog.",
+            "unsupported",
+          );
+        return agentScope.service.listPlugins({ workspacePath });
+      });
+      return {
+        plugins: catalog.plugins.map(({ id, name, enabled, source, marketplace, version }) => ({
+          id,
+          name,
+          enabled,
+          source,
+          marketplace,
+          ...(version ? { version } : {}),
+        })),
+      };
+    },
     async getTaskGoalStatus(input) {
       return runtime.readQualifiedTaskSession(input, async (target) => {
         if (target.engineId !== "zcode")

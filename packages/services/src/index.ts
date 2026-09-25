@@ -6,6 +6,7 @@ export type {
   TaskSkillReference,
   TaskSkillReferenceCatalog,
   TaskSkillReferenceCatalogRequest,
+  TaskPluginCatalog,
 } from "./anyagent/anyAgentService.js";
 export {
   IModelSelectionService,
