@@ -1,0 +1,842 @@
+{
+  "testedProductCommit": "2b06484c5f8c88f31c6b919fd7c0ff7bf74d7255",
+  "scope": "Isolated final candidate desktop scenario, 2026-09-26",
+  "productDatabaseAlias": "isolatedHome/anyagent-m1.sqlite",
+  "nativeDatabaseAlias": "isolatedHome/.zcode/cli/db/db.sqlite",
+  "productTaskId": "task_be2ae963-20c2-4f07-9c0b-b16dee2bccb5",
+  "productParticipantId": "participant_bb034b3d-d6a4-4843-86f4-018413a97ac2",
+  "productSessionId": "session_1cd1d6fc-675c-44f6-bd1a-4b9adf275ed3",
+  "nativeSessionId": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+  "inputs": [
+    {
+      "marker": "M2_FINAL_2B0_R5_926",
+      "inputId": "input_f774e43f-4b35-435a-a1c6-4cbb58b06986",
+      "productTaskId": "task_be2ae963-20c2-4f07-9c0b-b16dee2bccb5",
+      "productSessionId": "session_1cd1d6fc-675c-44f6-bd1a-4b9adf275ed3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_R5_926: In this same Task and Session, reply exactly R5_SAME_SESSION_926. Do not call tools.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_c43e00e5-2090-4a3b-82b5-f527f5194dfe",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_f774e43f-4b35-435a-a1c6-4cbb58b06986",
+        "session_id": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 6,
+        "promoted_sequence": 6,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_APPROVAL_ALLOW_926",
+      "inputId": "input_2b16c328-2188-4799-9c0d-fc27ebad6b15",
+      "productTaskId": "task_be2ae963-20c2-4f07-9c0b-b16dee2bccb5",
+      "productSessionId": "session_1cd1d6fc-675c-44f6-bd1a-4b9adf275ed3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_APPROVAL_ALLOW_926: Use the Write tool now to create m2-final-2b0-allow-926.txt in this isolated project with exact content ALLOW_2B0_926. Ask for approval and wait before writing. Report only after tool result.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_5d48ab59-4891-4312-9d7e-a685ccf7581f",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_2b16c328-2188-4799-9c0d-fc27ebad6b15",
+        "session_id": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 7,
+        "promoted_sequence": 7,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_APPROVAL_DENY_926",
+      "inputId": "input_0c876035-a059-4a68-9f54-41daf8d66d99",
+      "productTaskId": "task_be2ae963-20c2-4f07-9c0b-b16dee2bccb5",
+      "productSessionId": "session_1cd1d6fc-675c-44f6-bd1a-4b9adf275ed3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_APPROVAL_DENY_926: Use the Write tool now to create m2-final-2b0-deny-926.txt in this isolated project with exact content SHOULD_NOT_EXIST_2B0_926. Wait for approval decision, do not work around a denial.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_0a3c8776-8c21-4156-9594-976bbedc32ac",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_0c876035-a059-4a68-9f54-41daf8d66d99",
+        "session_id": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 8,
+        "promoted_sequence": 8,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_AFTER_COMPACT_926",
+      "inputId": "input_20d3aef1-a7ee-462f-b122-362041026b17",
+      "productTaskId": "task_be2ae963-20c2-4f07-9c0b-b16dee2bccb5",
+      "productSessionId": "session_1cd1d6fc-675c-44f6-bd1a-4b9adf275ed3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_AFTER_COMPACT_926: Reply in one sentence with the marker AFTER_COMPACT_2B0_926. Do not use tools.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_34a88b92-2621-4e85-b1a7-426c85e5d4f2",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_20d3aef1-a7ee-462f-b122-362041026b17",
+        "session_id": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 10,
+        "promoted_sequence": 9,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_CONTEXT_926",
+      "inputId": "input_6721e41d-4ed6-4210-80eb-ea34c40e1f6f",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [
+        "README.md"
+      ],
+      "submittedText": "[README.md](./README.md)  M2_FINAL_2B0_CONTEXT_926: Read the attached file and the referenced README.md. Report the exact Workspace marker and say whether both refer to this isolated project. Do not modify files.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_017a1901-ab06-45af-94de-5193e9e6aa2a",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_6721e41d-4ed6-4210-80eb-ea34c40e1f6f",
+        "session_id": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 11,
+        "promoted_sequence": 10,
+        "attachments": [
+          {
+            "ref": "/private/tmp/anyagent-opencode-go.aBEA0z/m2-final-project/README.md",
+            "fileName": "README.md",
+            "mime": "text/markdown",
+            "bytes": 34
+          }
+        ]
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_STOP_926",
+      "inputId": "input_98e4b4ae-f353-43dc-afe6-1c75e5bf1833",
+      "productTaskId": "task_f9b8cf36-ac2b-4cc2-9c94-830bb619c0a5",
+      "productSessionId": "session_c48e7f9a-795e-4d1d-b473-4efa5998ea77",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_STOP_926: First use the Write tool to create m2-final-2b0-stop-926.txt in this isolated project with exact content STOP_SIDE_EFFECT_2B0_926. Wait for approval. After the tool completes, write 200 numbered distinct TypeScript tips, each one sentence. End with END_STOP_2B0_926. Do not delete or rewrite the file.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "deepseek-v4.1-flash",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_345fe5c1-ec30-4ac0-aac1-4252fa8e03bf",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_98e4b4ae-f353-43dc-afe6-1c75e5bf1833",
+        "session_id": "sess_5fa1f43f-9605-4083-aa51-f295516c7409",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 4,
+        "promoted_sequence": 4,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_STOP2_926",
+      "inputId": "input_46728b4b-e3ee-40b2-be0a-3b161f769675",
+      "productTaskId": "task_f9b8cf36-ac2b-4cc2-9c94-830bb619c0a5",
+      "productSessionId": "session_c48e7f9a-795e-4d1d-b473-4efa5998ea77",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_STOP2_926: Use Write now to create m2-final-2b0-stop2-926.txt in this isolated project with exact content STOP2_SIDE_EFFECT_2B0_926. Ask approval. After the Write completes, output 500 numbered one-sentence TypeScript tips. Do not modify or remove the file.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "deepseek-v4.1-flash",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "inputStatus": "stopped",
+      "executionId": "execution_fa1ecdc9-a493-4fa6-921f-1585cff957a9",
+      "executionStatus": "stopped",
+      "nativeSessionInput": {
+        "id": "queue_input_46728b4b-e3ee-40b2-be0a-3b161f769675",
+        "session_id": "sess_5fa1f43f-9605-4083-aa51-f295516c7409",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 5,
+        "promoted_sequence": 5,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_AFTER_STOP_926",
+      "inputId": "input_ca1137b5-7be3-4887-b7a0-8410af348c7e",
+      "productTaskId": "task_f9b8cf36-ac2b-4cc2-9c94-830bb619c0a5",
+      "productSessionId": "session_c48e7f9a-795e-4d1d-b473-4efa5998ea77",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_AFTER_STOP_926: Reply exactly AFTER_STOP_2B0_926. Do not call tools or alter files.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "deepseek-v4.1-flash",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_b29ea3b4-f037-4e6b-8732-19b837595c92",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_ca1137b5-7be3-4887-b7a0-8410af348c7e",
+        "session_id": "sess_5fa1f43f-9605-4083-aa51-f295516c7409",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 6,
+        "promoted_sequence": 6,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_2B0_QUEUE_A_926",
+      "inputId": "input_dcdaed4a-e349-41e9-b15e-1a239c01f6e0",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [],
+      "submittedText": "M2_2B0_QUEUE_A_926: Write 120 numbered one-sentence TypeScript tips. Start with START_QUEUE_2B0_926 and end with END_QUEUE_2B0_926. Do not use tools.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_37013500-1606-4d96-b02c-7cacf17748d9",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_dcdaed4a-e349-41e9-b15e-1a239c01f6e0",
+        "session_id": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 12,
+        "promoted_sequence": 11,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_2B0_QUEUE_B_ORIGINAL_926",
+      "inputId": "input_e9bfc649-3003-4efa-853e-6361699bd01d",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [],
+      "submittedText": "M2_2B0_QUEUE_B_ORIGINAL_926: Reply QUEUE_B_ORIGINAL_2B0_926 after A completes.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "cancelled",
+      "executionId": null,
+      "executionStatus": null,
+      "nativeSessionInput": null
+    },
+    {
+      "marker": "M2_2B0_QUEUE_B_REVISED_926",
+      "inputId": "input_e3a4ec68-17f8-457b-98d7-1e0e76ee0f45",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [],
+      "submittedText": "M2_2B0_QUEUE_B_REVISED_926: Reply exactly QUEUE_B_REVISED_2B0_926 after A completes. Do not call tools.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_e2ea2d04-801a-4986-b119-d86d02ac0b97",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_e3a4ec68-17f8-457b-98d7-1e0e76ee0f45",
+        "session_id": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 13,
+        "promoted_sequence": 12,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_2B0_EDIT_SOURCE_926",
+      "inputId": "input_98429136-ecd0-46a5-bfcb-053d44e33972",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [
+        "m2-final-allow-925.txt"
+      ],
+      "submittedText": "M2_2B0_EDIT_SOURCE_926: Confirm the attached marker. Do not modify files.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_1b9d60a4-96dd-4e4c-a755-f8740ebcd9b2",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_98429136-ecd0-46a5-bfcb-053d44e33972",
+        "session_id": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 14,
+        "promoted_sequence": 13,
+        "attachments": [
+          {
+            "ref": "/private/tmp/anyagent-opencode-go.aBEA0z/m2-final-project/m2-final-allow-925.txt",
+            "fileName": "m2-final-allow-925.txt",
+            "mime": "text/plain",
+            "bytes": 15
+          }
+        ]
+      }
+    },
+    {
+      "marker": "M2_2B0_EDIT_KEEP_926",
+      "inputId": "input_17610ad0-a310-4296-8ef9-46a70fd17247",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [
+        "m2-final-allow-925.txt"
+      ],
+      "submittedText": "M2_2B0_EDIT_KEEP_926: Keep the attached file and report its exact marker. Do not modify files.",
+      "revisionOf": {
+        "kind": "edit",
+        "inputId": "input_98429136-ecd0-46a5-bfcb-053d44e33972",
+        "executionId": "execution_1b9d60a4-96dd-4e4c-a755-f8740ebcd9b2"
+      },
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_8ce2d5c6-b0d0-4a4d-b911-4353a71afff1",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_revision_a9945b15-18dc-48ae-b039-58f2f5e6a496",
+        "session_id": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 15,
+        "promoted_sequence": 14,
+        "attachments": [
+          {
+            "ref": "/private/tmp/anyagent-opencode-go.aBEA0z/m2-final-project/m2-final-allow-925.txt",
+            "fileName": "m2-final-allow-925.txt",
+            "mime": "text/plain",
+            "bytes": 15
+          }
+        ]
+      }
+    },
+    {
+      "marker": "M2_2B0_EDIT_REPLACE_926",
+      "inputId": "input_223d8698-341a-4135-96c9-4917ee2ffd89",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [
+        "README.md"
+      ],
+      "submittedText": "M2_2B0_EDIT_REPLACE_926: The old attachment was removed and README.md was added. Report the exact Workspace marker only. Do not modify files.",
+      "revisionOf": {
+        "kind": "edit",
+        "inputId": "input_17610ad0-a310-4296-8ef9-46a70fd17247",
+        "executionId": "execution_8ce2d5c6-b0d0-4a4d-b911-4353a71afff1"
+      },
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_be8eaa3b-63ec-4379-8ee8-d9cf2ee66e2e",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_revision_9b746535-bb51-46f2-ab24-418e9ef0d7c8",
+        "session_id": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 16,
+        "promoted_sequence": 15,
+        "attachments": [
+          {
+            "ref": "/private/tmp/anyagent-opencode-go.aBEA0z/m2-final-project/README.md",
+            "fileName": "README.md",
+            "mime": "text/markdown",
+            "bytes": 34
+          }
+        ]
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_QUESTION_926",
+      "inputId": "input_e0fe80f0-5026-4a98-9ce6-abe65f9e2d13",
+      "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_QUESTION_926: Before answering, use the native structured AskUserQuestion tool to ask me to choose A or B. Do not infer or answer until I select an option. After I select B, reply exactly QUESTION_B_2B0_926.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_afed8f3d-a2e6-4346-816a-d94a6c3c2ce8",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_e0fe80f0-5026-4a98-9ce6-abe65f9e2d13",
+        "session_id": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 17,
+        "promoted_sequence": 16,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_SHORTCUT_HARNESS_926",
+      "inputId": "input_09a9e5a6-ad52-4c1b-a403-09ab142e7821",
+      "productTaskId": "task_31653add-af35-4377-897e-0bfc228ce437",
+      "productSessionId": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_SHORTCUT_HARNESS_926: Reply SHORTCUT_HARNESS_OK_926 only.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_f0a7341c-9732-4b8e-82bb-288d7767994d",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_09a9e5a6-ad52-4c1b-a403-09ab142e7821",
+        "session_id": "sess_37e4b711-bef4-4ed3-beb0-9527cee45f30",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 0,
+        "promoted_sequence": 0,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_SHORTCUT_HARNESS_R2_926",
+      "inputId": "input_cd1daaf9-d774-4375-bcbf-7335fc06e35e",
+      "productTaskId": "task_31653add-af35-4377-897e-0bfc228ce437",
+      "productSessionId": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_SHORTCUT_HARNESS_R2_926: Reply SHORTCUT_HARNESS_R2_OK_926 only.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_31894421-2dee-44ed-887f-b82833d5b160",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_cd1daaf9-d774-4375-bcbf-7335fc06e35e",
+        "session_id": "sess_37e4b711-bef4-4ed3-beb0-9527cee45f30",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 1,
+        "promoted_sequence": 1,
+        "attachments": []
+      }
+    },
+    {
+      "marker": "M2_FINAL_2B0_MODEL_DEEPSEEK_926",
+      "inputId": "input_2df75661-e331-48ad-8c82-d0369c87ab1c",
+      "productTaskId": "task_31653add-af35-4377-897e-0bfc228ce437",
+      "productSessionId": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_MODEL_DEEPSEEK_926: Reply MODEL_DEEPSEEK_OK_926 only.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "deepseek-v4.1-flash",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_9173e5c3-b08b-43e8-a9ec-cfc5b7c27d7b",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_2df75661-e331-48ad-8c82-d0369c87ab1c",
+        "session_id": "sess_37e4b711-bef4-4ed3-beb0-9527cee45f30",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 2,
+        "promoted_sequence": 2,
+        "attachments": []
+      }
+    }
+  ],
+  "fakeInputs": [
+    {
+      "id": "input_b7404f6a-81b8-4aa2-a228-dff797cc4482",
+      "taskId": "task_8eec2cfa-95c9-4d0b-bc18-16a826c4ef8a",
+      "sessionId": "session_0d5e5438-c9ea-44e9-9d96-de7267273862",
+      "status": "completed",
+      "text": "M2_2B0_FAKE_A1_926: Return distinguishable Fake round one with tool marker."
+    },
+    {
+      "id": "input_1a3a4948-d528-4a7b-b756-0a32b9fe342d",
+      "taskId": "task_8eec2cfa-95c9-4d0b-bc18-16a826c4ef8a",
+      "sessionId": "session_0d5e5438-c9ea-44e9-9d96-de7267273862",
+      "status": "completed",
+      "text": "M2_2B0_FAKE_A2_926: second round in the same Task A."
+    },
+    {
+      "id": "input_27016d47-3ca8-4559-94df-9b924f30ca13",
+      "taskId": "task_22f35830-4603-4043-afd6-de2cc64f2a94",
+      "sessionId": "session_7933fe7f-f89e-483d-a740-f36b8b37b626",
+      "status": "completed",
+      "text": "M2_2B0_FAKE_B1_926: independent Task B; return a separate fake marker."
+    },
+    {
+      "id": "input_b9d58f26-5eba-4019-8703-de33f57554ad",
+      "taskId": "task_8eec2cfa-95c9-4d0b-bc18-16a826c4ef8a",
+      "sessionId": "session_0d5e5438-c9ea-44e9-9d96-de7267273862",
+      "status": "completed",
+      "text": "M2_2B0_FAKE_A3_AFTER_B_926: third round back in original Task A after visiting B."
+    }
+  ],
+  "m0NativeInput": [
+    {
+      "id": "queue_01a0d96a-b6ac-7f0a-9c62-1a5bc2bf6b06",
+      "session_id": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+      "status": "promoted",
+      "delivery": "startNow"
+    }
+  ],
+  "approvals": [
+    {
+      "id": "approval_bf2ecd6e-9653-4f36-a775-aea9df7b478d",
+      "executionId": "execution_5d48ab59-4891-4312-9d7e-a685ccf7581f",
+      "nativeApprovalId": "perm_a4a78cc1-00ee-4b47-b32f-f6a595d9412f",
+      "status": "forwarded",
+      "operation": "Write"
+    },
+    {
+      "id": "approval_854122bd-66db-4748-95b8-5223fa6c23c8",
+      "executionId": "execution_0a3c8776-8c21-4156-9594-976bbedc32ac",
+      "nativeApprovalId": "perm_80653b18-e756-43a2-a26b-aa0d04716767",
+      "status": "rejected",
+      "operation": "Write"
+    },
+    {
+      "id": "approval_364ee1fc-3683-418c-a266-14e99f6aa827",
+      "executionId": "execution_0a3c8776-8c21-4156-9594-976bbedc32ac",
+      "nativeApprovalId": "perm_d1ad9b30-a854-45a7-803e-e04b0aed227b",
+      "status": "rejected",
+      "operation": "Write"
+    },
+    {
+      "id": "approval_cd66f67c-8211-48fc-8846-b92b42bbbfb4",
+      "executionId": "execution_345fe5c1-ec30-4ac0-aac1-4252fa8e03bf",
+      "nativeApprovalId": "perm_0c80832f-02a9-4ce8-8966-40b06cd5b8d2",
+      "status": "forwarded",
+      "operation": "Write"
+    },
+    {
+      "id": "approval_56289b7f-f370-458d-b4a8-1fad4b0f6506",
+      "executionId": "execution_fa1ecdc9-a493-4fa6-921f-1585cff957a9",
+      "nativeApprovalId": "perm_c190bcc2-9abc-47c6-8283-d224fc45bbc3",
+      "status": "forwarded",
+      "operation": "Write"
+    }
+  ],
+  "question": {
+    "productUserInput": {
+      "id": "user-input_a806717c-c48b-4514-999b-de0cd872eb54",
+      "requestEventId": "event_fb460f7e-bcd7-472d-a4d4-c93280d27abc",
+      "taskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+      "participantId": "participant_3bb1e616-d843-4faa-a364-a1ed692a7ba8",
+      "sessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+      "executionId": "execution_afed8f3d-a2e6-4346-816a-d94a6c3c2ce8",
+      "nativeRequestId": "perm_8fb3bdad-dc33-401a-b084-6af8c4b3fa44",
+      "prompt": "Which option do you choose, A or B?",
+      "inputKind": "choice",
+      "options": [
+        {
+          "id": "A",
+          "label": "A"
+        },
+        {
+          "id": "B",
+          "label": "B"
+        }
+      ],
+      "presentation": {
+        "questions": [
+          {
+            "question": "Which option do you choose, A or B?",
+            "header": "Choice",
+            "options": [
+              {
+                "value": "A",
+                "label": "A",
+                "description": "Choose option A."
+              },
+              {
+                "value": "B",
+                "label": "B",
+                "description": "Choose option B."
+              }
+            ],
+            "multiSelect": false
+          }
+        ]
+      },
+      "expiresAt": null,
+      "status": "forwarded",
+      "response": {
+        "action": "accept",
+        "content": {
+          "answers": {
+            "Which option do you choose, A or B?": "B"
+          },
+          "answer_0": "B",
+          "answer": "B"
+        }
+      }
+    },
+    "nativeToolPart": {
+      "type": "tool",
+      "callID": "toolu_ad6da5969b6744b5bcb25e70",
+      "declarationIndex": 0,
+      "tool": "AskUserQuestion",
+      "state": {
+        "status": "completed",
+        "input": {
+          "questions": [
+            {
+              "header": "Choice",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Choose option A.",
+                  "label": "A"
+                },
+                {
+                  "description": "Choose option B.",
+                  "label": "B"
+                }
+              ],
+              "question": "Which option do you choose, A or B?"
+            }
+          ]
+        },
+        "output": "User has answered your questions: \"Which option do you choose, A or B?\"=\"B\". You can now continue with the user's answers in mind.",
+        "title": "AskUserQuestion",
+        "metadata": {
+          "schemaVersion": 1,
+          "serialization": {
+            "truncated": false,
+            "originalBytes": 130,
+            "returnedBytes": 130,
+            "budgetStrategy": "truncate"
+          }
+        },
+        "time": {
+          "start": 1790355243706,
+          "end": 1790355243710
+        }
+      }
+    }
+  },
+  "compactOperations": [
+    {
+      "id": "compact_826e9834-f565-490a-b5aa-142c64aa3dce",
+      "status": "completed",
+      "inputId": null,
+      "executionId": null
+    }
+  ],
+  "stop2NativeTerminals": [
+    {
+      "type": "runtime/native_turn_started",
+      "eventType": null,
+      "resultType": null
+    },
+    {
+      "type": "runtime/native_turn_terminal",
+      "eventType": "turn_complete",
+      "resultType": "cancelled"
+    }
+  ],
+  "files": {
+    "m2-final-2b0-allow-926.txt": {
+      "exists": true,
+      "sha256": "417d3616736e0cc4571b36b12d939cd181ebdd4487cfdf1d6107de7e3ccb013f",
+      "bytes": 13
+    },
+    "m2-final-2b0-deny-926.txt": {
+      "exists": false
+    },
+    "m2-final-2b0-stop-926.txt": {
+      "exists": true,
+      "sha256": "3d24667448a61329656b7ac3c49629afd9401c5bdcb68a0a86b1ff883a1288b1",
+      "bytes": 24
+    },
+    "m2-final-2b0-stop2-926.txt": {
+      "exists": true,
+      "sha256": "71c7c30f9d06a39ae8f6da566ee7a06e7e2ac1ba025ecac8597c00c97ec98302",
+      "bytes": 25
+    }
+  },
+  "limits": [
+    "Database facts corroborate desktop observations; they do not prove screenshot timing or visual appearance.",
+    "The model response after allow falsely claimed auto-approval; product approval UI and record show the actual explicit approval."
+  ]
+}

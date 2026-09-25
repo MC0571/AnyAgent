@@ -1,8 +1,8 @@
-# M1 修复集成候选复验（2026-09-24 至 25）
+# M1 修复集成候选复验（截至 2026-09-26）
 
-最新 `f8f0d9cd0dcff67caefe6835d79467d03dcce91e` 集成候选的[原生桌面组合复验、截图与结构化对账](final-f8f0d9c/README.md)单独记录；该候选的通过与缺口以此记录为准。
+当前产品候选为 `2b06484c5f8c88f31c6b919fd7c0ff7bf74d7255`，基于 `origin/main` `8732e7117666352e6252df3992a2cf25a2ccf478`。本候选将 M1 Engine Composer 的 slash 命令目录接回当前 Task 的 Host 资格；[同提交正式桌面与双库复验](final-2b06484/README.md)记录当前已通过的路径及未覆盖范围。此前 [`f8f0d9c` 桌面复验](final-f8f0d9c/README.md)只证明其所记录的旧产品提交，不作为 `2b06484` 最终 RC 通过。
 
-当前集成基线是 `origin/main` `f8f0d9cd0dcff67caefe6835d79467d03dcce91e`（PR #35 squash merge），不是下方旧矩阵所用的 `f47e6b7679f199d82d2f78fc8534aa417b110367`。`f47e6b7`、`432eb7075024639b1e5e9f0692c20666f85d7fa7`、`dda479f031212729dfcb289a983161e32686e872` 及更早候选的桌面与存储记录仍只证明各自完整产品提交；保留其原归属，不自动升级为 `f8f0d9c` 的最终 RC 通过。PR #34 的产品提交 `b92d523dc6a0233b59acdd28f106eae33b9a674c`、证据提交 `67a753ca8d33e0ce5d678c4f515e41a44c975147`，合并提交 `cf4c2da3e6bde4a3b4b22de01b5a5b7e5c0a5190`；PR #35 的产品提交 `a314e828e378cdc85bebe480aad2dfea14c7a7cf`、证据提交 `3900a1535f1c0692754e97a466627a5944da31c1`，合并提交 `f8f0d9cd0dcff67caefe6835d79467d03dcce91e`。#35 合并后的产品路径没有再变更；其 squash tree 与证据提交 tree 相同，但其真实 CLI 场景仍按证据中记录的产品提交 `a314e82` 标识。PR #25 已在独立集成审阅后合并为 `d813b84318aa554c65c162e533c079ba9ed16bdc`。Milestone #2 仍 open；集成基线、增量通过和 Milestone 最终 RC 是不同状态。
+截至 2026-09-26 从 GitHub 核对，[#26](https://github.com/MC0571/AnyAgent/issues/26)、[#21](https://github.com/MC0571/AnyAgent/issues/21) 与 [#11](https://github.com/MC0571/AnyAgent/issues/11) 均保持 open（#11 已重新打开）。本文件更新收口证据状态，不表示候选 PR 已合并或 Milestone #2、上述 Issue 已关闭。
 
 ## PR #35 原生提问空答复增量（`a314e828e378cdc85bebe480aad2dfea14c7a7cf`）
 
@@ -127,7 +127,66 @@ PR #25 最后产品提交为 `6bc55e2eeab63bc495a9c2c954feb15549969e52`，证据
 
 第三轮有 43 条 `message.delta`，首条 `1790260234203`、末条 `1790260245768`，`execution.completed` 为 `1790260245818`；完成前截图和时序共同证明真实 CLI 增量进入正式回答区。第二轮 3 条、第一轮 4 条增量也早于各自完成事件。
 
-## 当前 Milestone #2 收口矩阵（集成基线 `f8f0d9c`）
+## 当前 Milestone #2 收口矩阵（候选 `2b06484`，基线 `8732e711`）
+
+本节汇总产品候选 `2b06484c5f8c88f31c6b919fd7c0ff7bf74d7255` 相对 `origin/main` `8732e7117666352e6252df3992a2cf25a2ccf478` 的状态。旧 [`f8f0d9c` 矩阵](#历史候选收口矩阵f8f0d9c)仅支持它所记录的产品提交；其桌面和双库证据不作为 `2b06484` 最终 RC 通过。GitHub [#26](https://github.com/MC0571/AnyAgent/issues/26)、[#21](https://github.com/MC0571/AnyAgent/issues/21)、[#11](https://github.com/MC0571/AnyAgent/issues/11) 均 open，#11 为 reopened。
+
+**产品功能缺口**指可复现的用户可见缺失或错误；**M1 Contract 技术缺口**指实现违反身份、授权、状态或事件语义。必需负例尚未证明时记作**契约验证缺口**，不等于代码已有缺陷。**纯 RC 证据缺口**表示缺少绑定到完整 `2b06484` 候选的充分证据，不推断功能失败或通过。#26 的 Required／Conditional／Deferred 是产品范围分类，不能代替 M1 Contract Closure。
+
+### 1. M0 Verified Baseline：历史范围与当前回归
+
+| 范围                          | 当前状态                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 历史 Verified Baseline     | #11 与 M0 merge commit `5685739f3f86172a85a43fe6785af7c2dcb438a8` 记录隔离构建／启动、Provider／Model 显式配置、缺认证时不伪造可执行状态、原 Composer 文本输入、真实原生回复与隔离存储、可重复 smoke。它是历史基线，不等于 M0 全部产品能力。见[根 README](../../../README.md#m0-开发基线)和[ZC-04](../../architecture/zcode-transition.md#zc-04m0-整体-bootstrap-过渡基线)。 |
+| `2b06484` 的 M0 flag-off 回归 | **已通过基础对照**：隔离 App 关闭 M1，原 Root／Task／Composer 一轮真实 CLI 回复、原侧栏导航至自动化与模型设置后返回，以及原 slash 菜单，见[同候选记录](final-2b06484/README.md#m0-flag-off-独立对照)。历史 M0 Verified Baseline 不因当前复验扩大。 |
+
+### 2. Product Parity Baseline：Required／Conditional／Deferred
+
+分类和范围依 [#26](https://github.com/MC0571/AnyAgent/issues/26)。Required 与 Conditional 表中的 f8 结果仅作历史对照；Deferred 不阻塞 Milestone #2。
+
+#### Required parity
+
+| 必须保持的产品能力                                                                                                                                                  | `2b06484` 当前状态                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Root、Workspace、任务侧栏与导航；新建／历史 Task、A→B→A；Composer 文本、键盘提交与草稿；多轮、历史顺序、streaming、完成后不重复、Markdown／代码／Tool／文件变更呈现 | **主路径通过，侧栏菜单阻塞**：真实 ZCode 冷恢复、A→B→A、完成前长回答及队列、Markdown／代码与工具、`⌘N` 显式 Harness 新任务、Fake 独立 A／B、M0 flag-off 有[同候选桌面与双库记录](final-2b06484/README.md)。M1 Task 原侧栏菜单的置顶／重命名／归档／未读仍硬禁用，[现场截图](final-2b06484/sidebar-menu-current.jpg)；按 #26 Required 原侧栏范围修复中。 |
+| Provider／Model 逐轮选择；可用权限、模式与 reasoning 实际生效 | **同候选通过**：原 Composer 的 `Harness · zcode` 子菜单将同 OpenCode Go (Anthropic) Provider 从 qwen 换至 deepseek；产品 Input 与原生 `message.modelSelection` 均为 `opencode-go-messages/deepseek-v4.1-flash`、reasoning `max`，前两轮为 qwen／`xhigh`，模式 build。根层旧 Provider 项[按设计锁定](final-2b06484/legacy-provider-group-locked.jpg)，不代表 Harness 子菜单不可用；见[桌面与双库记录](final-2b06484/README.md#m1-真实-cli-与产品边界)。 |
+| 本地附件、文件引用／mention；编辑时附件 keep／remove／add 和来源关系 | **已通过本候选**：Task C 附件＋mention 与两次历史编辑，旧附件保留后替换为 README，产品 `revisionOf`、原生 attachments 一致；见[桌面与双库记录](final-2b06484/README.md#m1-真实-cli-与产品边界)。 |
+| Tool／Approval 请求、允许、拒绝与结果；Stop 送达、原生停止及最终对账 | **已通过本候选对应场景**：原生 Write 一次允许、两次拒绝且拒绝文件不存在；unknown 运行中请求 Stop、ACK 不冒充终态、原生 cancelled 后对账同一 Execution；见[桌面与双库记录](final-2b06484/README.md#运行中观测丢失stop对账)。 |
+
+#### Conditional parity
+
+| 条件能力                              | `2b06484` 当前状态                                                                                                                                                                                            |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 原生结构化 question | **本候选已通过显式答复**：真实 CLI `AskUserQuestion` 在正式 UI 显示 A/B，选择 B 后原请求、产品 user-input、原生工具结果与同一 Execution 完成对应；见[同候选窗口与双库核对](final-2b06484/README.md#m1-真实-cli-与产品边界)。旧候选空答复保留原提交归属；过期／迟到负例由本候选自动化覆盖。 |
+| 可用 slash commands | **当前目录和 `/goal`／`/compact` 通过**：原 Composer 恢复后显示固定 CLI 目录，Host 当前资格检查，`/goal` 真 CLI 回执、`/compact` 原生操作完成且无伪 Input；见[桌面复验](final-2b06484/README.md#m1-真实-cli-与产品边界)。未逐一声称目录中所有命令已执行。 |
+| Queue／队列操作、`/compact`、文件摘要 | **Queue／compact 已通过**：长回答中编辑队列 B，A 完成后提升 B，原 B 零原生派发；compact 成功后同 Session 继续。文件／工具结果已在 Write 审批场景展示；独立文件摘要 UI 效果仍由旧候选和当前组件测试支持，最终 reviewer 核对充分性。见[当前复验](final-2b06484/README.md)。 |
+
+slash 范围是 M0 Desktop App catalog 的 `/goal`、`/compact`、`/init` 和 App-only `/plan`。`2b06484` 的当前路径由 [Task-scoped Host catalog reader](../../../packages/services/src/anyagent/taskSlashCommandCatalog.ts) 经资格检查读取当前 Task 的原生目录，再由 [Composer](../../../packages/ui/src/EngineConversation.tsx) 显示。[Service 测试](../../../packages/services/test/anyAgentService.test.ts) 和 [UI 测试](../../../packages/ui/test/EngineConversation.test.tsx)覆盖跨 Task Session 拒绝、暂不可用、当前 Task picker 填充与切 Task 后重读，并在本候选运行通过。固定 CLI 的真实 picker、`/goal` 与 `/compact` 桌面和原生操作见[同候选证据](final-2b06484/README.md)。
+
+#### Deferred for Milestone #2
+
+#26 将 Like／Dislike 与反馈撤回、Fork 完整语义、Retry 完整 UI、File rewind／undo 完整 UI，以及 Browser／Web context 跨 Engine 共享平台列为 Deferred。它们不阻塞本里程碑，也不表示当前候选已恢复完整体验。Retry 的安全资格与副作用不确定时禁止重放、rewind 结果 unknown 时不冒称成功，仍属于 M1 Contract。保留 M0 flag-off 路径。
+
+### 3. M1 Contract Closure：独立于 Product Parity
+
+| 契约要求                                                                                        | `2b06484` 当前状态                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task／Participant／Session／Input／Execution 归属、admission、迟到事件与副作用归属 | 本候选 Contract 12／12、Runtime 81／81、Service 88／88 通过；真实 Task A／C／Stop 的产品／原生身份与队列原 B 零派发见[双库核对](final-2b06484/crosscheck.json)。迟到事件由 Runtime 自动化证明，未声称桌面逐一注入。 |
+| Engine／Adapter 能力当前值与历史快照；配置／授权失效、恢复与派发前资格核验；禁止 fallback／提权 | 本候选 Host／Runtime 定向检查通过；真实冷恢复显式授权后保持原身份。授权失效和配置变化负例由测试覆盖，真实窗口没有直接撤销隔离 Provider 凭据；同 Provider 真实换模与原生提交已核对。 |
+| Approval／question 拒绝、过期、重复／迟到答复及原请求归属 | 本候选真实 CLI Write allow／deny 和隔离文件状态、结构化 question 选择 B 与同一 Execution 继续均通过；当前 Contract／Runtime／Service 自动化覆盖过期、重复、迟到与错归属零派发。旧候选 question 空答保留原提交归属。 |
+| Stop 与原生终态分离；unknown／reconciliation、迟到终态、副作用去重与安全 retry | 本候选真实 CLI 一次性 Adapter 观察丢失后 unknown，第二轮运行中 Stop ACK、原生 cancelled、对账同一 Execution，文件只写一次；第一次终态已变化时 Stop 明确拒绝。另有隔离 stdio failpoint 4／4。物理 stdio 断开未验证，未据此扩大结论。见[当前证据](final-2b06484/README.md#运行中观测丢失stop对账)。 |
+| 状态错误可区分、越界热迁移零派发、Core／Adapter 信任边界与唯一事实写入方 | 本候选 Contract／Runtime／Service／Adapter／架构检查通过，M0 与 M1 共用原 Root 路径，产品／原生库分别记录自身身份与状态。越界和资格拒绝由自动化证明；最终独立 reviewer 仍需核对完整增量。 |
+
+对新增 slash 目录读取，当前 [Host reader](../../../packages/services/src/anyagent/taskSlashCommandCatalog.ts) 通过 `readQualifiedTaskSession` 核验 Task／Session、ZCode workspace 和返回 workspace 一致性，并区分 unsupported 与 runtime temporarily unavailable；[Service 测试](../../../packages/services/test/anyAgentService.test.ts)中跨 Task 零原生读取和 unavailable 断言已运行通过。此结果只证明该 Host 路径，不能代替 Milestone 整体关闭评审。
+
+### 当前分类摘要（`2b06484`）
+
+- **产品功能缺口**：同 Provider 换模已从正确的 `Harness · zcode` 子菜单完成，根层旧 Provider 项的锁定是既定 Session 边界，先前的“模型菜单错误锁定”判断已由当前 UI 与原生请求推翻。侧栏 M1 Task 菜单中的置顶、重命名、归档、未读仍显示“暂不支持”；按 #26 Required 原任务侧栏范围修复中，不能以 UI 说明充当已确认豁免。
+- **M1 Contract**：本候选的全套适用本机检查与真实 CLI／双库主路径已通过，未发现新的已确认 Contract 违规；最终集成与独立审阅仍需完成。
+- **纯 RC 证据缺口**：全入口／焦点组合及最终独立 reviewer 仍待收口；本候选 question 显式答复已补，早期空答场景保持对应旧提交归属。
+- **GitHub 状态**：#26、#21、#11 均 open；本文不声称候选 PR 已合并或 Milestone #2 已关闭。
+
+## 历史候选收口矩阵（`f8f0d9c`）
 
 本节记录 `f8f0d9cd0dcff67caefe6835d79467d03dcce91e` 集成基线的收口视图，依据最新 #26、#21、#11 正文；复验时它是 `origin/main`。PR #34 合并为 `cf4c2da3e6bde4a3b4b22de01b5a5b7e5c0a5190`，PR #35 合并为 `f8f0d9cd0dcff67caefe6835d79467d03dcce91e`。被测产品提交与证据提交仍按各增量 README 标明：PR #34 `b92d523`／`67a753c`，PR #35 `a314e82`／`3900a15`。`f8f0d9c` 的新增桌面与双库组合复验见 [final-f8f0d9c](final-f8f0d9c/README.md)；它只升级所列场景，未覆盖的入口／异常仍待验证。较早候选 `f47e6b7` 的逐项矩阵已移为下方历史记录，不再作为当前台账。
 
