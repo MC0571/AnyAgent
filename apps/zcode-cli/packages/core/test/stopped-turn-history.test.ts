@@ -484,7 +484,7 @@ test("cold resume permits a second turn stopped before its user Input was persis
   );
 });
 
-for (const control of ["compact", "rewind"] as const) {
+for (const control of ["compact", "rewind", "fork", "fork latest"] as const) {
   test(`cancelled ${control} control turn needs no provider withdrawal marker`, async () => {
     const store = {
       async listSessionInputs() {
@@ -492,6 +492,20 @@ for (const control of ["compact", "rewind"] as const) {
           {
             kind: "sendText",
             payload: { intent: { clientId: "anyagent-m1-host", sourceCommandId: "first-input" } },
+          },
+          {
+            kind: control === "compact" ? "compact" : "sendText",
+            payload: {
+              text:
+                control === "compact"
+                  ? "/compact"
+                  : control === "rewind"
+                    ? "/rewind status"
+                    : control === "fork"
+                      ? "/fork"
+                      : "/fork latest",
+              intent: { sourceCommandId: `${control}-input` },
+            },
           },
         ];
       },
@@ -524,6 +538,92 @@ for (const control of ["compact", "rewind"] as const) {
     );
   });
 }
+
+test("old /rewind followed by tab is a regular prompt and cannot bypass withdrawal", async () => {
+  const store = {
+    async listSessionInputs() {
+      return [
+        {
+          kind: "sendText",
+          payload: { intent: { clientId: "anyagent-m1-host", sourceCommandId: "first-input" } },
+        },
+        {
+          kind: "sendText",
+          payload: {
+            text: "/rewind\tstatus",
+            intent: { clientId: "anyagent-m1-host", sourceCommandId: "tab-input" },
+          },
+        },
+      ];
+    },
+    async sessionEntries(input: { type: string }) {
+      if (input.type === "runtime/native_turn_started") return [];
+      return [
+        { data: { inputId: "first-input", resultType: "success", turnId: "first-turn" } },
+        { data: { inputId: "tab-input", resultType: "cancelled", turnId: "tab-turn" } },
+      ];
+    },
+    async messages() {
+      return [
+        {
+          info: { id: "tab-user", role: "user", anchor: { turnId: "tab-turn" } },
+          parts: [{ type: "text", text: "/rewind\tstatus" }],
+        },
+      ];
+    },
+  };
+  await assert.rejects(
+    assertNoUnresolvedAnyAgentInputs(store as never, "test-session" as never),
+    /lacks provider withdrawal/,
+  );
+});
+
+test("old M1 background notification Stop without start or marker blocks cold resume", async () => {
+  const store = {
+    async listSessionInputs() {
+      return [
+        {
+          kind: "sendText",
+          payload: { intent: { clientId: "anyagent-m1-host", sourceCommandId: "first-input" } },
+        },
+      ];
+    },
+    async sessionEntries(input: { type: string }) {
+      if (input.type === "runtime/native_turn_started") return [];
+      return [
+        { data: { inputId: "first-input", resultType: "success", turnId: "first-turn" } },
+        {
+          data: {
+            inputId: "background-notification-input",
+            resultType: "cancelled",
+            turnId: "notification-turn",
+          },
+        },
+      ];
+    },
+    async messages() {
+      return [
+        {
+          info: {
+            id: "background-notice",
+            role: "user",
+            source: "background_task",
+            anchor: { turnId: "earlier-tool-turn" },
+          },
+          parts: [{ type: "text", text: "BACKGROUND_NOTIFICATION_SECRET" }],
+        },
+        {
+          info: { id: "partial", role: "assistant", anchor: { turnId: "notification-turn" } },
+          parts: [{ type: "text", text: "partial notification answer" }],
+        },
+      ];
+    },
+  };
+  await assert.rejects(
+    assertNoUnresolvedAnyAgentInputs(store as never, "test-session" as never),
+    /lacks provider withdrawal/,
+  );
+});
 
 test("M1 pre-recorded notification without terminal blocks cold resume after failed Stop persistence", async () => {
   const store = {

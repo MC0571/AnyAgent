@@ -110,14 +110,28 @@ test("native terminal provenance survives SQLite reopen and excludes cold synthe
       sessionID: sessionId,
       type: SESSION_ENTRY_NATIVE_TURN_TERMINAL,
     });
-    assert.equal(entries.length, 1);
-    assert.deepEqual(entries[0]?.data, {
+    assert.equal(entries.length, 2);
+    const nativeTerminal = entries.find(
+      (entry) => (entry.data as { inputId?: string }).inputId === durableInputId,
+    );
+    assert.deepEqual(nativeTerminal?.data, {
       eventId: liveTerminal.id,
       eventType: SessionEventType.TurnComplete,
       inputId: durableInputId,
       resultType: "success",
       sequenceNumber: 1,
       turnId: durableTurnId,
+    });
+    const noInputTerminal = entries.find(
+      (entry) =>
+        (entry.data as { turnId?: string }).turnId === createTurnId("turn-terminal-without-input"),
+    );
+    assert.deepEqual(noInputTerminal?.data, {
+      eventId: missingInput.id,
+      eventType: SessionEventType.TurnComplete,
+      resultType: "success",
+      sequenceNumber: 2,
+      turnId: createTurnId("turn-terminal-without-input"),
     });
 
     const coldEvents = synthesizeEventsFromMessages(

@@ -5,6 +5,7 @@ import {
 } from "./message-history.js";
 import { SESSION_ENTRY_NATIVE_TURN_TERMINAL } from "@zcode/contracts";
 import type { MessageId, SessionId, SessionStorePort } from "@zcode/contracts";
+import { parseRewindCommand } from "../runtime/helpers/commands.js";
 
 // A stopped prompt remains readable in the native transcript, but its unfinished
 // instruction must not be offered to the model again when the next Input starts.
@@ -104,6 +105,30 @@ export async function assertNoUnresolvedAnyAgentInputs(
       : [],
   );
   if (cancelledTurnIds.length === 0) return;
+  const controlCancelledTurnIds = new Set(
+    terminalFacts.flatMap((terminal) => {
+      if (
+        terminal.resultType !== "cancelled" ||
+        typeof terminal.turnId !== "string" ||
+        typeof terminal.inputId !== "string"
+      ) {
+        return [];
+      }
+      const controlInput = promoted.find((input) => {
+        const intent = input.payload.intent;
+        return (
+          intent &&
+          typeof intent === "object" &&
+          !Array.isArray(intent) &&
+          (intent as Record<string, unknown>).sourceCommandId === terminal.inputId
+        );
+      });
+      const text = controlInput?.payload.text ?? "";
+      return controlInput?.kind === "compact" || parseRewindCommand(text) !== null
+        ? [terminal.turnId]
+        : [];
+    }),
+  );
   const messages = await sessionStore.messages({ sessionID: sessionId });
   const startedMessageIds = new Map(
     startedEntries.flatMap((entry) => {
@@ -128,13 +153,10 @@ export async function assertNoUnresolvedAnyAgentInputs(
       if (withdrawnTurnIds.has(turnId)) return false;
       const startedMessageId = startedMessageIds.get(turnId);
       if (!startedMessageId) {
-        // Manual compact and rewind emit native cancelled terminals, but do not
-        // enter the regular provider-user path. Older regular turns lack a start
-        // fact, so keep guarding those only when their user row is persisted.
-        return messages.some(
-          (message) =>
-            message.info.role === "user" && String(message.info.anchor?.turnId) === turnId,
-        );
+        // Old regular turns and background notices may lack a start fact and
+        // have provider input anchored to an earlier turn. Only a matched
+        // compact/rewind command proves this cancelled terminal is control-only.
+        return !controlCancelledTurnIds.has(turnId);
       }
       // A Stop before prompt hooks/attachment resolution can emit a cancelled
       // terminal without ever adding or persisting a provider-visible Input.
