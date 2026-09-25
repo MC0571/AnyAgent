@@ -41,8 +41,11 @@ import {
 import { compactActiveSessionMessages, isActiveCompactionBoundaryPart } from "./compact-session.js";
 import { filePartToContentBlock, projectPersistedToolMediaContent } from "./file-part-hydration.js";
 import { selectToolPartsForHistory } from "./tool-part-order.js";
-
-const INTERRUPTED_TOOL_RESULT = "[Tool execution was interrupted before resume]";
+import {
+  INTERRUPTED_TOOL_RESULT,
+  STOPPED_TURN_PROVIDER_DISPOSITION,
+  STOPPED_TURN_PROVIDER_TEXT,
+} from "./stopped-turn-history.js";
 
 export interface SessionHistoryHydrationResult {
   appliedMessageCount: number;
@@ -69,12 +72,19 @@ export async function hydrateMessageHistoryFromSession(input: {
   let appliedMessageCount = 0,
     interruptedToolCount = 0,
     partCount = 0;
+  const withdrawnTurnIds = new Set<string>();
 
   for (const message of activeMessages) {
     const parts = dedupeParts(message.parts);
     partCount += parts.length;
 
     if (message.info.role === "user") {
+      if (message.info.metadata?.providerHistoryDisposition === STOPPED_TURN_PROVIDER_DISPOSITION) {
+        if (message.info.anchor?.turnId) withdrawnTurnIds.add(message.info.anchor.turnId);
+        input.history.addUser(STOPPED_TURN_PROVIDER_TEXT, { source: "legacy_synthetic" });
+        appliedMessageCount++;
+        continue;
+      }
       const sharedContextStatus =
         message.info.source === "shared_context" &&
         message.info.metadata &&
@@ -115,8 +125,11 @@ export async function hydrateMessageHistoryFromSession(input: {
       continue;
     }
 
-    const text = assistantTextFromParts(parts);
-    const reasoning = assistantReasoningFromParts(parts);
+    const withdrawn = Boolean(
+      message.info.anchor?.turnId && withdrawnTurnIds.has(message.info.anchor.turnId),
+    );
+    const text = withdrawn ? "" : assistantTextFromParts(parts);
+    const reasoning = withdrawn ? [] : assistantReasoningFromParts(parts);
     const toolParts = selectToolPartsForHistory(parts.filter(isToolPart));
     // live history 会保留带合法 provider usage 的空 assistant 作为估算锚点，
     // 旧 hydration 却无条件丢弃它，导致重启前后的 context estimate 不一致。

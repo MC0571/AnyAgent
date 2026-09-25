@@ -64,6 +64,10 @@ import { appendBrowserTurnScreenshot } from "./browser-turn-screenshot.js";
 import { clearBrowserTurnState } from "../../repl/browser-turn-state.js";
 import { applySubmissionExecutionState, createTurnModel } from "./turn-model.js";
 import { rebuildContextPrefix } from "./context-refresh.js";
+import {
+  STOPPED_TURN_PROVIDER_DISPOSITION,
+  withdrawStoppedTurnFromLiveHistory,
+} from "../../agent/stopped-turn-history.js";
 
 const TARGET_RUN_HEARTBEAT_MS = 15_000;
 
@@ -131,6 +135,7 @@ export async function executeTurnCommand(
   let startedTarget: SessionGoal | null = null;
   let targetRunHeartbeat: ReturnType<typeof setInterval> | undefined;
   let userMessageId: MessageId | undefined;
+  let providerHistoryTurnStartIndex: number | undefined;
   let loopState: RegularTurnLoopState | undefined;
   let shouldRetryTitleGenerationAfterTurn = false;
   // 线上“已工作 N 秒”但没有终态的根因候选是：内层 Turn try/catch 之前的 await
@@ -501,6 +506,7 @@ export async function executeTurnCommand(
             visibility: "model-only",
           });
         } else if (options?.skipInputRecord !== true) {
+          providerHistoryTurnStartIndex = this.messageHistory.getMessageCount();
           this.messageHistory.addEntries(
             buildRuntimeUserEntriesFromTurn(input, resolvedAttachments, {
               browserAmbientContext: options?.browserAmbientContext,
@@ -729,6 +735,32 @@ export async function executeTurnCommand(
           startedTarget = finishedTarget;
         }
         if (coreError.type === CoreErrorType.TurnCancelled) {
+          if (providerHistoryTurnStartIndex !== undefined) {
+            // The transcript stays intact; only subsequent provider context loses
+            // the unfinished request. Do this before TurnComplete can drain queued Input.
+            const sessionStore = this.sessionStore;
+            if (userMessageId && sessionStore) {
+              const stored = await sessionStore.messageWithParts({
+                sessionID: this.sessionId,
+                messageID: userMessageId,
+              });
+              if (stored?.info.role === "user" && stored.info.anchor?.turnId === turnId) {
+                await sessionStore.saveMessage({
+                  ...stored.info,
+                  ...(stored.info.semantics
+                    ? {
+                        semantics: { ...stored.info.semantics, providerVisibility: "hidden" },
+                      }
+                    : {}),
+                  metadata: {
+                    ...stored.info.metadata,
+                    providerHistoryDisposition: STOPPED_TURN_PROVIDER_DISPOSITION,
+                  },
+                });
+              }
+            }
+            withdrawStoppedTurnFromLiveHistory(this.messageHistory, providerHistoryTurnStartIndex);
+          }
           await this.pauseActiveTargetForCancellation(turnTraceContext);
           if (activeTurn) {
             await this.fallbackPendingGuidesToQueue({
