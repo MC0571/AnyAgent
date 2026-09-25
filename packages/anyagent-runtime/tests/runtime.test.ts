@@ -116,6 +116,7 @@ class ManualEngine implements EngineAdapter {
         input: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0],
       ) => Promise<EngineExecutionReconciliation>)
     | null = null;
+  verifyRetrySafety?: EngineAdapter["verifyRetrySafety"];
   readonly forkCalls: Parameters<NonNullable<EngineAdapter["forkSession"]>>[0][] = [];
   forkFailure: Error | null = null;
   readonly compactCalls: Parameters<NonNullable<EngineAdapter["compactSession"]>>[0][] = [];
@@ -3649,6 +3650,122 @@ test("retry preserves a failed source but rejects a turn that may have run tools
       /may have run tools/u,
     );
     assert.equal(engine.runs.length, 3);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("retry of a failed turn with possible side effects requires native safety proof", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "may have written a file" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "possible-retry-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "execution.failed",
+      failure: {
+        kind: "execution-failed",
+        operation: "execution.run",
+        message: "failed after an unobserved effect",
+        sideEffects: "possible",
+      },
+      evidence: { source: "engine", evidenceId: "possible-retry-failed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "failed");
+    const sourceId = runtime.getHistory(task.id)!.executions[0]!.id;
+    await assert.rejects(
+      () => runtime.reviseTurn({ ...identity, sourceExecutionId: sourceId, kind: "retry" }),
+      /side effects|safety proof/i,
+    );
+    assert.equal(engine.runs.length, 1, "no retry command may reach the Engine");
+    assert.equal(runtime.getHistory(task.id)!.inputs.length, 1, "no false retry Input is recorded");
+    let reads = 0;
+    engine.verifyRetrySafety = async ({ session, executionId, beforeDispatch }) => {
+      reads++;
+      assert.equal(session, engine.sessions[0]);
+      assert.equal(executionId, engine.runs[0]!.executionId);
+      beforeDispatch?.();
+      return { source: "adapter", evidenceId: "native-source-no-effect" };
+    };
+    const retry = await runtime.reviseTurn({
+      ...identity,
+      sourceExecutionId: sourceId,
+      kind: "retry",
+    });
+    assert.equal(reads, 1);
+    assert.equal(retry.retrySafetyEvidence?.evidenceId, "native-source-no-effect");
+    assert.equal(runtime.getHistory(task.id)!.inputs[1]?.retrySafetyEvidence?.source, "adapter");
+    assert.equal(engine.runs.length, 2);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("revoking authorization during retry safety verification prevents a new Input and dispatch", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const grant = { ...authorization, id: "retry-proof-revocation-grant" };
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "possibly changed a file" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "retry-revoke-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "execution.failed",
+      failure: {
+        kind: "execution-failed",
+        operation: "execution.run",
+        message: "failed with unknown effect",
+        sideEffects: "possible",
+      },
+      evidence: { source: "engine", evidenceId: "retry-revoke-failed" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "failed");
+    engine.verifyRetrySafety = async ({ beforeDispatch }) => {
+      beforeDispatch?.();
+      runtime.revokeHostAuthorization(grant.id, "revoked while reading native retry source");
+      return { source: "adapter", evidenceId: "stale-safe-retry-proof" };
+    };
+    await assert.rejects(
+      runtime.reviseTurn({
+        ...identity,
+        sourceExecutionId: runtime.getHistory(task.id)!.executions[0]!.id,
+        kind: "retry",
+      }),
+      /revoked while reading native retry source/i,
+    );
+    assert.equal(engine.runs.length, 1);
+    assert.equal(runtime.getHistory(task.id)!.inputs.length, 1);
   } finally {
     runtime.close();
   }

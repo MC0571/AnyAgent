@@ -7,7 +7,9 @@ import type {
   EngineExecutionReconciliation,
   EngineInputReconciliation,
 } from "./execution-reconciliation.js";
+import type { EngineJsonValue } from "./json-value.js";
 export type * from "./execution-reconciliation.js";
+export type { EngineJsonValue } from "./json-value.js";
 export type {
   EngineFileChanges,
   EngineFileRewindPreview,
@@ -314,14 +316,6 @@ export interface EngineRun {
 }
 
 /** JSON-only adapter input configuration; each Adapter owns its supported keys and semantics. */
-export type EngineJsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | readonly EngineJsonValue[]
-  | { readonly [key: string]: EngineJsonValue };
-
 export type EngineJsonObject = Readonly<Record<string, EngineJsonValue>>;
 
 /** A Host-resolved attachment locator. Renderer supplied paths are never valid here. */
@@ -417,6 +411,10 @@ export interface EngineAdapter {
     /** Command acceptance is evidence, never compaction completion. */
     readonly onAccepted?: (evidence: EngineEvidence) => void;
   }): Promise<EngineCompactReceipt>;
+  /** Native no-effect proof for failed retry; run() must recheck before dispatch. */
+  verifyRetrySafety?(
+    input: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0],
+  ): Promise<EngineEvidence>;
   run(input: {
     readonly session: EngineSessionRef;
     readonly input: string;
