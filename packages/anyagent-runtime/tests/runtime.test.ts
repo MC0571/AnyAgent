@@ -2344,78 +2344,93 @@ test("queued Inputs, plain compaction, and later Inputs keep their order and rec
 });
 
 test("queued compaction rechecks authorization before promotion", async () => {
-  const engine = new ManualEngine();
-  let now = 0;
-  const runtime = createTaskRuntime({
-    databasePath: ":memory:",
-    engines: new Map([["manual", engine]]),
-    now: () => now,
-  });
-  try {
-    const task = await runtime.createTask({
-      engineId: "manual",
-      environment,
-      authorization: { ...authorization, id: "compact-queue-expiring-grant", expiresAt: 100 },
+  for (const revoke of [false, true]) {
+    const engine = new ManualEngine();
+    let now = 0;
+    const runtime = createTaskRuntime({
+      databasePath: ":memory:",
+      engines: new Map([["manual", engine]]),
+      now: () => now,
     });
-    const identity = {
-      taskId: task.id,
-      participantId: task.participant.id,
-      sessionId: task.session.id,
-      authorizationId: task.authorizationId,
-    };
-    await runtime.submitInput({ ...identity, text: "active A" });
-    engine.emit(0, {
-      type: "input.accepted",
-      evidence: { source: "engine", evidenceId: "compact-expiry-A-accepted" },
-    });
-    engine.emit(0, {
-      type: "execution.started",
-      evidence: { source: "engine", evidenceId: "compact-expiry-A-started" },
-    });
-    await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
+    try {
+      const grant = {
+        ...authorization,
+        id: revoke ? "compact-queue-revoked-grant" : "compact-queue-expiring-grant",
+        expiresAt: revoke ? null : 100,
+      };
+      const task = await runtime.createTask({
+        engineId: "manual",
+        environment,
+        authorization: grant,
+      });
+      const identity = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: task.authorizationId,
+      };
+      await runtime.submitInput({ ...identity, text: "active A" });
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "compact-expiry-A-accepted" },
+      });
+      engine.emit(0, {
+        type: "execution.started",
+        evidence: { source: "engine", evidenceId: "compact-expiry-A-started" },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
 
-    const earlier = await runtime.submitInput({
-      ...identity,
-      text: "earlier B",
-      delivery: "queue",
-    });
-    const compact = await runtime.compactSession(identity);
-    const later = await runtime.submitInput({ ...identity, text: "later C", delivery: "queue" });
-    assert.equal(compact.status, "queued");
-    assert.ok(earlier.queuePosition! < compact.queuePosition!);
-    assert.ok(compact.queuePosition! < later.queuePosition!);
+      const earlier = await runtime.submitInput({
+        ...identity,
+        text: "earlier B",
+        delivery: "queue",
+      });
+      const compact = await runtime.compactSession(identity);
+      const later = await runtime.submitInput({ ...identity, text: "later C", delivery: "queue" });
+      assert.equal(compact.status, "queued");
+      assert.ok(earlier.queuePosition! < compact.queuePosition!);
+      assert.ok(compact.queuePosition! < later.queuePosition!);
 
-    engine.emit(0, {
-      type: "execution.completed",
-      result: "A done",
-      evidence: { source: "engine", evidenceId: "compact-expiry-A-completed" },
-    });
-    await until(() => engine.runs.length === 2);
-    engine.emit(1, {
-      type: "input.accepted",
-      evidence: { source: "engine", evidenceId: "compact-expiry-B-accepted" },
-    });
-    engine.emit(1, {
-      type: "execution.started",
-      evidence: { source: "engine", evidenceId: "compact-expiry-B-started" },
-    });
-    now = 101;
-    engine.emit(1, {
-      type: "execution.completed",
-      result: "B done",
-      evidence: { source: "engine", evidenceId: "compact-expiry-B-completed" },
-    });
-    await until(() => runtime.getHistory(task.id)!.compactOperations[0]?.status === "failed");
-    await until(() => runtime.getHistory(task.id)!.inputs[2]?.status === "rejected");
-    assert.match(runtime.getHistory(task.id)!.compactOperations[0]!.reason ?? "", /expired/i);
-    assert.equal(engine.compactCalls.length, 0, "expired authorization prevents native compaction");
-    assert.equal(
-      engine.runs.length,
-      2,
-      "later queued Input is not dispatched with expired authorization",
-    );
-  } finally {
-    runtime.close();
+      engine.emit(0, {
+        type: "execution.completed",
+        result: "A done",
+        evidence: { source: "engine", evidenceId: "compact-expiry-A-completed" },
+      });
+      await until(() => engine.runs.length === 2);
+      engine.emit(1, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "compact-expiry-B-accepted" },
+      });
+      engine.emit(1, {
+        type: "execution.started",
+        evidence: { source: "engine", evidenceId: "compact-expiry-B-started" },
+      });
+      if (revoke) runtime.revokeHostAuthorization(grant.id, "revoked before queued compaction");
+      else now = 101;
+      engine.emit(1, {
+        type: "execution.completed",
+        result: "B done",
+        evidence: { source: "engine", evidenceId: "compact-expiry-B-completed" },
+      });
+      await until(() => runtime.getHistory(task.id)!.compactOperations[0]?.status === "failed");
+      await until(() => runtime.getHistory(task.id)!.inputs[2]?.status === "rejected");
+      assert.match(
+        runtime.getHistory(task.id)!.compactOperations[0]!.reason ?? "",
+        /expired|revoked/i,
+      );
+      assert.equal(
+        engine.compactCalls.length,
+        0,
+        "invalid authorization prevents native compaction",
+      );
+      assert.equal(
+        engine.runs.length,
+        2,
+        "later queued Input is not dispatched with invalid authorization",
+      );
+    } finally {
+      runtime.close();
+    }
   }
 });
 

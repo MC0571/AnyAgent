@@ -134,6 +134,7 @@ test("send-now queue history follows native dispatch order in the mounted conver
     approvals: [],
     userInputs: [],
     stopRequests: [],
+    compactOperations: [],
     integrityIssues: [],
   };
   const container = document.createElement("div");
@@ -665,6 +666,7 @@ test("product conversation forks into a fresh Task and displays only its verifie
     approvals: [],
     userInputs: [],
     stopRequests: [],
+    compactOperations: [],
     integrityIssues: [],
   };
   const childHistory = { ...sourceHistory, taskId: childTask.id, inputs: [], executions: [] };

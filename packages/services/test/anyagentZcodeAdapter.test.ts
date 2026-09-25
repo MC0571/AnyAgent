@@ -1156,10 +1156,7 @@ test("ZCode queues plain compaction while a native turn is active and keeps term
       session,
       commandId: "compact-busy",
     });
-    await waitUntil(
-      () => busyFixture.commands.some((entry) => entry.type === "compact"),
-      "plain compact should be admitted to the native busy queue",
-    );
+    await waitUntil(() => busyFixture.commands.some((entry) => entry.type === "compact"));
     assert.deepEqual(
       busyFixture.commands.find((entry) => entry.type === "compact")?.payload,
       {},
