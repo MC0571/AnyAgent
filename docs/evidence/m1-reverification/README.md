@@ -2,11 +2,15 @@
 
 本次分层整理所据产品候选：`f47e6b7679f199d82d2f78fc8534aa417b110367`，当时基于 `origin/main` 的 `644120db21f654edbf40b4008df92294772a08cc`；整理前 PR 证据 head 为 `f66b629646446b504e452f9e31fccdf5b9906d33`。本候选已有[增量原生桌面与检查记录](final-f47e6b7/README.md)，但尚未完成全量必测回归。上一次较完整的桌面证据对应 `432eb7075024639b1e5e9f0692c20666f85d7fa7`，见[该候选原生桌面与检查证据](final-432eb70/README.md)；后续 `dda479f031212729dfcb289a983161e32686e872` 的[冷恢复增量复验](final-dda479f/README.md)保留原提交归属。较早 `44cfb92096238882c24c87315b271a2d8428aa4a` 的[网页拾取证据](final-44cfb92/README.md)、`07bced37c5e82e1a9413b305dc2f0fa0c2358d85` 的[分享、队列与恢复证据](final-07bced3/README.md)、`b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34` 的[集成证据](final-b0fc0e9/README.md)、`db192db555f1ef950052f528595ad3d055562ef9` 的[桌面证据](final-db192db/README.md)以及更早提交的截图保留原归属。PR #25 已在独立集成审阅后合并为 `d813b84318aa554c65c162e533c079ba9ed16bdc`；Milestone #2 保持 open，本记录不表示最终 RC 已通过。
 
+## PR #27 合并后当前增量：Goal 冷恢复
+
+PR #27 已合并至 main `5456321868fd57adee4504f1abdfc99ebe58a042`。后续 Goal 分支的产品候选 `7a4eaf68053bee5d22d75fe92a98e767968e72a1` 已补原生 `/goal` 控制与冷恢复订阅／对账修复。[本候选证据](final-7a4eaf6/README.md)明确区分：完整三轮、退出重启、原 Task／原生 Session 显式恢复的真实 CLI 桌面测试实际发生于 `7d766707c82b24d8dd105ba7262505160baea3c2`；其后仅修改了对账后未恢复正文的 UI 提示，并在 `7a4eaf6` 上复测该提示。双 SQLite 核对产品身份和三条原生 Goal Input；没有在仓库保存该候选窗口截图，所以最终 RC 视觉证据仍待补齐。当前增量不改变 M0 Verified 的历史事实，也不把运行中 `/compact`、独立授权撤销或断线副作用对账标为通过。
+
 ## PR #25 合并后的增量事实
 
 PR #25 最后产品提交为 `6bc55e2eeab63bc495a9c2c954feb15549969e52`，证据 head 为 `2359bfdca8af2da3efcc010d8cd5d40ff7fef076`，合并至 main 为 `d813b84318aa554c65c162e533c079ba9ed16bdc`。该产品候选的[检查及正式桌面记录](final-6bc55e2/README.md)已核对真实结构化提问、审批允许／拒绝、同 Task 冷恢复、文件 mention、同 Provider 逐轮换模型、完成前流式，以及 M0 flag-off 基础烟测。本次合并后继续在同一隔离数据和原产品路径记录了[文本队列与空闲 compact](final-6bc55e2/queue-compact-crosscheck.json)、[真实 Stop](final-6bc55e2/stop-crosscheck.json)；被测产品行为仍为 `6bc55e2`。这些是逐场景证据，不将后续修复自动算作通过。
 
-按三个关闭对象区分当前未收口项：**Product Parity 功能缺口**仍含固定 CLI 可用的 `/goal` 写入／恢复和运行中 compact 等接入差异；自定义 slash 命令与附件排队在 `6ee088b` 候选已有实现及自动化证据，但没有 UI 测试或真实 CLI 桌面证据，故尚不能标为通过。**M1 Contract 技术缺口或待验证项**含独立授权撤销、真实断线恢复与副作用对账、失败后安全重试、终态待答控件；`6ee088b` 的 Runtime 自动化覆盖其中部分终态交互约束，详见[该候选检查记录](final-6ee088b/README.md)。**仅最终 RC 证据缺口**含新代码候选上的完整必测桌面组合路径及可交付的视觉记录。此处不以早期混合 A/B/C/D 数字替代各对象验收。
+按三个关闭对象区分当时未收口项：**Product Parity 功能缺口**含当时固定 CLI 可用的 `/goal` 写入／恢复和运行中 compact 等接入差异；自定义 slash 命令与附件排队在 `6ee088b` 候选已有实现及自动化证据，但当时没有 UI 测试或真实 CLI 桌面证据，故不能将该历史候选标为通过。**M1 Contract 技术缺口或待验证项**含独立授权撤销、真实断线恢复与副作用对账、失败后安全重试、终态待答控件；`6ee088b` 的 Runtime 自动化覆盖其中部分终态交互约束，详见[该候选检查记录](final-6ee088b/README.md)。**仅最终 RC 证据缺口**含新代码候选上的完整必测桌面组合路径及可交付的视觉记录。此处不以早期混合 A/B/C/D 数字替代各对象验收；后续变化见上方增量。
 
 ## 此前 `6ee088b` 候选自动化证据
 
@@ -14,7 +18,7 @@ PR #25 最后产品提交为 `6bc55e2eeab63bc495a9c2c954feb15549969e52`，证据
 
 三个对象保持分开：M0 Verified 在 `6ee088b` 时仍是已记录的历史基线；Product Parity 仍按 #26 的 Required／Conditional／Deferred 分类。自定义 slash 和队列附件有实现层及 Runtime／Adapter 自动化证据；正式 UI 操作后来在 HMR 开发窗口中观察并由双库记录互证，但该场景早于最终 `382e6e5` 提交，不作为最终候选 UI 通过。M1 Contract 有终态交互清理等定向 Runtime 自动化证据，未覆盖的真实 CLI 断线恢复、未知副作用对账等仍待验证。`/goal` 写入／恢复及运行中 compact 仍是已知接入缺口。
 
-## PR #27 当前产品候选：`382e6e5`
+## PR #27 历史产品候选：`382e6e5`
 
 当前产品代码候选为 `382e6e549e44bc0a87d01ff8819371d4b84c0888`，比较基线仍为 PR #25 合并提交 `d813b84318aa554c65c162e533c079ba9ed16bdc`。[该候选证据](final-382e6e5/README.md)记录了当前提交上的检查、M0 flag-off 真机基本回归，以及较早 HMR 窗口中的真实 M1 自定义命令和队列编辑记录。当前候选没有保存 UI 截图／录屏；本机日志与自动化结果不等同 CI。
 

@@ -45,3 +45,26 @@ test("native full-access hint cannot discard the legacy permission gate", () => 
   assert.equal("fullAccessSupported" in parsed.payload, false);
   assert.ok(parsed.payload.options.length > 0);
 });
+
+test("resumed Goal status survives strict native session event validation", () => {
+  const event = {
+    id: "resume-goal-event",
+    sessionId: "session-a",
+    type: SessionEventType.SessionResumed,
+    timestamp: new Date(),
+    traceId: "trace-a",
+    sequenceNumber: 2,
+    payload: {
+      directory: "/tmp/workspace",
+      interruptedToolCount: 0,
+      messageCount: 2,
+      partCount: 2,
+      resumedTarget: "complete",
+    },
+  } as Parameters<typeof mapSessionEventForProtocol>[0];
+  const mapped = mapSessionEventForProtocol(event);
+  assert.ok(mapped);
+  const parsed = zcodeSessionEventSchema.parse(mapped);
+  assert.equal(parsed.type, "session.resumed");
+  assert.equal(parsed.payload.resumedTarget, "complete");
+});

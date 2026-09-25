@@ -1413,7 +1413,11 @@ export function EngineConversationTimeline({
                 !execution.result &&
                 !toolParts.size &&
                 execution.status === "completed" ? (
-                  <p className="ml-4 text-xs text-foreground-subtle">本轮没有回答正文。</p>
+                  <p className="ml-4 text-xs text-foreground-subtle">
+                    {execution.reconciliationReason
+                      ? "原生终态已对账；回答正文未恢复。"
+                      : "本轮没有回答正文。"}
+                  </p>
                 ) : null}
                 {!deltas.length &&
                 !execution.result &&
