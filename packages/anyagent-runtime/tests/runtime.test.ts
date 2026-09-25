@@ -103,6 +103,7 @@ class ManualEngine implements EngineAdapter {
   createSessionCalls = 0;
   readonly resumeCalls: Parameters<NonNullable<EngineAdapter["resumeSession"]>>[0][] = [];
   resumeResult: EngineSessionRef | null = null;
+  resumeHandler: (() => Promise<void>) | null = null;
   readonly reconcileCalls: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0][] = [];
   reconcileResult: EngineExecutionReconciliation = {
     status: "unknown",
@@ -176,6 +177,7 @@ class ManualEngine implements EngineAdapter {
     this.resumeCalls.push(input);
     if (!this.sessions.includes(input.session))
       throw new Error("The native Session does not belong to this Engine instance.");
+    await this.resumeHandler?.();
     return this.resumeResult ?? input.session;
   }
 
@@ -804,6 +806,11 @@ test("Runtime cold restore reattaches the same Session for an active Task after 
     assert.equal(recovered.session.id, identity.sessionId);
     assert.equal(recovered.session.status, "unknown");
     assert.equal(recovered.session.nativeSessionId, nativeSessionId);
+    assert.deepEqual(
+      runtime.getHistory(identity.taskId)?.integrityIssues,
+      [],
+      "completed rounds require reattachment, but have no interrupted native work",
+    );
     await assert.rejects(
       runtime.restoreTaskSession({ ...identity, sessionId: otherTask.session.id }),
       /Session ownership|participant/i,
@@ -828,6 +835,56 @@ test("Runtime cold restore reattaches the same Session for an active Task after 
     assert.equal(engine.runs.length, 3);
     assert.equal(engine.runs[2]?.session, nativeSessionId);
     assert.equal(engine.createSessionCalls, 2);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Runtime restart records an interrupted native turn once", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-restart-issue-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "still running at quit" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "restart-input-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "restart-execution-started" },
+    });
+    await until(() => runtime.getHistory(task.id)?.executions[0]?.status === "started");
+    runtime.close();
+
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    const first = runtime.getHistory(task.id)!;
+    assert.equal(first.inputs[0]?.status, "unknown");
+    assert.equal(first.executions[0]?.status, "unknown");
+    assert.deepEqual(
+      first.integrityIssues.map((issue) => issue.type),
+      ["stream-ended-unknown"],
+    );
+    assert.equal(runtime.getTask(task.id)?.session.nativeSessionId, task.session.nativeSessionId);
+    assert.equal(engine.runs.length, 1);
+    runtime.close();
+
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    assert.deepEqual(
+      runtime.getHistory(task.id)?.integrityIssues.map((issue) => issue.id),
+      first.integrityIssues.map((issue) => issue.id),
+      "restarting an already unknown turn must not invent another interruption",
+    );
+    assert.equal(engine.runs.length, 1);
   } finally {
     runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -917,6 +974,47 @@ test("Runtime cold restore rejects expired authorization, stale configuration, a
   try {
     await assert.rejects(runtime.restoreTaskSession(terminalIdentity), /completed|active task/i);
     assert.equal(terminalEngine.resumeCalls.length, 0);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Runtime cold restore rechecks configuration after native resume before attaching the saved Session", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-restore-config-race-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const nativeSessionId = task.session.nativeSessionId;
+    runtime.close();
+    runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    engine.resumeHandler = async () => {
+      engine.configurationVersion = "changed-during-native-resume";
+    };
+
+    await assert.rejects(runtime.restoreTaskSession(identity), /configuration changed/i);
+    assert.equal(engine.resumeCalls.length, 1);
+    assert.equal(runtime.getTask(task.id)?.session.status, "unknown");
+    assert.equal(runtime.getTask(task.id)?.session.nativeSessionId, nativeSessionId);
+    assert.equal(engine.createSessionCalls, 1);
+    assert.deepEqual(runtime.getHistory(task.id)?.inputs, []);
+    await assert.rejects(runtime.submitInput({ ...identity, text: "must not send yet" }));
+    assert.equal(engine.runs.length, 0);
+
+    engine.resumeHandler = null;
+    engine.configurationVersion = "test";
+    const restored = await runtime.restoreTaskSession(identity);
+    assert.equal(restored.session.nativeSessionId, nativeSessionId);
+    assert.equal(restored.session.status, "active");
+    assert.equal(engine.createSessionCalls, 1);
   } finally {
     runtime.close();
     await rm(directory, { recursive: true, force: true });

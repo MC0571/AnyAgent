@@ -4907,17 +4907,12 @@ export class TaskRuntime {
         session.createdAt,
         recoveredAt,
       );
-      this.#addIssue(
-        session.taskId,
-        session.id,
-        "stream-ended-unknown",
-        null,
-        "Runtime restarted before this native Session could be reattached; verify its execution state before continuing.",
-      );
+      let interruptedNativeWork = false;
       for (const input of this.#store.list<InputData>("input", session.taskId)) {
         if (input.data.sessionId !== session.id) continue;
         if (input.data.status === "queued") continue;
         if (ACTIVE_INPUT_STATUSES.has(input.data.status)) {
+          if (input.data.status !== "unknown") interruptedNativeWork = true;
           input.data.status = "unknown";
           input.data.error =
             "Runtime restarted; explicit native Execution reconciliation is required before continuing.";
@@ -4940,6 +4935,7 @@ export class TaskRuntime {
           TERMINAL_EXECUTION_STATUSES.has(execution.data.status)
         )
           continue;
+        if (execution.data.status !== "unknown") interruptedNativeWork = true;
         execution.data.status = "unknown";
         execution.data.error =
           "Runtime restarted; explicit native Execution reconciliation is required before continuing.";
@@ -4957,6 +4953,14 @@ export class TaskRuntime {
           execution.id,
         );
       }
+      if (interruptedNativeWork)
+        this.#addIssue(
+          session.taskId,
+          session.id,
+          "stream-ended-unknown",
+          null,
+          "Runtime restarted while native Input or Execution lacked terminal evidence; reconcile it before continuing.",
+        );
       for (const operation of this.#store.list<RuntimeCompactOperation>(
         "compact-operation",
         session.taskId,
