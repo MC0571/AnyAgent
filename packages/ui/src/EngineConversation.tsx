@@ -215,13 +215,17 @@ function formatSessionSkillCatalog(skills: readonly TaskSkillReference[]): strin
   return lines.join("\n");
 }
 
-function excludedNativeSlashCommandNames(commands: readonly ZCodeSlashCommand[]): string[] {
+function excludedNativeSlashCommandNames(
+  commands: readonly ZCodeSlashCommand[],
+  isZCodeHarness: boolean,
+): string[] {
+  const visibleBuiltinNames = new Set([
+    ...rendererMappedSlashCommands,
+    ...nativePromptBuiltinSlashCommands,
+  ]);
   return commands
     .map((command) => normalizeSlashCommandValue(command.name).toLowerCase())
-    .filter(
-      (name) =>
-        !nativePromptBuiltinSlashCommands.has(name) && !rendererMappedSlashCommands.has(name),
-    );
+    .filter((name) => !isZCodeHarness || !visibleBuiltinNames.has(name));
 }
 
 function formatEngineSlashHelp(
@@ -231,6 +235,17 @@ function formatEngineSlashHelp(
 ): string {
   const requestedName = normalizeSlashCommandValue(args.trim()).toLowerCase();
   if (requestedName) {
+    if (requestedName === "plan") {
+      return locale === "zh-CN"
+        ? [
+            "/plan [task] — 切换到计划模式，并可选提交任务。",
+            "M1 App 命令：/plan 切换当前 Composer 的计划模式；/plan <task> 以计划模式提交任务。",
+          ].join("\n")
+        : [
+            "/plan [task] — Switch to Plan mode and optionally send a task.",
+            "M1 App command: /plan switches the composer to Plan mode; /plan <task> submits that task in Plan mode.",
+          ].join("\n");
+    }
     const entry = BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES.find(
       (candidate) => candidate.name === requestedName || candidate.aliases?.includes(requestedName),
     );
@@ -242,8 +257,14 @@ function formatEngineSlashHelp(
         `${entry.usage} — ${entry.summary}`,
         ...entry.details,
         ...(entry.name === "compact" ? ["M1 Engine 通过 Host 支持可选 instructions。"] : []),
+        ...(entry.name === "init" ? ["M1 将 /init 原样作为当前产品 Task 的原生输入提交。"] : []),
+        ...(entry.name === "model" ? ["M1 当前 Session 只支持同一 Provider 内切换模型。"] : []),
+        ...(entry.name === "new" ? ["M1 通过 Host 在当前工作区新建 Task 和 Session。"] : []),
         ...(entry.name === "locale"
           ? ["M1 通过产品全局 UI 语言偏好支持 auto、en-US 和 zh-CN。"]
+          : []),
+        ...(entry.name === "skill"
+          ? ["M1 经 Host 读取当前 Task 的 Skill catalog，并在同一 Task 中提交命名 Skill 请求。"]
           : []),
         ...(!isMapped
           ? [
@@ -255,14 +276,21 @@ function formatEngineSlashHelp(
           : []),
       ].join("\n");
     }
-    const custom = commands.find(
+    const catalogCommand = commands.find(
       (command) => normalizeSlashCommandValue(command.name).toLowerCase() === requestedName,
     );
-    if (custom) {
+    if (catalogCommand?.source === "custom") {
       return [
-        custom.inputHint?.trim() || `/${custom.name}`,
-        custom.description,
+        catalogCommand.inputHint?.trim() || `/${catalogCommand.name}`,
+        catalogCommand.description,
         "M1 Engine 对话暂不执行 ZCode CLI 自定义命令；输入会保留。",
+      ].join("\n");
+    }
+    if (catalogCommand) {
+      return [
+        catalogCommand.inputHint?.trim() || `/${catalogCommand.name}`,
+        catalogCommand.description,
+        "该内置命令不属于固定 ZCode v0.16.9 支持目录；M1 不会执行，输入会保留。",
       ].join("\n");
     }
     return `未找到固定 ZCode v0.16.9 命令 /${requestedName}。输入已保留。`;
@@ -737,6 +765,16 @@ export function EngineConversation({
     visibleHistory?.executions.some((execution) => execution.status === "unknown");
   const unknownExecutions =
     visibleHistory?.executions.filter((execution) => execution.status === "unknown") ?? [];
+  const unknownInputs =
+    visibleHistory?.inputs.filter(
+      (input) =>
+        input.status === "unknown" &&
+        !visibleHistory.executions.some((execution) => execution.inputId === input.id),
+    ) ?? [];
+  const reconciledTerminalExecutions =
+    visibleHistory?.executions.filter(
+      (execution) => isTerminal(execution.status) && execution.reconciledAt !== undefined,
+    ) ?? [];
   const hasPendingRound = activeRound || unknownRound || queuedInputs.length > 0;
   const shouldQueue = activeRound || queuedInputs.length > 0;
   const hasUnresolvedMaintenance =
@@ -749,7 +787,9 @@ export function EngineConversation({
   const sessionRestoreBlockedReason = unknownRound
     ? unknownExecutions.length > 0
       ? "请先对账结果未知的原执行；对账不会重发原输入。"
-      : "原生输入结果未知，尚无可对账的执行；请先核实原生状态。"
+      : unknownInputs.length > 0
+        ? "请先对账结果未知的原输入；对账不会重发输入。"
+        : "原生输入结果未知，尚无可对账的执行；请先核实原生状态。"
     : activeRound || (queuedInputs.length > 0 && !queuePaused)
       ? "Session 仍有未完成的输入或执行，完成对账后才能恢复继续。"
       : hasUnresolvedMaintenance
@@ -824,12 +864,7 @@ export function EngineConversation({
   const activeNativeSessionId = visibleTask?.session.status === "active" ? nativeSessionId : null;
   const nativeSlashCommands = useSlashCommands(composerWorkspacePath);
   const excludedSlashCommandNames = useMemo(
-    () =>
-      isZCodeHarness
-        ? excludedNativeSlashCommandNames(nativeSlashCommands)
-        : nativeSlashCommands.map((command) =>
-            normalizeSlashCommandValue(command.name).toLowerCase(),
-          ),
+    () => excludedNativeSlashCommandNames(nativeSlashCommands, isZCodeHarness),
     [isZCodeHarness, nativeSlashCommands],
   );
   const modelView =
@@ -1182,6 +1217,75 @@ export function EngineConversation({
       } catch (error) {
         const message = errorText(error);
         setReconcileErrors((current) => ({ ...current, [executionId]: message }));
+        setNotice({ kind: "error", message });
+      } finally {
+        lifecycleActionsRef.current.delete(actionKey);
+        setBusyAction(null);
+      }
+    })();
+  };
+
+  const reconcileUnknownInput = (inputId: string): void => {
+    const target = visibleTask;
+    const sourceInput = visibleHistory?.inputs.find((item) => item.id === inputId);
+    if (
+      !target ||
+      !sourceInput ||
+      sourceInput.status !== "unknown" ||
+      sourceInput.taskId !== target.id ||
+      sourceInput.participantId !== target.participant.id ||
+      sourceInput.sessionId !== target.session.id ||
+      visibleHistory?.executions.some((execution) => execution.inputId === inputId) ||
+      busyAction
+    )
+      return;
+    const actionKey = `reconcile-input:${inputId}`;
+    if (lifecycleActionsRef.current.has(actionKey)) return;
+    lifecycleActionsRef.current.add(actionKey);
+    setReconcileErrors((current) => {
+      const next = { ...current };
+      delete next[inputId];
+      return next;
+    });
+    setBusyAction(actionKey);
+    setNotice(null);
+    const requestVersion = requestVersionRef.current;
+    void (async () => {
+      try {
+        const identity = {
+          taskId: target.id,
+          participantId: target.participant.id,
+          sessionId: target.session.id,
+          authorizationId: target.authorizationId,
+        };
+        const result = await service.reconcileInput({ ...identity, inputId });
+        if (
+          result.id !== inputId ||
+          result.taskId !== target.id ||
+          result.participantId !== target.participant.id ||
+          result.sessionId !== target.session.id
+        )
+          throw new Error("Host 对账结果的 Input 归属不匹配。");
+        const [freshTask, freshHistory] = await Promise.all([
+          service.getTask(target.id),
+          service.getHistory(target.id),
+        ]);
+        if (
+          !freshTask ||
+          !freshHistory ||
+          freshHistory.taskId !== target.id ||
+          freshTask.id !== target.id ||
+          freshTask.participant.id !== target.participant.id ||
+          freshTask.session.id !== target.session.id
+        )
+          throw new Error("对账后读取的 Task、Participant、Session 或历史身份不匹配。");
+        if (requestVersion === requestVersionRef.current && selectedTaskId === target.id) {
+          setTask(freshTask);
+          setHistory(freshHistory);
+        }
+      } catch (error) {
+        const message = errorText(error);
+        setReconcileErrors((current) => ({ ...current, [inputId]: message }));
         setNotice({ kind: "error", message });
       } finally {
         lifecycleActionsRef.current.delete(actionKey);
@@ -2135,7 +2239,15 @@ export function EngineConversation({
   };
 
   const retryExecution = (executionId: string) => {
-    if (!visibleTask || revisionBlockedReason || busyAction) return;
+    if (
+      !visibleTask ||
+      revisionBlockedReason ||
+      busyAction ||
+      visibleHistory?.executions.some(
+        (execution) => execution.id === executionId && execution.reconciledAt !== undefined,
+      )
+    )
+      return;
     void runAction(
       `retry:${executionId}`,
       () =>
@@ -2467,6 +2579,52 @@ export function EngineConversation({
                 >
                   {busyAction === `reconcile:${execution.id}` ? "正在对账…" : "对账原执行"}
                 </button>
+              </section>
+            ))}
+            {unknownInputs.map((input) => (
+              <section
+                className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm"
+                data-testid={`unknown-input-${input.id}`}
+                key={input.id}
+                role="status"
+                aria-live="polite"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    原输入的送达确认丢失；对账只查询原生状态，不会再次发送。
+                  </p>
+                  {input.error ? (
+                    <p className="mt-1 break-words text-xs text-foreground-subtle">{input.error}</p>
+                  ) : null}
+                  {reconcileErrors[input.id] ? (
+                    <p
+                      className="mt-1 break-words text-xs text-warning"
+                      data-testid={`reconcile-input-error-${input.id}`}
+                    >
+                      对账失败：{reconcileErrors[input.id]}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-60"
+                  data-testid={`reconcile-input-${input.id}`}
+                  type="button"
+                  disabled={busyAction !== null}
+                  onClick={() => reconcileUnknownInput(input.id)}
+                >
+                  {busyAction === `reconcile-input:${input.id}` ? "正在对账…" : "对账原输入"}
+                </button>
+              </section>
+            ))}
+            {reconciledTerminalExecutions.map((execution) => (
+              <section
+                className="mb-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-foreground-subtle"
+                data-testid={`reconciled-execution-caveat-${execution.id}`}
+                key={execution.id}
+                role="status"
+              >
+                {execution.reconciliationReason ??
+                  "原生终态已对账，但对账期间遗漏的工具和文件变更轨迹无法确认；请核查原生 Session 与工作区，不能重试此轮。"}
               </section>
             ))}
             {submitBlockedReason ? (

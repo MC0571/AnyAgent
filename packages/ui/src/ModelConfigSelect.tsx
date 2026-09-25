@@ -46,6 +46,7 @@ import {
 } from "@/lib/pickerFocus.js";
 import { RollingToolbarLabel } from "@/chat-input-toolbar/RollingToolbarLabel.js";
 import { ModelInputCapabilityBadge } from "@/components/ModelInputCapabilityBadge.js";
+import { toast } from "@/components/ui/toast.js";
 
 export interface ModelSelectGroupItem {
   key: string;
@@ -341,8 +342,13 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           <DropdownMenuItem
             key={itemKey}
             {...commonProps}
+            aria-description={lockReasonMessage}
+            title={lockReasonMessage}
             className="min-h-8 cursor-not-allowed gap-2 px-2 text-ui-base text-foreground-subtlest data-[highlighted]:text-foreground-subtlest"
-            onSelect={(event) => event.preventDefault()}
+            onSelect={(event) => {
+              event.preventDefault();
+              toast(lockReasonMessage, { variant: "info", dedupeKey: "model-locked" });
+            }}
           >
             {content}
           </DropdownMenuItem>

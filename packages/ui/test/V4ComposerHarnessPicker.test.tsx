@@ -186,7 +186,33 @@ test("the native composer model menu selects Harness and keeps Provider selectio
     );
     assert.ok(sessionLockedHarness, "Harness options should be locked for native Sessions");
     assert.ok(sessionLockedHarness.textContent?.includes("Local CLI"));
-    await act(async () => sessionLockedHarness.click());
+    assert.equal(
+      sessionLockedHarness.getAttribute("aria-description"),
+      "This option cannot be changed in the current session.",
+    );
+    assert.equal(
+      sessionLockedHarness.getAttribute("title"),
+      "This option cannot be changed in the current session.",
+    );
+    await act(async () => {
+      sessionLockedHarness.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.match(
+      document.querySelector("#zcode-toast-host")?.textContent ?? "",
+      /This option cannot be changed in the current session/u,
+    );
+    await act(async () => {
+      sessionLockedHarness.focus();
+      sessionLockedHarness.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
     assert.deepEqual(selected, ["harness:local:cli", "harness:none", `provider:${providerValue}`]);
   } finally {
     await act(async () => root.unmount());

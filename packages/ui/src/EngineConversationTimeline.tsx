@@ -1260,6 +1260,7 @@ export function EngineConversationTimeline({
                               !readOnlySource &&
                               !revisionBlockedReason &&
                               !busyAction &&
+                              execution.reconciledAt === undefined &&
                               execution.id === latestRetryableExecutionId &&
                               onRetryExecution
                                 ? () => onRetryExecution(execution.id)
@@ -1365,6 +1366,7 @@ export function EngineConversationTimeline({
                           !readOnlySource &&
                           !revisionBlockedReason &&
                           !busyAction &&
+                          execution.reconciledAt === undefined &&
                           execution.id === latestRetryableExecutionId &&
                           onRetryExecution
                             ? () => onRetryExecution(execution.id)

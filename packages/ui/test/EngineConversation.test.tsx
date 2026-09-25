@@ -3,7 +3,11 @@ import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import { act, createElement, useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { buildManualSkillPrompt as buildM0ManualSkillPrompt } from "../../../apps/zcode-cli/packages/cli/src/command-center/slash-commands.ts";
+import { APP_PROTOCOL_VISIBLE_BUILTIN_SLASH_COMMAND_NAMES } from "../../../apps/zcode-cli/packages/bootstrap/src/slash-command-surface.ts";
+import {
+  buildManualSkillPrompt as buildM0ManualSkillPrompt,
+  listSlashCommandSuggestions as listM0TuiSlashCommands,
+} from "../../../apps/zcode-cli/packages/cli/src/command-center/slash-commands.ts";
 
 const taskId = "task-engine-ui";
 const participantId = "participant-engine-ui";
@@ -2796,13 +2800,51 @@ test("an active ZCode Harness task switches models within its Session and submit
   };
   const workspacePath = "/tmp/anyagent-ui";
   const zcodeSlashCommands = [
-    { name: "compact", description: "Compact", source: "builtin" as const },
     { name: "goal", description: "Goal", source: "builtin" as const },
+    { name: "compact", description: "Compact", source: "builtin" as const },
     { name: "init", description: "Initialize", source: "builtin" as const },
     { name: "skill", description: "Use a skill", source: "builtin" as const },
     { name: "custom-note", description: "Custom prompt", source: "custom" as const },
     { name: "future-native", description: "Future native command", source: "builtin" as const },
   ];
+  assert.deepEqual(
+    zcodeSlashCommands
+      .filter(
+        (command) =>
+          command.source === "builtin" &&
+          APP_PROTOCOL_VISIBLE_BUILTIN_SLASH_COMMAND_NAMES.includes(
+            command.name as (typeof APP_PROTOCOL_VISIBLE_BUILTIN_SLASH_COMMAND_NAMES)[number],
+          ),
+      )
+      .map((command) => command.name),
+    APP_PROTOCOL_VISIBLE_BUILTIN_SLASH_COMMAND_NAMES,
+    "the M1 Composer fixture should use the App protocol catalog, not the broader CLI TUI registry",
+  );
+  assert.deepEqual(
+    listM0TuiSlashCommands().map((command) => command.name),
+    [
+      "help",
+      "login",
+      "logout",
+      "compact",
+      "init",
+      "expert",
+      "effort",
+      "dwf",
+      "fork",
+      "locale",
+      "mcp",
+      "plugins",
+      "mode",
+      "model",
+      "new",
+      "resume",
+      "rewind",
+      "skill",
+      "goal",
+    ],
+    "fixed ZCode 0.16.9 TUI must keep its separate complete built-in slash directory",
+  );
   const zcodeSessionStore = useZCodeSessionStore.getState();
   const originalSlashCommands = zcodeSessionStore.getWorkspaceState(workspacePath).slashCommands;
   zcodeSessionStore.setSlashCommands(workspacePath, zcodeSlashCommands);
@@ -3158,6 +3200,45 @@ test("an active ZCode Harness task switches models within its Session and submit
       | null;
     assert.ok(input?.__zcodeLexicalInputE2E);
 
+    await act(async () => {
+      input.focus();
+      input.__zcodeLexicalInputE2E!.setText("/goal");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(
+      container.querySelector('[data-option-id="slash:goal"]'),
+      null,
+      "the fixed CLI /goal command has no M1 Task-scoped handler and must not appear as selectable",
+    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText(""));
+
+    for (const command of ["compact", "init", "skill"] as const) {
+      await act(async () => {
+        input.focus();
+        input.__zcodeLexicalInputE2E!.setText(`/${command}`);
+      });
+      await waitFor(() => {
+        const visibleOptions = Array.from(
+          container.querySelectorAll<HTMLElement>("[data-option-id]"),
+          (option) => option.getAttribute("data-option-id"),
+        );
+        assert.ok(
+          container.querySelector(`[data-option-id="slash:${command}"]`),
+          `the fixed App protocol /${command} command should be present; visible options: ${visibleOptions.join(", ")}`,
+        );
+      }, `the fixed App protocol /${command} command should remain selectable in the Composer picker`);
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(`[data-option-id="slash:${command}"]`)!
+          .dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 })),
+      );
+      await waitFor(
+        () => assert.equal(input.__zcodeLexicalInputE2E!.getText(), `/${command} `),
+        `selecting /${command} should insert the command into the draft without submitting it`,
+      );
+      await act(async () => input.__zcodeLexicalInputE2E!.setText(""));
+    }
+
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/model"));
     await waitFor(
       () => assert.ok(container.querySelector('[data-option-id="app-slash:model"]')),
@@ -3260,6 +3341,18 @@ test("an active ZCode Harness task switches models within its Session and submit
       "/effort high should update the same model selection used by the composer",
     );
     assert.equal(submissions.length, 0, "reasoning selection must not create an Input");
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/variant low"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.match(
+          container.querySelector('[data-testid="chat-thought-level-select-trigger"]')
+            ?.textContent ?? "",
+          /low/i,
+        ),
+      "the fixed CLI /variant alias should route to the same reasoning-level control",
+    );
+    assert.equal(submissions.length, 0, "the /variant alias must not create an Input");
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/mode"));
     await waitFor(
@@ -3330,6 +3423,33 @@ test("an active ZCode Harness task switches models within its Session and submit
       "/help locale should describe the existing product preference route",
     );
     assert.equal(submissions.length, 0);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help plan"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.ok(
+          document.body.textContent?.includes("/plan [task] — 切换到计划模式，并可选提交任务。"),
+        ),
+      "/help plan should describe the App-only command without adding it to the fixed CLI catalog",
+    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help future-native"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.ok(
+          document.body.textContent?.includes("该内置命令不属于固定 ZCode v0.16.9 支持目录"),
+        ),
+      "/help should classify catalog built-ins outside the fixed version separately from custom commands",
+    );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/help custom-note"));
+    await submitCurrentDraft();
+    await waitFor(
+      () =>
+        assert.ok(
+          document.body.textContent?.includes("M1 Engine 对话暂不执行 ZCode CLI 自定义命令"),
+        ),
+      "/help should explain that discovered CLI custom commands are not executed by M1",
+    );
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/help"));
     await submitCurrentDraft();
     await waitFor(
@@ -3451,7 +3571,7 @@ test("an active ZCode Harness task switches models within its Session and submit
     assert.deepEqual(submissionConfig.modelSelection, {
       providerId: "opencode-go",
       modelId: "go-beta",
-      options: { reasoningLevel: "high" },
+      options: { reasoningLevel: "low" },
     });
     assert.equal(submissions[0]?.sessionId, sessionId);
     assert.equal(submissionConfig.mode, "edit");
@@ -4178,6 +4298,7 @@ test("unknown native Session and Execution require explicit identity-bound recov
   };
   const restoreRequests: Array<Record<string, unknown>> = [];
   const reconcileRequests: Array<Record<string, unknown>> = [];
+  const reconcileInputRequests: Array<Record<string, unknown>> = [];
   const submittedInputs: Array<Record<string, unknown>> = [];
   const feedbackReads: string[] = [];
   const listeners = new Set<(change: Record<string, unknown>) => void>();
@@ -4248,6 +4369,28 @@ test("unknown native Session and Execution require explicit identity-bound recov
         executions: [terminalExecution],
       };
       return terminalExecution;
+    },
+    reconcileInput: async (request: Record<string, unknown>) => {
+      reconcileInputRequests.push(request);
+      const source = activeHistory.inputs.find((input) => input.id === request.inputId);
+      assert.ok(source);
+      const terminal = { ...source, status: "completed", acceptedAt: 1_300, terminalAt: 1_400 };
+      activeHistory = {
+        ...activeHistory,
+        inputs: [terminal],
+        executions: [
+          {
+            ...unknownExecution,
+            id: "execution-recovered-from-input",
+            inputId: source.id,
+            status: "completed",
+            terminalAt: 1_400,
+            reconciledAt: 1_400,
+            reconciliationReason: undefined,
+          },
+        ],
+      };
+      return terminal;
     },
     restoreTaskSession: async (request: Record<string, unknown>) => {
       restoreRequests.push(request);
@@ -4421,6 +4564,54 @@ test("unknown native Session and Execution require explicit identity-bound recov
     assert.equal(restoreRequests.length, 2);
     assert.deepEqual(restoreRequests[1], restoreRequests[0]);
     assert.equal(submittedInputs.length, 0, "recovery must not replay the original input");
+
+    const lostAckInput = {
+      ...sourceInput,
+      id: "input-lost-ack-ui",
+      status: "unknown",
+      acceptedAt: null,
+      startedAt: null,
+      error: "native receipt lost",
+    };
+    activeTask = { ...activeTask, session: { ...activeTask.session, status: "unknown" } };
+    activeHistory = { ...activeHistory, inputs: [lostAckInput], executions: [] };
+    await act(async () => {
+      for (const listener of listeners)
+        listener({ taskId, task: activeTask, history: activeHistory });
+    });
+    const reconcileInputButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="reconcile-input-input-lost-ack-ui"]',
+    );
+    assert.ok(
+      reconcileInputButton,
+      "a lost native ACK needs an explicit read-only reconciliation action",
+    );
+    assert.equal(container.querySelector('[data-testid="restore-engine-session"]'), null);
+    await act(async () => {
+      reconcileInputButton.click();
+      reconcileInputButton.click();
+    });
+    await waitFor(
+      () => assert.equal(reconcileInputRequests.length, 1),
+      "input reconciliation should dispatch once",
+    );
+    assert.deepEqual(reconcileInputRequests[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-recovery-ui",
+      inputId: lostAckInput.id,
+    });
+    await waitFor(() => {
+      assert.ok(container.querySelector('[data-testid="restore-engine-session"]'));
+      assert.match(
+        container.querySelector(
+          '[data-testid="reconciled-execution-caveat-execution-recovered-from-input"]',
+        )?.textContent ?? "",
+        /工具和文件变更轨迹无法确认/,
+      );
+    }, "terminal native evidence should disclose the missing side-effect trace and allow explicit recovery");
+    assert.equal(submittedInputs.length, 0, "reconciliation must never resend the lost-ACK input");
 
     activeTask = {
       ...activeTask,

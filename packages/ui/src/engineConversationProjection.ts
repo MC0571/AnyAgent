@@ -166,7 +166,13 @@ export function projectEngineConversation(
       (input) =>
         belongsToTask(input, task) && input.status !== "queued" && input.status !== "cancelled",
     )
-    .sort((a, b) => a.receivedAt - b.receivedAt);
+    // Queued inputs become conversation turns only after dispatch. Send-now can
+    // promote a later admitted input first, so use the actual dispatch order.
+    .sort(
+      (a, b) =>
+        (a.startedAt ?? a.acceptedAt ?? a.receivedAt) -
+          (b.startedAt ?? b.acceptedAt ?? b.receivedAt) || a.receivedAt - b.receivedAt,
+    );
   const executions = history.executions
     .filter((execution) => belongsToTask(execution, task))
     .sort((a, b) => (a.startedAt ?? a.acceptedAt) - (b.startedAt ?? b.acceptedAt));

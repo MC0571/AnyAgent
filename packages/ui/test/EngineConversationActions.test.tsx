@@ -78,6 +78,105 @@ async function waitForElement(selector: string): Promise<HTMLElement> {
   assert.fail(`Timed out waiting for ${selector}`);
 }
 
+test("send-now queue history follows native dispatch order in the mounted conversation", async () => {
+  const dom = installDom();
+  const [
+    { EngineConversationTimeline },
+    { projectEngineConversation },
+    { ZCodeIntlProvider },
+    { TooltipProvider },
+  ] = await Promise.all([
+    import("../src/EngineConversationTimeline.js"),
+    import("../src/engineConversationProjection.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/components/ui/tooltip.js"),
+  ]);
+  const task = {
+    id: "queue-task",
+    participant: { id: "queue-participant" },
+    session: { id: "queue-session" },
+  };
+  const input = (id: string, text: string, receivedAt: number, startedAt: number) => ({
+    id,
+    taskId: task.id,
+    participantId: task.participant.id,
+    sessionId: task.session.id,
+    text,
+    status: "completed",
+    receivedAt,
+    acceptedAt: startedAt,
+    startedAt,
+    terminalAt: startedAt + 1,
+    error: null,
+  });
+  const inputs = [
+    input("source", "source", 100, 110),
+    input("queued-a", "queued A", 120, 300),
+    input("queued-b", "queued B sent now", 130, 200),
+  ];
+  const history = {
+    taskId: task.id,
+    inputs,
+    executions: inputs.map((item) => ({
+      id: `execution-${item.id}`,
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      inputId: item.id,
+      status: "completed",
+      acceptedAt: item.acceptedAt,
+      startedAt: item.startedAt,
+      terminalAt: item.terminalAt,
+      result: `${item.text} answer`,
+      error: null,
+    })),
+    events: [],
+    approvals: [],
+    userInputs: [],
+    stopRequests: [],
+    integrityIssues: [],
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(EngineConversationTimeline, {
+              projection: projectEngineConversation(task as never, history as never),
+              workspacePath: "/tmp/anyagent-ui",
+              historyLoading: false,
+              approvalBlockedReason: null,
+              userInputBlockedReason: null,
+              busyAction: null,
+              onReplyApproval: () => {},
+              onReplyUserInput: () => {},
+            }),
+          ),
+        ),
+      );
+    });
+    const orderedInputs = [
+      ...container.querySelectorAll<HTMLElement>("[data-testid^='engine-input-']"),
+    ].map((element) => element.getAttribute("data-testid"));
+    assert.deepEqual(orderedInputs, [
+      "engine-input-source",
+      "engine-input-queued-b",
+      "engine-input-queued-a",
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    dom.window.close();
+  }
+});
+
 test("Engine completed answers reuse native bubble and message actions", async () => {
   const dom = installDom();
   const [
