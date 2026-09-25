@@ -6,7 +6,7 @@
 
 [本候选步骤与本机检查](final-92b66f2/README.md)、[同场景双库与文件对账](final-92b66f2/running-observation-crosscheck.json)证明：精确开发态 failpoint 只断开一个 Adapter Execution 的事件观察，真实 CLI 在产品 unknown 后继续至原生 success terminal；正式 UI 首次对账仍 unknown，终态后再次对账将**同一**产品 Execution 更新为 completed，原生 Input／Write 均只一次，并可在同 Task／Session 继续新轮。该事实只覆盖 Adapter 事件观测中断，原始 stdio 未断；窗口实际观察未保存截图／录屏，仍有最终 RC 视觉证据缺口。
 
-另一个[真实模型随后再请求工具的快照](final-92b66f2/running-observation-pending-tool.json)仍是产品 unknown、原生 Edit running，待答工具请求的处理与最终状态需继续核查；不能以成功的单次 Write 场景覆盖该组合缺口。本次新增的是增量验证，不将下文固定在 `f47e6b7` 的旧矩阵自动改算为最终候选通过。
+另一个[真实模型后续工具快照](final-92b66f2/running-observation-pending-tool.json)仍是产品 unknown、原生 Edit running；该状态不能证明存在待审批请求。当前产品对可能仍在运行的原执行缺少安全 Stop 入口，最终状态也未证实；不能以成功的单次 Write 场景覆盖该组合缺口。本次新增的是增量验证，不将下文固定在 `f47e6b7` 的旧矩阵自动改算为最终候选通过。
 
 ## 真实 CLI 断线对账候选增量（`ea8e5cdd31a549a87934e5b7759eea9c428d82be`）
 

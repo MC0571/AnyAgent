@@ -51,5 +51,5 @@
     "sha256": "f04d90169c577180c030ce7cdb9de93927872f1e6331b5640cd1744525f862a1",
     "contentUtf8": "RUNNING_OBSERVATION_925"
   },
-  "interpretation": "This snapshot is not a successful reconnect or native terminal outcome. It shows the product preserves unknown and does not resend the original Input, but the native turn has a later running Edit with no product approval surface after this run listener was detached. The model chose further tools contrary to the requested flow; final behavior remains to be investigated."
+  "interpretation": "This snapshot is not a successful reconnect, approval, or native terminal outcome. The product preserves unknown and does not resend the original Input. The native turn has a later running Edit, but ToolCallStarted follows the CLI permission gate, so the running row does not establish that an approval request is pending. The product currently lacks a safe Stop entry for this possibly live original execution; final behavior remains to be investigated."
 }

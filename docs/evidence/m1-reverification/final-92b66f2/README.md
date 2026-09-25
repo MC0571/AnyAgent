@@ -11,9 +11,9 @@
 
 该场景验证**原生 CLI 仍运行时，单次 Adapter 事件观测中断所致 unknown 与两阶段原执行对账**。Host 与 CLI 的原始 stdio transport 全程未断；它不是物理 stdio 断线证明。窗口经 CUA 实际操作并观察了 unknown、对账入口、恢复答案和文件摘要，但本次没有保存可交付的窗口截图或录屏；视觉 RC 证据仍缺。结构化证据没有使用截图替代原生副作用核对。
 
-## 未收口的后续待答工具场景
+## 未收口的后续工具控制场景
 
-同候选的另一隔离 Task 在观测中断后，真实模型又完成 Bash 并开始 Edit；[该时点快照](running-observation-pending-tool.json)记录了产品仍 unknown、原生 Edit 为 running、原 Input 仅派发一次和文件实际状态。产品没有接收到新的待答工具请求，首次对账只能返回“原生 turn 行仍 running，无法证明其当前进程仍在执行”。这个快照**不是**成功的恢复或终态证据；后续授权／停止的可用处理入口仍在调查，不能将该场景算作通过，也不把模型后续调用工具误写成 CLI 不支持。
+同候选的另一隔离 Task 在观测中断后，真实模型又完成 Bash 并开始 Edit；[该时点快照](running-observation-pending-tool.json)记录了产品仍 unknown、原生 Edit 为 running、原 Input 仅派发一次和文件实际状态。CLI 在发布 `ToolCallStarted` 前已处理权限流程，因此 `Edit running` **不能证明**存在待审批请求。首次对账只能返回“原生 turn 行仍 running，无法证明其当前进程仍在执行”。产品当前未提供对这条仍可能运行的原执行发起安全 Stop 的入口；这个快照**不是**成功的恢复、审批或终态证据，不能将该场景算作通过。
 
 ## 本候选本机检查
 
