@@ -225,6 +225,7 @@ export class FakeEngine implements EngineAdapter {
   async interrupt(input: {
     readonly session: EngineSessionRef;
     readonly executionId: EngineExecutionRef;
+    readonly beforeDispatch?: () => void;
   }): Promise<EngineCommandReceipt> {
     const record = this.#executions.get(input.executionId);
     if (!record || record.session !== input.session) {
@@ -253,6 +254,7 @@ export class FakeEngine implements EngineAdapter {
     if (record.terminal)
       return { status: "unknown", reason: "Execution already has a terminal observation." };
 
+    input.beforeDispatch?.();
     record.interruptRequested = true;
     const evidence = this.#evidence(record, "interrupt request accepted by fake execution");
     this.#emit(record, { type: "execution.interruption-requested", status: "requested", evidence });

@@ -784,7 +784,10 @@ export interface IZCodeAgentService {
   conversationFileRewindPreviewV4(
     params: ZCodeAgentConversationFileRewindPreviewParams,
   ): Promise<V4ConversationFileRewindPreviewResult>;
-  sendConversationCommandV4(params: ZCodeAgentConversationCommandParams): Promise<CommandAck>;
+  sendConversationCommandV4(
+    params: ZCodeAgentConversationCommandParams,
+    beforeDispatch?: () => void,
+  ): Promise<CommandAck>;
   queryConversationCommandsV4(params: ZCodeAgentCommandsQueryParams): Promise<CommandsQueryResult>;
   attachmentBeginV4(params: ZCodeAgentAttachmentBeginParams): Promise<V4AttachmentBeginResult>;
   attachmentChunkV4(params: ZCodeAgentAttachmentChunkParams): Promise<V4AttachmentChunkResult>;

@@ -132,7 +132,7 @@ async function mount(script: readonly FakeEngineStep[]) {
       await runtime.replyToUserInput(input);
     },
     requestStop: async (input: Parameters<typeof runtime.requestStop>[0]) => {
-      await runtime.requestStop(input);
+      return runtime.requestStop(input);
     },
   };
   const [

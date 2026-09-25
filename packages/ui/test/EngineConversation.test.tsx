@@ -436,11 +436,27 @@ test("EngineConversation sends through the product composer and renders ordered 
             executionId,
             requestedAt: clock,
             status: "requested",
+            deliveryStatus: "delivered",
+            deliveryEvidence: null,
+            stopEvidence: null,
             reason: null,
           },
         ],
       };
       emit();
+      return {
+        id: "stop-request-frozen",
+        taskId,
+        participantId,
+        sessionId,
+        executionId,
+        requestedAt: clock,
+        status: "requested",
+        deliveryStatus: "delivered",
+        deliveryEvidence: null,
+        stopEvidence: null,
+        reason: null,
+      };
     },
   };
   const services = {
@@ -4965,9 +4981,14 @@ test("unknown native Session and Execution require explicit identity-bound recov
   const restoreRequests: Array<Record<string, unknown>> = [];
   const reconcileRequests: Array<Record<string, unknown>> = [];
   const reconcileInputRequests: Array<Record<string, unknown>> = [];
+  const stopRequests: Array<Record<string, unknown>> = [];
   const submittedInputs: Array<Record<string, unknown>> = [];
   const feedbackReads: string[] = [];
   const listeners = new Set<(change: Record<string, unknown>) => void>();
+  const emit = () => {
+    for (const listener of listeners)
+      listener({ taskId, task: activeTask, history: activeHistory });
+  };
   let rejectRestore = true;
   let releaseRestore: (() => void) | null = null;
   let releaseReconciliation: (() => void) | null = null;
@@ -5015,6 +5036,41 @@ test("unknown native Session and Execution require explicit identity-bound recov
       return { dispose: () => listeners.delete(listener) };
     },
     submitInput: async (input: Record<string, unknown>) => submittedInputs.push(input),
+    requestStop: async (request: Record<string, unknown>) => {
+      stopRequests.push(request);
+      const result = {
+        status: "temporarily-unavailable",
+        deliveryStatus: "not-delivered",
+        deliveryEvidence: null,
+        stopEvidence: null,
+        reason: "没有此 Session／Execution 的已验证原生执行标识；未发送中断请求。",
+      };
+      activeHistory = {
+        ...activeHistory,
+        stopRequests: [
+          ...(activeHistory.stopRequests ?? []),
+          {
+            id: "stop-request-no-native-token",
+            taskId,
+            participantId,
+            sessionId,
+            executionId: request.executionId,
+            requestedAt: 1_200,
+            ...result,
+          },
+        ],
+      };
+      emit();
+      return {
+        id: "stop-request-no-native-token",
+        taskId,
+        participantId,
+        sessionId,
+        executionId: request.executionId as string,
+        requestedAt: 1_200,
+        ...result,
+      };
+    },
     reconcileExecution: async (request: Record<string, unknown>) => {
       reconcileRequests.push(request);
       await reconciliationGate;
@@ -5140,6 +5196,12 @@ test("unknown native Session and Execution require explicit identity-bound recov
         )?.disabled,
         true,
       );
+      assert.ok(
+        container.querySelector<HTMLButtonElement>(
+          '[data-testid="stop-unknown-execution-execution-after-disconnect"]',
+        ),
+        "unknown Execution should expose the existing Host Stop action",
+      );
     }, "unknown Session should show explicit recovery controls while blocking composer actions");
     assert.doesNotMatch(
       container.textContent ?? "",
@@ -5149,6 +5211,32 @@ test("unknown native Session and Execution require explicit identity-bound recov
     assert.match(container.textContent ?? "", /发送状态暂时无法确认/u);
     assert.equal(restoreRequests.length, 0, "history selection must not restore automatically");
     assert.equal(reconcileRequests.length, 0, "history selection must not reconcile automatically");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="stop-unknown-execution-execution-after-disconnect"]',
+        )
+        ?.click();
+    });
+    await waitFor(() => assert.equal(stopRequests.length, 1));
+    assert.deepEqual(stopRequests[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-recovery-ui",
+      executionId: unknownExecution.id,
+    });
+    await waitFor(
+      () =>
+        assert.match(
+          container.querySelector('[data-testid="execution-stop-state-execution-after-disconnect"]')
+            ?.textContent ?? "",
+          /未发送中断请求/u,
+        ),
+      "a Stop rejection without a native token should be visible and explicit",
+    );
+    assert.equal(submittedInputs.length, 0, "Stop must not resend the unknown Input");
 
     const reconcileButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="reconcile-execution-execution-after-disconnect"]',

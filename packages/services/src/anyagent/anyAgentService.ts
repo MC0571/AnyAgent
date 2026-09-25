@@ -124,7 +124,7 @@ export interface IAnyAgentService {
   compactSession(input: CompactSession): Promise<RuntimeCompactOperation>;
   replyToApproval(input: ReplyToApproval): Promise<void>;
   replyToUserInput(input: ReplyToUserInput): Promise<void>;
-  requestStop(input: RequestStop): Promise<void>;
+  requestStop(input: RequestStop): Promise<RuntimeStopRequest>;
 }
 
 export interface TaskSkillReferenceCatalog {

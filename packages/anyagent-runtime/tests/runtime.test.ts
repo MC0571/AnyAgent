@@ -138,6 +138,7 @@ class ManualEngine implements EngineAdapter {
   approvalReplies = 0;
   userInputReplies = 0;
   interrupts = 0;
+  beforeInterruptDispatch: (() => Promise<void>) | null = null;
   readonly feedbackCalls: Parameters<NonNullable<EngineAdapter["setAssistantFeedback"]>>[0][] = [];
   feedbackEffects = 0;
   beforeFeedbackDispatch: (() => Promise<void>) | null = null;
@@ -256,7 +257,9 @@ class ManualEngine implements EngineAdapter {
     this.userInputReplies++;
     return { status: "forwarded" };
   }
-  async interrupt(): Promise<EngineCommandReceipt> {
+  async interrupt(input: Parameters<EngineAdapter["interrupt"]>[0]): Promise<EngineCommandReceipt> {
+    await this.beforeInterruptDispatch?.();
+    input.beforeDispatch?.();
     this.interrupts++;
     return {
       status: this.interruptStatus,
@@ -4495,6 +4498,96 @@ test("Execution completing during capability refresh is not interrupted", async 
     await assert.rejects(stopPromise, /already completed/);
     assert.equal(engine.interrupts, 0);
     assert.equal(runtime.getHistory(task.id)!.stopRequests.length, 0);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Stop rechecks Host authorization after capability refresh and dispatches nothing if revoked", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  const grant = { ...authorization, id: "stop-revoked-during-capability-refresh" };
+  try {
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: grant.id,
+    };
+    await runtime.submitInput({ ...identity, text: "wait before stop" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "stop-revoke-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    let releaseCapabilities: (() => void) | undefined;
+    engine.refreshHandler = () =>
+      new Promise((resolve) => {
+        releaseCapabilities = () => resolve(engine.getCapabilities());
+      });
+    const stopPromise = runtime.requestStop({ ...identity, executionId });
+    await until(() => !!releaseCapabilities);
+    runtime.revokeHostAuthorization(grant.id, "revoked before Stop dispatch");
+    releaseCapabilities!();
+    await assert.rejects(stopPromise, /revoked before Stop dispatch/i);
+    assert.equal(engine.interrupts, 0);
+    assert.equal(runtime.getHistory(task.id)!.stopRequests.length, 0);
+    assert.equal(runtime.getHistory(task.id)!.executions[0]!.status, "accepted");
+  } finally {
+    runtime.close();
+  }
+});
+
+test("Stop rechecks Host authorization after Adapter waits and dispatches nothing if revoked", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  const grant = { ...authorization, id: "stop-revoked-during-adapter-wait" };
+  try {
+    const task = await runtime.createTask({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: grant.id,
+    };
+    await runtime.submitInput({ ...identity, text: "wait before stop" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "stop-adapter-wait-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    let releaseAdapter: (() => void) | undefined;
+    engine.beforeInterruptDispatch = () =>
+      new Promise<void>((resolve) => {
+        releaseAdapter = resolve;
+      });
+    const stopPromise = runtime.requestStop({ ...identity, executionId });
+    await until(() => !!releaseAdapter && runtime.getHistory(task.id)!.stopRequests.length === 1);
+    runtime.revokeHostAuthorization(grant.id, "revoked while Adapter was preparing Stop");
+    releaseAdapter!();
+    const stop = await stopPromise;
+    assert.equal(stop.status, "authorization-required");
+    assert.equal(stop.deliveryStatus, "not-delivered");
+    assert.match(stop.reason ?? "", /revoked while Adapter was preparing Stop/u);
+    assert.equal(engine.interrupts, 0);
+    assert.equal(runtime.getHistory(task.id)!.executions[0]!.status, "accepted");
   } finally {
     runtime.close();
   }

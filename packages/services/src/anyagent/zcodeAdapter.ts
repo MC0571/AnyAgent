@@ -142,6 +142,11 @@ interface PendingRun {
   dispose(): void;
 }
 
+interface NativeStopLease {
+  readonly executionId: EngineExecutionRef;
+  readonly foregroundExecutionId: string;
+}
+
 type ZCodeSubmissionMode = "build" | "edit" | "plan" | "yolo";
 
 interface ZCodeSubmissionConfig {
@@ -393,6 +398,9 @@ export function createZCodeAdapter(options: {
   // There is no trustworthy way to recover this pin if the Adapter is recreated.
   const providerIdBySession = new Map<string, string>();
   const runs = new Map<string, PendingRun>();
+  // Retain only in-memory control for the exact unknown run after observation
+  // ends. A fresh Adapter cannot validate this token and must fail closed.
+  const stopLeases = new Map<string, NativeStopLease>();
   const compactOperations = new Map<string, (reason: string) => void>();
   // ponytail: retain per-run listeners for late evidence until Host disposal; use one
   // per-session fanout if long-lived, high-volume Sessions make listener count material.
@@ -756,13 +764,24 @@ export function createZCodeAdapter(options: {
     });
     run.wake?.();
     run.wake = undefined;
+    if (payload.type === "execution.unknown" && run.nativeForegroundExecutionId?.trim())
+      stopLeases.set(run.session, {
+        executionId: run.executionId,
+        foregroundExecutionId: run.nativeForegroundExecutionId,
+      });
     if (
       payload.type === "execution.completed" ||
       payload.type === "execution.failed" ||
       payload.type === "execution.stopped"
     ) {
+      if (stopLeases.get(run.session)?.executionId === run.executionId)
+        stopLeases.delete(run.session);
       if (runs.get(run.session) === run) runs.delete(run.session);
     }
+  }
+
+  function releaseStopLease(session: EngineSessionRef, executionId: EngineExecutionRef): void {
+    if (stopLeases.get(session)?.executionId === executionId) stopLeases.delete(session);
   }
 
   function scheduleGoalTerminalProbe(run: PendingRun, delayMs: number): void {
@@ -1252,6 +1271,7 @@ export function createZCodeAdapter(options: {
       }
       allRuns.clear();
       runs.clear();
+      stopLeases.clear();
     },
     getCapabilities: capabilities,
     refreshCapabilities,
@@ -1447,12 +1467,17 @@ export function createZCodeAdapter(options: {
             .sort((left, right) => left.rowId - right.rowId)
             .map((row) => row.text)
             .join("");
+          releaseStopLease(session, executionId);
           return { status: "completed" as const, result: result || null, evidence };
         }
-        if (header.state === "completedInterrupted")
+        if (header.state === "completedInterrupted") {
+          releaseStopLease(session, executionId);
           return { status: "stopped" as const, evidence };
-        if (header.state === "failed")
+        }
+        if (header.state === "failed") {
+          releaseStopLease(session, executionId);
           return { status: "failed" as const, error: "Native turn failed.", evidence };
+        }
       }
       // Product projection state alone is not an execution outcome. Cold transcript
       // hydration can synthesize terminal rows and its `hydrate-turn-N` identity differs
@@ -1739,10 +1764,10 @@ export function createZCodeAdapter(options: {
       }
       if (validationError)
         throw operationError(operation, validationError, "execution-failed", "none");
-      if (runs.has(session) || compactOperations.has(session))
+      if (runs.has(session) || stopLeases.has(session) || compactOperations.has(session))
         throw operationError(
           operation,
-          "Session has an active operation; queued promotion is not integrated.",
+          "Session has an active or unreconciled native operation; queued promotion is not integrated.",
           "temporarily-unavailable",
           "none",
         );
@@ -1798,10 +1823,10 @@ export function createZCodeAdapter(options: {
           })),
         );
       }
-      if (runs.has(session) || compactOperations.has(session))
+      if (runs.has(session) || stopLeases.has(session) || compactOperations.has(session))
         throw operationError(
           operation,
-          "Session became busy before native dispatch; queued promotion is not integrated.",
+          "Session became busy or has unreconciled native work before dispatch; queued promotion is not integrated.",
           "temporarily-unavailable",
           "none",
         );
@@ -2474,21 +2499,48 @@ export function createZCodeAdapter(options: {
         return { status: "unknown" };
       }
     },
-    async interrupt({ session, executionId }): Promise<EngineCommandReceipt> {
-      if (runs.get(session)?.executionId !== executionId)
+    async interrupt({ session, executionId, beforeDispatch }): Promise<EngineCommandReceipt> {
+      const activeRun = runs.get(session);
+      const stopLease = stopLeases.get(session);
+      if (
+        (activeRun && activeRun.executionId !== executionId) ||
+        (stopLease && stopLease.executionId !== executionId)
+      )
         return { status: "unsupported", reason: "执行标识不匹配" };
-      const current = runs.get(session)!;
-      if (!current.nativeForegroundExecutionId) {
+      const foregroundExecutionId =
+        activeRun?.executionId === executionId
+          ? activeRun.nativeForegroundExecutionId
+          : stopLease?.executionId === executionId
+            ? stopLease.foregroundExecutionId
+            : null;
+      if (!foregroundExecutionId) {
         return {
           status: "temporarily-unavailable",
-          reason: "尚无可防止误停后续执行的原生执行标识",
+          reason: "没有此 Session／Execution 的已验证原生执行标识；未发送中断请求。",
         };
       }
       const envelope = command("stop", session, {
-        expectedForegroundExecutionId: current.nativeForegroundExecutionId,
+        expectedForegroundExecutionId: foregroundExecutionId,
       });
+      let dispatchGuardRejected = false;
+      const checkDispatch = () => {
+        try {
+          beforeDispatch?.();
+        } catch (error) {
+          dispatchGuardRejected = true;
+          throw error;
+        }
+      };
       try {
-        const ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
+        const ack = await options.agent.sendConversationCommandV4(
+          { ...workspace, envelope },
+          checkDispatch,
+        );
+        if (ack.commandId !== envelope.commandId)
+          return {
+            status: "unknown",
+            reason: "Native stop acknowledgement command ID did not match the request.",
+          };
         if (ack.status === "accepted")
           return { status: "requested", evidence: { source: "engine", evidenceId: ack.commandId } };
         return {
@@ -2496,6 +2548,7 @@ export function createZCodeAdapter(options: {
           reason: ack.reasonCode ?? ack.message,
         };
       } catch (error) {
+        if (dispatchGuardRejected) throw error;
         return {
           status: "unknown",
           reason: error instanceof Error ? error.message : String(error),

@@ -384,7 +384,7 @@ export function createAnyAgentService(
       await runtime.replyToUserInput(input);
     },
     async requestStop(input) {
-      await runtime.requestStop(input);
+      return runtime.requestStop(input);
     },
   };
   return {

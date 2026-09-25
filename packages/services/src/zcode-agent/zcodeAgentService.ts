@@ -5023,7 +5023,10 @@ export function createZCodeAgentService(
       return resyncV4Route(params, "conversation/");
     },
 
-    async sendConversationCommandV4(params: ZCodeAgentConversationCommandParams) {
+    async sendConversationCommandV4(
+      params: ZCodeAgentConversationCommandParams,
+      beforeDispatch?: () => void,
+    ) {
       const client = await getClient(params);
       const planPayload = params.envelope.payload as {
         planEnabled?: boolean;
@@ -5081,6 +5084,7 @@ export function createZCodeAgentService(
           };
         }
       }
+      beforeDispatch?.();
       const ack: CommandAck = await client.request(V4_METHODS.command, envelope, commandAckSchema);
       // Prompt command 在 committed TurnStarted 或 committed WorkspaceHookReviewRequested
       // 任一 authority 到达后即返回；人工审核不能占用 Host RPC，因此继续使用统一默认

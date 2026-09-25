@@ -476,6 +476,8 @@ export interface EngineAdapter {
   interrupt(input: {
     readonly session: EngineSessionRef;
     readonly executionId: EngineExecutionRef;
+    /** Revalidate Host ownership, authorization and current capability at native dispatch. */
+    readonly beforeDispatch?: () => void;
   }): Promise<EngineCommandReceipt>;
   closeSession(input: { readonly session: EngineSessionRef }): Promise<EngineCommandReceipt>;
 }
