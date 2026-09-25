@@ -320,18 +320,14 @@ export function useEngineComposerDrafts(
       setIssue(taskId, outcome.reviewRequired ? "review-required" : null);
       if (!outcome.textMatched) return false;
       setDrafts((current) => {
-        if (!current[taskId]) return current;
-        return {
-          ...current,
-          [taskId]: {
-            ...current[taskId],
-            text: "",
-            attachmentTickets: [],
-            recoveryParts: [],
-            // Keep this monotonic across repeated queue edits in the same mounted
-            // Composer; EngineConversation has already applied this version.
-          },
-        };
+        const draft = current[taskId];
+        // Keep recoveryVersion monotonic; the mounted Composer already applied it.
+        return draft
+          ? {
+              ...current,
+              [taskId]: { ...draft, text: "", attachmentTickets: [], recoveryParts: [] },
+            }
+          : current;
       });
       return outcome.cleared;
     },
