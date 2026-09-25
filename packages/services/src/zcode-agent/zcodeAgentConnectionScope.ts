@@ -679,7 +679,7 @@ export function createZCodeAgentConnectionScope(
       if (!ownsRoute) throw new Error("fault.subscription.notOwned");
       await base.setConnectionFlowStateV4(withTrustedConnection(params, forwarded));
     },
-    async sendConversationCommandV4(params) {
+    async sendConversationCommandV4(params, beforeDispatch) {
       assertOpen();
       if (role === "terminal-client") {
         assertReady();
@@ -694,6 +694,7 @@ export function createZCodeAgentConnectionScope(
       // envelope 仍原样透传；可信连接上下文只通过 host 内部 carrier 传给 base service。
       return base.sendConversationCommandV4(
         withTrustedConnection(params, forwardedConnection(params)),
+        beforeDispatch,
       );
     },
     async queryConversationCommandsV4(params) {

@@ -2284,7 +2284,16 @@ export function EngineConversation({
           authorizationId: visibleTask.authorizationId,
           executionId,
         }),
-      () => "中断请求已提交，仍需等待实际停止证据。",
+      (receipt) =>
+        receipt.status === "confirmed"
+          ? "原生停止已确认。"
+          : receipt.deliveryStatus === "delivered"
+            ? "中断请求已送达；这不表示已停止，仍需等待原生终态证据。"
+            : receipt.deliveryStatus === "not-delivered"
+              ? `未发送中断请求：${receipt.reason ?? "当前没有可验证的原生执行标识。"}`
+              : receipt.deliveryStatus === "unknown"
+                ? `中断请求是否送达未知：${receipt.reason ?? "请对账原执行；不会自动重发。"}`
+                : `中断请求尚待送达确认：${receipt.reason ?? "仍需对账原执行。"}`,
     );
   };
 
@@ -2819,41 +2828,77 @@ export function EngineConversation({
                 ) : null}
               </section>
             ) : null}
-            {unknownExecutions.map((execution) => (
-              <section
-                className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm"
-                data-testid={`unknown-execution-${execution.id}`}
-                key={execution.id}
-                role="status"
-                aria-live="polite"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">执行结果未知；对账只查询原生状态，不会重发输入。</p>
-                  {execution.reconciliationReason || execution.reconciliationEvidence?.detail ? (
-                    <p className="mt-1 break-words text-xs text-foreground-subtle">
-                      {execution.reconciliationReason ?? execution.reconciliationEvidence?.detail}
-                    </p>
-                  ) : null}
-                  {reconcileErrors[execution.id] ? (
-                    <p
-                      className="mt-1 break-words text-xs text-warning"
-                      data-testid={`reconcile-execution-error-${execution.id}`}
-                    >
-                      对账失败：{reconcileErrors[execution.id]}
-                    </p>
-                  ) : null}
-                </div>
-                <button
-                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-60"
-                  data-testid={`reconcile-execution-${execution.id}`}
-                  type="button"
-                  disabled={busyAction !== null}
-                  onClick={() => reconcileUnknownExecution(execution.id)}
+            {unknownExecutions.map((execution) => {
+              const executionStopRequests = (visibleHistory?.stopRequests ?? []).filter(
+                (stop) => stop.executionId === execution.id,
+              );
+              const stopRequest = executionStopRequests.at(-1);
+              const unresolvedStop = executionStopRequests.some(
+                (stop) => stop.status === "requested" || stop.status === "unknown",
+              );
+              return (
+                <section
+                  className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm"
+                  data-testid={`unknown-execution-${execution.id}`}
+                  key={execution.id}
+                  role="status"
+                  aria-live="polite"
                 >
-                  {busyAction === `reconcile:${execution.id}` ? "正在对账…" : "对账原执行"}
-                </button>
-              </section>
-            ))}
+                  <div className="min-w-0">
+                    <p className="font-medium">执行结果未知；对账只查询原生状态，不会重发输入。</p>
+                    {execution.reconciliationReason || execution.reconciliationEvidence?.detail ? (
+                      <p className="mt-1 break-words text-xs text-foreground-subtle">
+                        {execution.reconciliationReason ?? execution.reconciliationEvidence?.detail}
+                      </p>
+                    ) : null}
+                    {stopRequest ? (
+                      <p
+                        className="mt-1 break-words text-xs text-foreground-subtle"
+                        data-testid={`execution-stop-state-${execution.id}`}
+                      >
+                        {stopRequest.status === "confirmed"
+                          ? "原生停止已确认。"
+                          : stopRequest.deliveryStatus === "delivered"
+                            ? "中断请求已送达；这不表示已停止，仍需等待原生终态证据。"
+                            : stopRequest.deliveryStatus === "not-delivered"
+                              ? `未发送中断请求：${stopRequest.reason ?? "当前没有可验证的原生执行标识。"}`
+                              : stopRequest.deliveryStatus === "unknown"
+                                ? `中断请求是否送达未知：${stopRequest.reason ?? "请对账原执行；不会自动重发。"}`
+                                : "中断请求尚待送达确认；仍需对账原执行。"}
+                      </p>
+                    ) : null}
+                    {reconcileErrors[execution.id] ? (
+                      <p
+                        className="mt-1 break-words text-xs text-warning"
+                        data-testid={`reconcile-execution-error-${execution.id}`}
+                      >
+                        对账失败：{reconcileErrors[execution.id]}
+                      </p>
+                    ) : null}
+                  </div>
+                  <button
+                    className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-60"
+                    data-testid={`reconcile-execution-${execution.id}`}
+                    type="button"
+                    disabled={busyAction !== null}
+                    onClick={() => reconcileUnknownExecution(execution.id)}
+                  >
+                    {busyAction === `reconcile:${execution.id}` ? "正在对账…" : "对账原执行"}
+                  </button>
+                  {!unresolvedStop && !stopBlockedReason ? (
+                    <button
+                      className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-60"
+                      data-testid={`stop-unknown-execution-${execution.id}`}
+                      type="button"
+                      disabled={busyAction !== null}
+                      onClick={() => requestStop(execution.id)}
+                    >
+                      {busyAction === `stop:${execution.id}` ? "正在请求中断…" : "请求中断"}
+                    </button>
+                  ) : null}
+                </section>
+              );
+            })}
             {unknownInputs.map((input) => (
               <section
                 className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm"

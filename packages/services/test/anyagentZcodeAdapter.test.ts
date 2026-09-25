@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { EngineContractError } from "@anyagent/engine-contract";
 import { createTaskRuntime } from "@anyagent/runtime";
 import { WORKFLOW_REFINE_PERMISSION_OPTION_ID, zcodeSessionEventSchema } from "@zcode/shared";
 import { parseCommandEnvelope } from "@zcode/shared/zcode-protocol-v4";
+import { setDataBaseDir } from "../src/paths.js";
 import { createZCodeAdapter } from "../src/anyagent/zcodeAdapter.js";
+import { getZCodeAdapterObservationFailpointPath } from "../src/anyagent/zcodeAdapterObservationFailpoint.js";
 
 type AgentPort = Parameters<typeof createZCodeAdapter>[0]["agent"];
 const DEFAULT_MODEL_SELECTION = { providerId: "provider-a", modelId: "model-a" };
@@ -62,6 +64,9 @@ function harness({
   nativeActiveTurnId = null,
   nativePendingRequestIds = [],
   nativeSessionStatus = "idle",
+  stopSendFails = false,
+  stopAckCommandId,
+  beforeStopCommand,
   nativeGoalStatus,
   nativeGoalReadFails,
   resumeSessionId = "native-session",
@@ -93,6 +98,9 @@ function harness({
   nativeActiveTurnId?: string | null;
   nativePendingRequestIds?: string[];
   nativeSessionStatus?: string;
+  stopSendFails?: boolean;
+  stopAckCommandId?: string;
+  beforeStopCommand?: () => Promise<void>;
   nativeGoalStatus?: () => "active" | "complete";
   nativeGoalReadFails?: () => boolean;
   resumeSessionId?: string;
@@ -191,18 +199,32 @@ function harness({
         },
       } as Awaited<ReturnType<AgentPort["compactSession"]>>;
     },
-    sendConversationCommandV4: async ({
-      envelope,
-    }: {
-      envelope: {
-        type: string;
-        commandId: string;
-        payload: unknown;
-        baseRevision?: number;
-        baseLogEpoch?: string;
-      };
-    }) => {
+    sendConversationCommandV4: async (
+      {
+        envelope,
+      }: {
+        envelope: {
+          type: string;
+          commandId: string;
+          payload: unknown;
+          baseRevision?: number;
+          baseLogEpoch?: string;
+        };
+      },
+      beforeDispatch?: () => void,
+    ) => {
+      if (envelope.type === "stop") {
+        await beforeStopCommand?.();
+        beforeDispatch?.();
+      }
       commands.push(envelope);
+      if (envelope.type === "stop" && stopSendFails)
+        throw new Error("native stop acknowledgement lost");
+      if (envelope.type === "stop")
+        return {
+          status: "accepted",
+          commandId: stopAckCommandId ?? envelope.commandId,
+        };
       if (envelope.type === "createSession") {
         return {
           status: "accepted",
@@ -456,6 +478,9 @@ function harness({
   return {
     adapter,
     commands,
+    get activeSessionListeners() {
+      return listeners.size;
+    },
     nativeCompactCalls,
     rowQueries,
     resumeCalls,
@@ -3161,6 +3186,591 @@ test("ZCode tool cards retain native name and input without inventing a start", 
   assert.equal(started?.type === "tool.started" && started.name, "Bash");
   assert.deepEqual(started?.type === "tool.started" && started.input, { command: "pwd" });
   assert.equal(completed?.type === "tool.completed" && completed.name, "Bash");
+});
+
+test("development observation failpoint ends only the exact acknowledged Adapter run", async () => {
+  const dataBaseDir = await mkdtemp(join(tmpdir(), "anyagent-zcode-observation-drop-"));
+  const previousEnvironment = {
+    ANYAGENT_M0: process.env.ANYAGENT_M0,
+    ZCODE_RUNTIME_ENV: process.env.ZCODE_RUNTIME_ENV,
+    ZCODE_DATA_BASE_DIR: process.env.ZCODE_DATA_BASE_DIR,
+  };
+  const restoreEnvironment = () => {
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    setDataBaseDir(null);
+  };
+  process.env.ANYAGENT_M0 = "1";
+  process.env.ZCODE_RUNTIME_ENV = "development";
+  process.env.ZCODE_DATA_BASE_DIR = dataBaseDir;
+  setDataBaseDir(dataBaseDir);
+  const failpointPath = getZCodeAdapterObservationFailpointPath();
+  assert.ok(failpointPath);
+  await mkdir(dirname(failpointPath), { recursive: true });
+  await writeFile(
+    failpointPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        enabled: true,
+        workspaceKey: "/tmp/workspace",
+        sessionId: "native-session",
+        inputId: "native-input",
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+
+  const fixture = harness({ delayedAck: true, stopSendFails: true });
+  try {
+    const session = await fixture.adapter.createSession();
+    const runPromise = fixture.adapter.run({
+      session,
+      input: "write one file, then continue reasoning",
+      commandId: "observation-drop-execution",
+    });
+    await waitUntil(() => fixture.commands.some((entry) => entry.type === "sendText"));
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "observation-drop-turn-started",
+        seq: 1,
+        sessionId: "native-session",
+        turnId: "observation-drop-turn",
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+      },
+    });
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "observation-drop-write-result",
+        seq: 2,
+        sessionId: "native-session",
+        turnId: "observation-drop-turn",
+        timestamp: 2,
+        type: "tool.updated",
+        payload: {
+          kind: "result",
+          toolCallId: "observation-drop-write",
+          toolName: "Write",
+          result: { success: true },
+        },
+      },
+    });
+    assert.equal(
+      JSON.parse(await readFile(failpointPath, "utf8")).consumedAt,
+      undefined,
+      "events received before the native input ACK remain buffered",
+    );
+    assert.equal(fixture.activeSessionListeners, 1);
+
+    fixture.releaseSendText();
+    const run = await runPromise;
+    const events = [];
+    for await (const event of run.events) events.push(event);
+
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ["input.accepted", "execution.started", "tool.completed", "execution.unknown"],
+    );
+    assert.equal(fixture.activeSessionListeners, 0, "only the run event subscription is removed");
+    const consumed = JSON.parse(await readFile(failpointPath, "utf8"));
+    assert.equal(consumed.enabled, false);
+    assert.equal(typeof consumed.consumedAt, "string");
+
+    const interruption = await fixture.adapter.interrupt({
+      session,
+      executionId: run.executionId,
+    });
+    assert.equal(interruption.status, "unknown");
+    assert.match(interruption.reason ?? "", /acknowledgement lost/u);
+    const stopCommand = fixture.commands.find((entry) => entry.type === "stop");
+    assert.deepEqual(stopCommand?.payload, {
+      expectedForegroundExecutionId: "native-work",
+    });
+
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "observation-drop-late-terminal",
+        seq: 3,
+        sessionId: "native-session",
+        turnId: "observation-drop-turn",
+        timestamp: 3,
+        type: "turn.completed",
+        payload: { inputId: "native-input", resultType: "success" },
+      },
+    });
+    assert.equal(
+      events.some((event) => event.type === "execution.completed"),
+      false,
+    );
+  } finally {
+    fixture.adapter.dispose();
+    restoreEnvironment();
+    await rm(dataBaseDir, { recursive: true, force: true });
+  }
+});
+
+test("a mismatched native Stop ACK stays unknown through Adapter and Runtime", async () => {
+  const fixture = harness({ stopAckCommandId: "another-command" });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "stop-ack-mismatch-grant",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run", "execution.interrupt"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({
+      ...identity,
+      text: "keep running while stop acknowledgement is mismatched",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    await waitUntil(() => fixture.commands.some((entry) => entry.type === "sendText"));
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "stop-ack-mismatch-start",
+        seq: 1,
+        sessionId: "native-session",
+        turnId: "stop-ack-mismatch-turn",
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+      },
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "started");
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    const stop = await runtime.requestStop({ ...identity, executionId });
+    assert.equal(stop.status, "unknown");
+    assert.equal(stop.deliveryStatus, "unknown");
+    assert.equal(stop.deliveryEvidence, null);
+    assert.match(stop.reason ?? "", /command ID did not match/u);
+    const stopCommands = fixture.commands.filter((entry) => entry.type === "stop");
+    assert.equal(stopCommands.length, 1);
+    assert.deepEqual(stopCommands[0]?.payload, {
+      expectedForegroundExecutionId: "native-work",
+    });
+    assert.equal(runtime.getHistory(task.id)?.stopRequests[0]?.deliveryStatus, "unknown");
+    await assert.rejects(
+      runtime.requestStop({ ...identity, executionId }),
+      /already has unresolved StopRequest/u,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 1);
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+  }
+});
+
+test("Stop rechecks revoked Host authorization after the service waits and before native dispatch", async () => {
+  let enterStopCommand!: () => void;
+  let releaseStopCommand!: () => void;
+  const stopCommandEntered = new Promise<void>((resolve) => {
+    enterStopCommand = resolve;
+  });
+  const stopCommandGate = new Promise<void>((resolve) => {
+    releaseStopCommand = resolve;
+  });
+  const fixture = harness({
+    beforeStopCommand: async () => {
+      enterStopCommand();
+      await stopCommandGate;
+    },
+  });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  const grant = {
+    id: "stop-service-wait-revocation-grant",
+    environmentId: environment.id,
+    issuer: "host" as const,
+    expiresAt: null,
+    scopes: ["session.create", "execution.run", "execution.interrupt"],
+  };
+  try {
+    const task = await runtime.createTask({ engineId: "zcode", environment, authorization: grant });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: grant.id,
+    };
+    await runtime.submitInput({
+      ...identity,
+      text: "wait in command service before native stop",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    await waitUntil(() => fixture.commands.some((entry) => entry.type === "sendText"));
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "stop-service-wait-start",
+        seq: 1,
+        sessionId: "native-session",
+        turnId: "stop-service-wait-turn",
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+      },
+    });
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "started");
+    const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+    const stopPromise = runtime.requestStop({ ...identity, executionId });
+    await stopCommandEntered;
+    runtime.revokeHostAuthorization(grant.id, "revoked while native command service was waiting");
+    releaseStopCommand();
+    const stop = await stopPromise;
+    assert.equal(stop.status, "authorization-required");
+    assert.equal(stop.deliveryStatus, "not-delivered");
+    assert.match(stop.reason ?? "", /revoked while native command service was waiting/u);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 0);
+    assert.equal(runtime.getHistory(task.id)?.executions[0]?.status, "started");
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+  }
+});
+
+test("unknown observed run retains only its exact native stop lease until terminal reconciliation", async () => {
+  const dataBaseDir = await mkdtemp(join(tmpdir(), "anyagent-zcode-stop-lease-"));
+  const previousEnvironment = {
+    ANYAGENT_M0: process.env.ANYAGENT_M0,
+    ZCODE_RUNTIME_ENV: process.env.ZCODE_RUNTIME_ENV,
+    ZCODE_DATA_BASE_DIR: process.env.ZCODE_DATA_BASE_DIR,
+  };
+  const restoreEnvironment = () => {
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    setDataBaseDir(null);
+  };
+  process.env.ANYAGENT_M0 = "1";
+  process.env.ZCODE_RUNTIME_ENV = "development";
+  process.env.ZCODE_DATA_BASE_DIR = dataBaseDir;
+  setDataBaseDir(dataBaseDir);
+  const failpointPath = getZCodeAdapterObservationFailpointPath();
+  assert.ok(failpointPath);
+  await mkdir(dirname(failpointPath), { recursive: true });
+  await writeFile(
+    failpointPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        enabled: true,
+        workspaceKey: "/tmp/workspace",
+        sessionId: "native-session",
+        inputId: "native-input",
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+
+  const fixture = harness({
+    delayedAck: true,
+    createSessionId: (index) => (index === 1 ? "native-session" : "native-session-b"),
+  });
+  const runtime = createTaskRuntime({
+    databasePath: join(dataBaseDir, "runtime.sqlite"),
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "stop-lease-grant-a",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run", "execution.interrupt"],
+      },
+    });
+    const unrelatedTask = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "stop-lease-grant-b",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run", "execution.interrupt"],
+      },
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const unrelatedIdentity = {
+      taskId: unrelatedTask.id,
+      participantId: unrelatedTask.participant.id,
+      sessionId: unrelatedTask.session.id,
+      authorizationId: unrelatedTask.authorizationId,
+    };
+    const inputPromise = runtime.submitInput({
+      ...identity,
+      text: "write once, then continue",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    await waitUntil(() => fixture.commands.some((entry) => entry.type === "sendText"));
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "stop-lease-start",
+        seq: 1,
+        sessionId: "native-session",
+        turnId: "stop-lease-turn",
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+      },
+    });
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "stop-lease-write-result",
+        seq: 2,
+        sessionId: "native-session",
+        turnId: "stop-lease-turn",
+        timestamp: 2,
+        type: "tool.updated",
+        payload: {
+          kind: "result",
+          toolCallId: "stop-lease-write",
+          toolName: "Write",
+          result: { success: true },
+        },
+      },
+    });
+    assert.equal(
+      JSON.parse(await readFile(failpointPath, "utf8")).consumedAt,
+      undefined,
+      "the failpoint cannot interrupt before the send command ACK",
+    );
+    fixture.releaseSendText();
+    await inputPromise;
+    await waitUntil(() => runtime.getHistory(task.id)?.executions[0]?.status === "unknown");
+    const unknownExecution = runtime.getHistory(task.id)!.executions[0]!;
+
+    await assert.rejects(
+      runtime.requestStop({ ...unrelatedIdentity, executionId: unknownExecution.id }),
+      /belongs to a different Task/i,
+    );
+    assert.equal(
+      fixture.commands.some((entry) => entry.type === "stop"),
+      false,
+    );
+
+    const stop = await runtime.requestStop({ ...identity, executionId: unknownExecution.id });
+    assert.equal(stop.status, "requested");
+    assert.equal(stop.deliveryStatus, "delivered");
+    assert.equal(stop.stopEvidence, null, "a stop ACK is not native stopped evidence");
+    const stopCommands = fixture.commands.filter((entry) => entry.type === "stop");
+    assert.equal(stopCommands.length, 1);
+    assert.deepEqual(stopCommands[0]?.payload, {
+      expectedForegroundExecutionId: "native-work",
+    });
+    const mismatchedStop = await fixture.adapter.interrupt({
+      session: "native-session" as never,
+      executionId: "different-execution" as never,
+    });
+    assert.equal(mismatchedStop.status, "unsupported");
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 1);
+    await assert.rejects(
+      runtime.requestStop({ ...identity, executionId: unknownExecution.id }),
+      /already has unresolved StopRequest/i,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 1);
+
+    const coldAdapter = fixture.createFreshAdapter();
+    const coldStop = await coldAdapter.interrupt({
+      session: "native-session" as never,
+      executionId: fixture.commands.find((entry) => entry.type === "sendText")!.commandId as never,
+    });
+    assert.equal(coldStop.status, "temporarily-unavailable");
+    assert.match(coldStop.reason ?? "", /未发送中断请求/u);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 1);
+    coldAdapter.dispose();
+
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "stop-lease-late-terminal",
+        seq: 3,
+        sessionId: "native-session",
+        turnId: "stop-lease-turn",
+        timestamp: 3,
+        type: "turn.completed",
+        payload: { inputId: "native-input", resultType: "cancelled" },
+      },
+    });
+    assert.equal(runtime.getHistory(task.id)?.executions[0]?.status, "unknown");
+    assert.equal(
+      (await runtime.reconcileExecution({ ...identity, executionId: unknownExecution.id })).status,
+      "unknown",
+    );
+    assert.equal(runtime.getHistory(task.id)?.inputs[0]?.status, "unknown");
+
+    const nativeCommandId = fixture.commands.find((entry) => entry.type === "sendText")!.commandId;
+    fixture.rows.push({
+      rowId: 1,
+      kind: "turnHeader",
+      turnId: "hydrated-stop-lease-turn",
+      sourceCommandId: nativeCommandId,
+      state: "completedInterrupted",
+      nativeTerminalEvidence: {
+        eventId: "native-stop-lease-terminal",
+        eventType: "turn_complete",
+        sourceCommandId: nativeCommandId,
+        turnId: "stop-lease-turn",
+        resultType: "cancelled",
+      },
+    });
+    const reconciled = await runtime.reconcileExecution({
+      ...identity,
+      executionId: unknownExecution.id,
+    });
+    assert.equal(reconciled.status, "stopped");
+    assert.equal(runtime.getHistory(task.id)?.stopRequests[0]?.status, "confirmed");
+    assert.equal(
+      runtime.getHistory(task.id)?.stopRequests[0]?.stopEvidence?.evidenceId,
+      `${nativeCommandId}:hydrated-stop-lease-turn:0`,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 1);
+
+    await writeFile(
+      failpointPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          enabled: true,
+          workspaceKey: "/tmp/workspace",
+          sessionId: "native-session-b",
+          inputId: "native-input-2",
+        },
+        null,
+        2,
+      )}\n`,
+      { mode: 0o600 },
+    );
+    const noTokenInput = runtime.submitInput({
+      ...unrelatedIdentity,
+      text: "write without a verifiable foreground token",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    await waitUntil(
+      () => fixture.commands.filter((entry) => entry.type === "sendText").length === 2,
+    );
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "stop-lease-no-token-start",
+        seq: 1,
+        sessionId: "native-session-b",
+        turnId: "stop-lease-no-token-turn",
+        timestamp: 4,
+        type: "turn.started",
+        payload: { inputId: "native-input-2" },
+      },
+    });
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "stop-lease-no-token-write-result",
+        seq: 2,
+        sessionId: "native-session-b",
+        turnId: "stop-lease-no-token-turn",
+        timestamp: 5,
+        type: "tool.updated",
+        payload: {
+          kind: "result",
+          toolCallId: "stop-lease-no-token-write",
+          toolName: "Write",
+          result: { success: true },
+        },
+      },
+    });
+    assert.equal(
+      JSON.parse(await readFile(failpointPath, "utf8")).consumedAt,
+      undefined,
+      "an unacknowledged input cannot create an actionable Stop target",
+    );
+    assert.equal(runtime.getHistory(unrelatedTask.id)?.executions.length, 0);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 1);
+    fixture.releaseSendText();
+    await noTokenInput;
+    await waitUntil(
+      () => runtime.getHistory(unrelatedTask.id)?.executions[0]?.status === "unknown",
+    );
+    const noTokenExecution = runtime.getHistory(unrelatedTask.id)!.executions[0]!;
+    const unavailableStop = await runtime.requestStop({
+      ...unrelatedIdentity,
+      executionId: noTokenExecution.id,
+    });
+    assert.equal(unavailableStop.status, "temporarily-unavailable");
+    assert.equal(unavailableStop.deliveryStatus, "not-delivered");
+    assert.match(unavailableStop.reason ?? "", /未发送中断请求/u);
+    assert.equal(fixture.commands.filter((entry) => entry.type === "stop").length, 1);
+
+    const nextInputPromise = runtime.submitInput({
+      ...identity,
+      text: "continue only after native terminal reconciliation",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    await waitUntil(
+      () => fixture.commands.filter((entry) => entry.type === "sendText").length === 3,
+    );
+    fixture.releaseSendText();
+    await nextInputPromise;
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+    restoreEnvironment();
+    await rm(dataBaseDir, { recursive: true, force: true });
+  }
 });
 
 test("late native event stays with its completed run until CLI loss", async () => {

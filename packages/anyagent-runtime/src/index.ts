@@ -3136,6 +3136,38 @@ export class TaskRuntime {
         throw new RuntimeEligibilityError(
           `Execution ${execution.id} is already ${currentExecution.data.status}.`,
         );
+      const nativeExecutionId = currentExecution.data.nativeExecutionId as EngineExecutionRef;
+      const checkStopDispatch = this.#dispatchGuard({
+        taskId: input.taskId,
+        participantId: input.participantId,
+        sessionId: input.sessionId,
+        authorizationId: input.authorizationId,
+        capability: "execution.interrupt",
+        engine,
+        nativeSessionId: nativeSession,
+        allowNonActiveTask: true,
+        allowUnknownSession: true,
+      });
+      const beforeStopDispatch = () => {
+        checkStopDispatch();
+        const latestExecution = this.#require<ExecutionData>("execution", execution.id);
+        this.#assertRelated(
+          latestExecution.data.taskId,
+          latestExecution.data.participantId,
+          latestExecution.data.sessionId,
+          input,
+        );
+        if (latestExecution.data.nativeExecutionId !== nativeExecutionId)
+          throw new RuntimeEligibilityError(
+            "The native Execution identity changed before Stop dispatch.",
+            "ownership",
+          );
+        if (TERMINAL_EXECUTION_STATUSES.has(latestExecution.data.status))
+          throw new RuntimeEligibilityError(
+            `Execution ${execution.id} is already ${latestExecution.data.status}.`,
+            "terminal",
+          );
+      };
       let request: RuntimeStopRequest = {
         id,
         taskId: task.id,
@@ -3163,9 +3195,11 @@ export class TaskRuntime {
       );
       this.#publish(task.id, "stop-request", id);
       try {
+        beforeStopDispatch();
         const receipt = await engine.interrupt({
           session: nativeSession,
-          executionId: currentExecution.data.nativeExecutionId as EngineExecutionRef,
+          executionId: nativeExecutionId,
+          beforeDispatch: beforeStopDispatch,
         });
         const current = this.#require<RuntimeStopRequest>("stop-request", id);
         const latestExecution = this.#require<ExecutionData>("execution", execution.id);
@@ -3196,10 +3230,10 @@ export class TaskRuntime {
         const current = this.#require<RuntimeStopRequest>("stop-request", id);
         const latestExecution = this.#require<ExecutionData>("execution", execution.id);
         const terminal = TERMINAL_EXECUTION_STATUSES.has(latestExecution.data.status);
-        const deliveryStatus =
-          error instanceof EngineContractError && error.failure.sideEffects === "none"
-            ? "not-delivered"
-            : "unknown";
+        const notDispatched =
+          error instanceof RuntimeEligibilityError ||
+          (error instanceof EngineContractError && error.failure.sideEffects === "none");
+        const deliveryStatus = notDispatched ? "not-delivered" : "unknown";
         request = {
           ...current.data,
           status:
@@ -3207,9 +3241,15 @@ export class TaskRuntime {
               ? "confirmed"
               : terminal
                 ? "unknown"
-                : error instanceof EngineContractError
-                  ? mapStopStatus(error.kind)
-                  : "unknown",
+                : error instanceof RuntimeEligibilityError
+                  ? error.kind === "authorization-required"
+                    ? "authorization-required"
+                    : error.kind === "unsupported"
+                      ? "unsupported"
+                      : "temporarily-unavailable"
+                  : error instanceof EngineContractError
+                    ? mapStopStatus(error.kind)
+                    : "unknown",
           deliveryStatus: mergeStopDelivery(current.data.deliveryStatus, deliveryStatus),
           reason:
             current.data.status === "confirmed"
@@ -5313,6 +5353,8 @@ export class TaskRuntime {
     readonly capability: EngineCapability & RuntimeAuthorizationScope;
     readonly engine: EngineAdapter;
     readonly nativeSessionId: EngineSessionRef;
+    readonly allowNonActiveTask?: boolean;
+    readonly allowUnknownSession?: boolean;
   }): () => void {
     return () => {
       this.#assertOpen();
@@ -5322,6 +5364,8 @@ export class TaskRuntime {
         input.sessionId,
         input.authorizationId,
         input.capability,
+        input.allowNonActiveTask,
+        input.allowUnknownSession,
       );
       if (
         session.data.nativeSessionId !== input.nativeSessionId ||
