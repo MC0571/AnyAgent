@@ -1,0 +1,55 @@
+{
+  "testedProductCommit": "92b66f2ff0246ab361d8febedfb2bff4ca0a173b",
+  "snapshotAtUnixMs": 1790340383382,
+  "scenario": "After exact Adapter observation loss, real CLI generated additional Bash and Edit operations; Edit remains running while product has only unknown reconciliation entry",
+  "product": {
+    "taskId": "task_9e52df5d-2adb-4465-add2-add4179dc677",
+    "participantId": "participant_c583eb25-71b4-468d-8ef0-a1c364730bfb",
+    "sessionId": "session_e9cef85e-ebb0-48b8-b85f-68f657280206",
+    "nativeSessionId": "sess_4db0c5c1-11fd-43ce-9736-ecc6a2510628",
+    "inputId": "input_cf694e58-b54c-48fc-b64c-e7c16cd2ad70",
+    "executionId": "execution_56a1a9d8-d650-4839-b2e3-39ab3061c332",
+    "inputStatus": "unknown",
+    "executionStatus": "unknown",
+    "reconciledAt": 1790339607419,
+    "reconciliationReason": "The native turn row is running, but rowsRange does not prove that the execution is still live in this process."
+  },
+  "native": {
+    "originalInputCount": 1,
+    "entriesForInput": [
+      {
+        "id": "native-turn-started:turn_e3e8b356-ae4e-49b4-a521-2cee16f1a6e8",
+        "timeCreated": 1790339559341,
+        "eventType": null,
+        "resultType": null
+      }
+    ],
+    "toolParts": [
+      {
+        "id": "part_mugxya5r_c3d632fe-1d75-4de5-9a04-bce93d5933e4",
+        "timeUpdated": 1790339572077,
+        "name": "Write",
+        "status": "completed"
+      },
+      {
+        "id": "part_mugxylt9_c4216e5e-3644-46f6-8178-cdef28d1ba7d",
+        "timeUpdated": 1790339580975,
+        "name": "Bash",
+        "status": "completed"
+      },
+      {
+        "id": "part_mugxyplb_867f5244-1e2d-4326-80bf-718d789d8473",
+        "timeUpdated": 1790339585813,
+        "name": "Edit",
+        "status": "running"
+      }
+    ]
+  },
+  "file": {
+    "path": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project/m2-running-observation.txt",
+    "sizeBytes": 23,
+    "sha256": "f04d90169c577180c030ce7cdb9de93927872f1e6331b5640cd1744525f862a1",
+    "contentUtf8": "RUNNING_OBSERVATION_925"
+  },
+  "interpretation": "This snapshot is not a successful reconnect or native terminal outcome. It shows the product preserves unknown and does not resend the original Input, but the native turn has a later running Edit with no product approval surface after this run listener was detached. The model chose further tools contrary to the requested flow; final behavior remains to be investigated."
+}

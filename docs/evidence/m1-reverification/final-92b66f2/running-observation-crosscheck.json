@@ -1,0 +1,118 @@
+{
+  "testedProductCommit": "92b66f2ff0246ab361d8febedfb2bff4ca0a173b",
+  "baselineMain": "40ccce8fa723361406898b07d2068d225742e9dc",
+  "scenario": "Exact per-Execution Adapter event observation loss after one real Write result; native CLI continues to durable success; explicit UI reconciliation of same Execution",
+  "environment": {
+    "system": "macOS arm64",
+    "desktop": "Electron 41.0.3",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "cli": "zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521",
+    "adapter": "m1.2",
+    "provider": "OpenCode Go (Anthropic)",
+    "nativeProviderId": "opencode-go-messages",
+    "model": "qwen3.8-flash",
+    "mode": "build",
+    "reasoningLevel": "xhigh",
+    "isolatedProfile": "/tmp/anyagent-opencode-go.aBEA0z",
+    "isolatedWorkspace": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project"
+  },
+  "product": {
+    "taskId": "task_e858f272-39e9-475b-beac-d6acf6580a8e",
+    "participantId": "participant_895f97da-0b38-4749-a0a0-c560fea8bf22",
+    "sessionId": "session_0b3a524a-f49d-4288-a909-623bba52e5f8",
+    "nativeSessionId": "sess_94292a29-0a52-4e2b-9c71-8b16d182904b",
+    "inputId": "input_cc13fa15-d23d-41fe-a7f9-fbcc6f2afd9b",
+    "executionId": "execution_658324ec-5242-49d4-b069-2d87e4d957fb",
+    "submittedConfig": {
+      "mode": "build",
+      "planEnabled": false,
+      "modelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      }
+    },
+    "finalInputStatus": "completed",
+    "finalExecutionStatus": "completed",
+    "firstReconcile": {
+      "observedAt": 1790340001391,
+      "result": "unknown",
+      "reason": "The native turn row is running, but rowsRange does not prove that the execution is still live in this process."
+    },
+    "finalReconcile": {
+      "observedAt": 1790340163326,
+      "result": "completed",
+      "warning": "Native terminal outcome is confirmed, but events missed before reconciliation, including tool and file-change effects, were not reconstructed. Inspect the native Session and workspace before retrying or treating side effects as audited."
+    },
+    "eventTypeCounts": {
+      "approval.response": 1,
+      "execution.unknown": 1,
+      "approval.requested": 1,
+      "tool.completed": 1,
+      "execution.started": 1,
+      "tool.started": 1,
+      "input.accepted": 1
+    },
+    "resultEndMarkerObservedInUI": "CLEAN_OBSERVATION_DONE_925",
+    "followUpInputId": "input_4455b7ec-dab5-4bd3-843d-ffb442b1d86a",
+    "followUpExecutionId": "execution_48b59522-348e-46cf-912b-b878f104cdf6",
+    "followUpResultObservedInUI": "CLEAN_AFTER_OK_925"
+  },
+  "native": {
+    "failpointConsumedAt": "2026-09-25T12:39:47.325Z",
+    "sessionInputs": [
+      {
+        "id": "queue_input_8f85b95a-c9df-4490-aeda-ea30b308b24b",
+        "kind": "sendText",
+        "status": "promoted"
+      },
+      {
+        "id": "queue_input_cc13fa15-d23d-41fe-a7f9-fbcc6f2afd9b",
+        "kind": "sendText",
+        "status": "promoted"
+      },
+      {
+        "id": "queue_input_4455b7ec-dab5-4bd3-843d-ffb442b1d86a",
+        "kind": "sendText",
+        "status": "promoted"
+      }
+    ],
+    "entriesForOriginalInput": [
+      {
+        "id": "native-turn-started:turn_5354d500-8fe5-4770-b59d-df5383f280c3",
+        "timeCreated": 1790339963322,
+        "inputId": "input_cc13fa15-d23d-41fe-a7f9-fbcc6f2afd9b",
+        "turnId": "turn_5354d500-8fe5-4770-b59d-df5383f280c3",
+        "eventId": null,
+        "eventType": null,
+        "resultType": null
+      },
+      {
+        "id": "native-turn-terminal:8dd72a0e-c861-4a07-a0ef-d7a01d49dd4a",
+        "timeCreated": 1790340108650,
+        "inputId": "input_cc13fa15-d23d-41fe-a7f9-fbcc6f2afd9b",
+        "turnId": "turn_5354d500-8fe5-4770-b59d-df5383f280c3",
+        "eventId": "8dd72a0e-c861-4a07-a0ef-d7a01d49dd4a",
+        "eventType": "turn_complete",
+        "resultType": "success"
+      }
+    ],
+    "toolPartsInNativeSession": [
+      {
+        "id": "part_mugy70tb_c043afec-6edb-4200-b1a5-3d217be2f0a2",
+        "name": "Write",
+        "status": "completed"
+      }
+    ]
+  },
+  "file": {
+    "path": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project/m2-observation-clean.txt",
+    "sizeBytes": 21,
+    "sha256": "cdb5f1485150797bc88474a453315d122683c5fd734bb7f82662f556bbac457e",
+    "contentUtf8": "CLEAN_OBSERVATION_925"
+  },
+  "evidenceBoundary": "Native CLI transport stayed connected. Only this Adapter run event listener stopped; this is not a raw stdio disconnect. UI observations were made through CUA; no deliverable screenshot was saved."
+}
