@@ -1625,6 +1625,23 @@ export function createZCodeAdapter(options: {
         "result-unknown",
       );
     },
+    async verifyRetrySafety({ session, executionId, beforeDispatch }) {
+      if (!sessions.has(session))
+        throw operationError(
+          "execution.revise",
+          "The source native Session is not attached.",
+          "unsupported",
+          "none",
+        );
+      beforeDispatch?.();
+      const source = await resolveRevisionTarget(session, executionId, "retry");
+      beforeDispatch?.();
+      return {
+        source: "adapter",
+        evidenceId: `${executionId}:${source.baseLogEpoch}:${source.baseRevision}:retry-safe`,
+        detail: "Native source turn has no tool call or file change in a stable row snapshot.",
+      };
+    },
     async run({
       session,
       input,

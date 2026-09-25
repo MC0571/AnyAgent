@@ -2107,15 +2107,16 @@ export class TaskRuntime {
         "Retry cannot safely replay an Execution whose native tool or file-change history was not reconstructed.",
         "unsupported",
       );
+    const sourceEvents = this.#store
+      .listInSession<RuntimeEvent>("event", session.id)
+      .filter((record) => record.data.executionId === sourceExecution.id);
     if (
       input.kind === "retry" &&
-      this.#store
-        .listInSession<RuntimeEvent>("event", session.id)
-        .some(
-          (record) =>
-            record.data.executionId === sourceExecution.id &&
-            ["tool.started", "tool.completed", "tool.failed"].includes(record.data.type),
-        )
+      sourceEvents.some((record) =>
+        ["tool.started", "tool.completed", "tool.failed", "file.changed"].includes(
+          record.data.type,
+        ),
+      )
     )
       throw new RuntimeEligibilityError(
         "Retry cannot safely replay an Execution that may have run tools.",
@@ -2157,6 +2158,62 @@ export class TaskRuntime {
     const newAttachments = normalizeAttachmentReferences(input.attachments);
     if (retained.length + (newAttachments?.length ?? 0) > 8)
       throw new RuntimeEligibilityError("An input cannot contain more than 8 attachments.");
+    let retrySafetyEvidence: EngineEvidence | undefined;
+    if (input.kind === "retry" && sourceExecution.data.status === "failed") {
+      const failures = sourceEvents.filter(
+        (record) => record.data.type === "execution.failed" && record.data.duplicateOf === null,
+      );
+      const sideEffects = failures.map((record) => {
+        const failure = record.data.payload.failure;
+        return failure && typeof failure === "object" && "sideEffects" in failure
+          ? failure.sideEffects
+          : undefined;
+      });
+      if (sideEffects.includes("known"))
+        throw new RuntimeEligibilityError(
+          "Retry cannot replay a failed Execution with known side effects.",
+          "unsupported",
+        );
+      if (failures.length === 0 || sideEffects.some((value) => value !== "none")) {
+        const engine = this.#engineFor(task.data);
+        if (!engine.verifyRetrySafety)
+          throw new RuntimeEligibilityError(
+            "Retry requires native safety proof for possible side effects.",
+            "unsupported",
+          );
+        const nativeSessionId = session.data.nativeSessionId;
+        if (!nativeSessionId || this.#liveSessions.get(session.id) !== nativeSessionId)
+          throw new RuntimeEligibilityError(
+            "The source native Session is not attached.",
+            "ownership",
+          );
+        const beforeRead = this.#dispatchGuard({
+          taskId: input.taskId,
+          participantId: input.participantId,
+          sessionId: input.sessionId,
+          authorizationId: input.authorizationId,
+          capability: "execution.revise",
+          engine,
+          nativeSessionId: nativeSessionId as EngineSessionRef,
+        });
+        beforeRead();
+        retrySafetyEvidence = await engine.verifyRetrySafety({
+          session: nativeSessionId as EngineSessionRef,
+          executionId: sourceExecution.data.nativeExecutionId as EngineExecutionRef,
+          beforeDispatch: beforeRead,
+        });
+        beforeRead();
+        if (
+          !retrySafetyEvidence ||
+          retrySafetyEvidence.source === "host" ||
+          !retrySafetyEvidence.evidenceId?.trim()
+        )
+          throw new RuntimeEligibilityError(
+            "Retry safety proof is absent or invalid.",
+            "result-unknown",
+          );
+      }
+    }
     return this.#submitInput(
       {
         taskId: input.taskId,
@@ -2178,6 +2235,7 @@ export class TaskRuntime {
           inputId: sourceInput.id,
           executionId: sourceExecution.id,
         },
+        ...(retrySafetyEvidence ? { retrySafetyEvidence } : {}),
         historicalAttachments: retained,
         sourceAttachments,
         retainedAttachmentIndices: retained.map((attachment) =>
@@ -2194,6 +2252,7 @@ export class TaskRuntime {
       readonly sourceExecutionId: EngineExecutionRef;
       readonly commandId: string;
       readonly revisionOf: NonNullable<RuntimeInput["revisionOf"]>;
+      readonly retrySafetyEvidence?: EngineEvidence;
       readonly historicalAttachments?: readonly RuntimeAttachmentReference[];
       readonly sourceAttachments?: readonly RuntimeAttachmentReference[];
       readonly retainedAttachmentIndices?: readonly number[];
@@ -2402,6 +2461,9 @@ export class TaskRuntime {
           ...(revision
             ? { revisionOf: revision.revisionOf, nativeRevisionCommandId: revision.commandId }
             : {}),
+          ...(revision?.retrySafetyEvidence
+            ? { retrySafetyEvidence: revision.retrySafetyEvidence }
+            : {}),
           ...(submissionConfig ? { submissionConfig } : {}),
           ...(recordedAttachments ? { attachments: recordedAttachments } : {}),
           status: queued ? "queued" : "received",
@@ -2524,7 +2586,9 @@ export class TaskRuntime {
               .some(
                 (record) =>
                   record.data.executionId === source.id &&
-                  ["tool.started", "tool.completed", "tool.failed"].includes(record.data.type),
+                  ["tool.started", "tool.completed", "tool.failed", "file.changed"].includes(
+                    record.data.type,
+                  ),
               )
           )
             throw new RuntimeEligibilityError(

@@ -2135,6 +2135,13 @@ test("failed ZCode retry records a new attempt while a completed tool effect can
       executionId: failedExecution.id,
     });
     assert.equal(attempt.text, failedInput.text);
+    assert.equal(attempt.retrySafetyEvidence?.source, "adapter");
+    assert.match(attempt.retrySafetyEvidence?.evidenceId ?? "", /retry-safe$/);
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((record) => record.id === attempt.id)
+        ?.retrySafetyEvidence?.evidenceId,
+      attempt.retrySafetyEvidence?.evidenceId,
+    );
     const retryCommands = fixture.commands.filter((command) => command.type === "retryTurn");
     assert.equal(retryCommands.length, 1);
     assert.deepEqual(retryCommands[0]?.payload, {
