@@ -1145,7 +1145,7 @@ export function createZCodeAdapter(options: {
     },
     getCapabilities: capabilities,
     refreshCapabilities,
-    async createSession(): Promise<EngineSessionRef> {
+    async createSession({ beforeDispatch } = {}): Promise<EngineSessionRef> {
       const state = await refreshCapabilities();
       if (state.capabilities["session.create"].availability !== "available") {
         throw operationError(
@@ -1158,6 +1158,7 @@ export function createZCodeAdapter(options: {
       const envelope = command("createSession", null, {
         workspaceId: nativeWorkspaceId,
       });
+      beforeDispatch?.();
       let ack;
       try {
         ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });

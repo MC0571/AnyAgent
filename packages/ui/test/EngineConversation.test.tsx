@@ -47,6 +47,7 @@ const task = {
   updatedAt: 1_000,
   closedAt: null,
   closeReason: null,
+  currentAuthorization: { status: "current", reason: null, observedAt: 1_000 },
   engine: {
     engineId,
     adapterVersion: "fake-adapter-1",
@@ -2248,6 +2249,21 @@ test("EngineConversation sends through the product composer and renders ordered 
       await act(async () => assert.equal(queueControls!.onSubmitted(taskId, message), true));
       await act(async () => repeatedEditor.__zcodeLexicalInputE2E.setText(""));
     }
+    activeTask = {
+      ...activeTask,
+      currentAuthorization: {
+        status: "revoked",
+        reason:
+          "Authorization was revoked by the Host. Reason: “Host policy changed”. This Task is read-only.",
+        observedAt: ++clock,
+      },
+    };
+    await act(async () => root.render(appFor(taskId, ++refreshVersion)));
+    await waitFor(() => {
+      assert.equal(composerSubmit()?.disabled, true);
+      assert.ok(container.textContent?.includes("Host policy changed"));
+      assert.ok(container.textContent?.includes("read-only"));
+    }, "a revoked current Host grant should keep history available and block new work with its reason");
   } finally {
     await act(async () => root.unmount());
     container.remove();

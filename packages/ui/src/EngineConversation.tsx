@@ -393,6 +393,11 @@ function currentTaskBlock(
   refreshedEngines: Awaited<ReturnType<IAnyAgentService["listEngines"]>> | null,
   refreshFailed: boolean,
 ): string | null {
+  if (task.currentAuthorization?.status !== "current")
+    return (
+      task.currentAuthorization?.reason ??
+      "Current Host authorization status is unknown; this Task is read-only."
+    );
   if (refreshFailed || refreshedEngines === null)
     return "暂时无法确认此对话是否可继续，请刷新状态。";
   const current = refreshedEngines.find(

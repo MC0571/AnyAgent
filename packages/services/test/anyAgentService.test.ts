@@ -94,6 +94,20 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
     await assert.rejects(
       host.service.submitInput({ ...input, taskId: other.id, text: "wrong session" }),
     );
+    assert.equal(host.host.getAuthorizationStatus(task.authorizationId).status, "current");
+    assert.equal(
+      host.host.revokeAuthorization(task.authorizationId, "Host service test revocation").status,
+      "revoked",
+    );
+    assert.match(
+      (await host.service.getTask(task.id))?.currentAuthorization.reason ?? "",
+      /Host service test revocation.*read-only/,
+    );
+    assert.equal((await host.service.getHistory(task.id))?.inputs.length, 2);
+    await assert.rejects(
+      host.service.submitInput({ ...input, text: "no dispatch after Host revocation" }),
+      /Host service test revocation/i,
+    );
   } finally {
     subscription.dispose();
     host.close();

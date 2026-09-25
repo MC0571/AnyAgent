@@ -16,6 +16,14 @@ import type {
   SetAssistantFeedback,
   RuntimeAssistantFeedbackResult,
 } from "./runtime-operation-types.js";
+import type {
+  RuntimeCurrentAuthorizationProjection,
+  RuntimeCurrentEngineProjection,
+} from "./runtime-current-projection-types.js";
+export type {
+  RuntimeCurrentAuthorizationProjection,
+  RuntimeCurrentEngineProjection,
+} from "./runtime-current-projection-types.js";
 
 export type {
   CompactSession,
@@ -158,19 +166,6 @@ export interface RuntimeEngineProjection {
 
 export type RuntimeSharedContext = Readonly<Record<"contextId" | "title" | "shareUrl", string>>;
 
-/** Latest in-memory observation; never persisted over a Task's historical snapshot. */
-export interface RuntimeCurrentEngineProjection {
-  readonly engineId: string;
-  readonly adapterVersion: string | null;
-  readonly engineVersion: string | null;
-  readonly configurationVersion: string | null;
-  readonly environment: string | null;
-  readonly capabilities: Readonly<Record<EngineCapability, CapabilityStatus>>;
-  readonly state: "current" | "unknown";
-  readonly observedAt: number | null;
-  readonly source: "active-probe" | "unknown";
-}
-
 export interface RuntimeParticipant {
   readonly id: string;
   readonly status: "active" | "closed";
@@ -206,6 +201,7 @@ export interface RuntimeTask {
   readonly engine: RuntimeEngineProjection;
   /** Latest Host probe for this Engine; unknown until the current Host has checked it. */
   readonly currentEngine: RuntimeCurrentEngineProjection;
+  readonly currentAuthorization: RuntimeCurrentAuthorizationProjection;
   readonly environment: RuntimeEnvironment;
   readonly credentialSource: RuntimeCredentialSource;
   readonly participant: RuntimeParticipant;
