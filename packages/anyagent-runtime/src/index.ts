@@ -82,6 +82,13 @@ interface CurrentEngineRecord {
   readonly projection: RuntimeCurrentEngineProjection;
 }
 
+interface PendingCapabilityCheck {
+  readonly key: string;
+  readonly revision: number;
+  readonly baseline: EngineCapabilitySnapshot;
+  readonly promise: Promise<EngineCapabilitySnapshot>;
+}
+
 export interface CreateTaskRuntimeOptions {
   readonly databasePath: string;
   readonly engines: EngineMap;
@@ -391,6 +398,7 @@ export class TaskRuntime {
   >();
   readonly #capabilityRevisions = new Map<string, number>();
   readonly #currentEngines = new Map<string, CurrentEngineRecord>();
+  readonly #pendingCapabilityChecks = new WeakMap<EngineAdapter, PendingCapabilityCheck>();
   #pendingChanges: { kind: RuntimeChange["kind"]; taskId: string; entityId: string }[] | null =
     null;
   #closed = false;
@@ -4719,10 +4727,40 @@ export class TaskRuntime {
 
   async #capabilities(engine: EngineAdapter): Promise<EngineCapabilitySnapshot> {
     const baseline = this.#clone(engine.getCapabilities());
-    const engineId = baseline.engineId;
     const key = engineStateKey(baseline);
+    const pending = this.#pendingCapabilityChecks.get(engine);
+    if (
+      pending?.key === key &&
+      this.#capabilityRevisions.get(key) === pending.revision &&
+      sameCapabilitySnapshot(pending.baseline, baseline)
+    ) {
+      return pending.promise;
+    }
     const revision = (this.#capabilityRevisions.get(key) ?? 0) + 1;
     this.#capabilityRevisions.set(key, revision);
+    const promise = this.#probeCapabilities(engine, baseline, key, revision);
+    const check: PendingCapabilityCheck = { key, revision, baseline, promise };
+    this.#pendingCapabilityChecks.set(engine, check);
+    void promise.then(
+      () => {
+        if (this.#pendingCapabilityChecks.get(engine) === check)
+          this.#pendingCapabilityChecks.delete(engine);
+      },
+      () => {
+        if (this.#pendingCapabilityChecks.get(engine) === check)
+          this.#pendingCapabilityChecks.delete(engine);
+      },
+    );
+    return promise;
+  }
+
+  async #probeCapabilities(
+    engine: EngineAdapter,
+    baseline: EngineCapabilitySnapshot,
+    key: string,
+    revision: number,
+  ): Promise<EngineCapabilitySnapshot> {
+    const engineId = baseline.engineId;
     this.#currentEngines.set(key, {
       revision,
       snapshot: null,

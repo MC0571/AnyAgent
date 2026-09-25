@@ -1936,6 +1936,131 @@ test("attachment staging rechecks Task eligibility after the capability probe", 
   }
 });
 
+test("concurrent attachment staging shares a capability check and dispatches both tickets", async () => {
+  const engine = new ManualEngine();
+  let releaseProbe!: () => void;
+  const heldProbe = new Promise<void>((resolve) => {
+    releaseProbe = resolve;
+  });
+  let probes = 0;
+  let stageCalls = 0;
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async (request) => {
+      stageCalls += 1;
+      return { locator: `host:${request.attachmentId}`, sizeBytes: 1 };
+    },
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    engine.refreshHandler = async () => {
+      probes += 1;
+      await heldProbe;
+      return engine.getCapabilities();
+    };
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const staged = Promise.allSettled(
+      ["one.txt", "two.txt"].map((fileName) =>
+        runtime.stageAttachment({
+          ...identity,
+          localPath: `/private/${fileName}`,
+          fileName,
+          mimeType: "text/plain",
+          sizeBytes: 1,
+        }),
+      ),
+    );
+    releaseProbe();
+    const results = await staged;
+    assert.deepEqual(
+      results.map((result) => result.status),
+      ["fulfilled", "fulfilled"],
+    );
+    assert.equal(probes, 1);
+    assert.equal(stageCalls, 2);
+    const attachments = results.map((result) => {
+      assert.equal(result.status, "fulfilled");
+      return result.value;
+    });
+    await runtime.submitInput({ ...identity, text: "read both", attachments });
+    assert.deepEqual(
+      engine.runs[0]?.attachments?.map((attachment) => attachment.fileName),
+      ["one.txt", "two.txt"],
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("an adapter change during shared attachment probing cannot stage stale tickets", async () => {
+  const engine = new ManualEngine();
+  let releaseProbe!: () => void;
+  const heldProbe = new Promise<void>((resolve) => {
+    releaseProbe = resolve;
+  });
+  let stageCalls = 0;
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async () => {
+      stageCalls += 1;
+      return { locator: "staged", sizeBytes: 1 };
+    },
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const oldSnapshot = engine.getCapabilities();
+    engine.refreshHandler = async () => {
+      await heldProbe;
+      return oldSnapshot;
+    };
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const staging = Promise.allSettled(
+      ["one.txt", "two.txt"].map((fileName) =>
+        runtime.stageAttachment({
+          ...identity,
+          localPath: `/private/${fileName}`,
+          fileName,
+          mimeType: "text/plain",
+          sizeBytes: 1,
+        }),
+      ),
+    );
+    engine.setCapability("execution.run", {
+      support: "supported",
+      availability: "temporarily-unavailable",
+      reason: "provider went offline",
+    });
+    engine.refreshHandler = async () => engine.getCapabilities();
+    const newer = await runtime.refreshEngines();
+    assert.equal(newer[0]?.capabilities["execution.run"].availability, "temporarily-unavailable");
+    releaseProbe();
+    const results = await staging;
+    assert.deepEqual(
+      results.map((result) => result.status),
+      ["rejected", "rejected"],
+    );
+    assert.equal(stageCalls, 0);
+    assert.equal(
+      runtime.getTask(task.id)?.currentEngine.capabilities["execution.run"].availability,
+      "temporarily-unavailable",
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
 test("fork rechecks its source Task after the final capability probe", async () => {
   const engine = new ManualEngine();
   const runtime = createTaskRuntime({
