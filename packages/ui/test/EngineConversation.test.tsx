@@ -2214,6 +2214,40 @@ test("EngineConversation sends through the product composer and renders ordered 
       "an empty review marker must block another submission until it is resolved",
     );
     assert.equal(queueControls!.onResolveReview(taskId, "discard"), true);
+    const repeatedEditor = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E: { getText: () => string; setText: (value: string) => void };
+    };
+    await act(async () => repeatedEditor.__zcodeLexicalInputE2E.setText(""));
+    for (const [inputId, message] of [
+      ["repeated-edit-first", "First repeated edit"],
+      ["repeated-edit-second", "Second repeated edit"],
+    ] as const) {
+      const ticket = {
+        id: `${inputId}-ticket`,
+        fileName: `${inputId}.txt`,
+        mimeType: "text/plain",
+        sizeBytes: 6,
+      };
+      assert.equal(
+        queueControls!.onQueueEditPrepare(taskId, inputId, {
+          text: message,
+          attachmentTickets: [ticket],
+        }),
+        true,
+      );
+      await act(async () => assert.equal(queueControls!.onQueueRecovered(taskId, inputId), true));
+      await waitFor(() => {
+        assert.equal(repeatedEditor.__zcodeLexicalInputE2E.getText(), message);
+        assert.match(
+          container.querySelector('[data-testid="engine-composer-attachments"]')?.textContent ?? "",
+          new RegExp(ticket.fileName.replace(".", "\\."), "u"),
+        );
+      });
+      await act(async () => assert.equal(queueControls!.onSubmitted(taskId, message), true));
+      await act(async () => repeatedEditor.__zcodeLexicalInputE2E.setText(""));
+    }
   } finally {
     await act(async () => root.unmount());
     container.remove();

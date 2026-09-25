@@ -321,7 +321,17 @@ export function useEngineComposerDrafts(
       if (!outcome.textMatched) return false;
       setDrafts((current) => {
         if (!current[taskId]) return current;
-        return { ...current, [taskId]: { ...current[taskId], text: "", recoveryVersion: 0 } };
+        return {
+          ...current,
+          [taskId]: {
+            ...current[taskId],
+            text: "",
+            attachmentTickets: [],
+            recoveryParts: [],
+            // Keep this monotonic across repeated queue edits in the same mounted
+            // Composer; EngineConversation has already applied this version.
+          },
+        };
       });
       return outcome.cleared;
     },

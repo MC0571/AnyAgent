@@ -519,6 +519,7 @@ export function EngineConversation({
   const changeVersionRef = useRef(0);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
   const appliedQueueRecoveryVersion = useRef(0);
+  const appliedQueueRecoveryTaskId = useRef<string | null>(null);
   const queuedSubmissionRef = useRef<{
     taskId: string;
     authorizationId: string;
@@ -749,6 +750,10 @@ export function EngineConversation({
       onQueueRecoveryReconcile?.(visibleTask.id, visibleHistory.inputs);
   }, [draftStorageIssue, onQueueRecoveryReconcile, visibleHistory, visibleTask?.id]);
   useEffect(() => {
+    if (appliedQueueRecoveryTaskId.current !== (visibleTask?.id ?? null) || !composerDraft) {
+      appliedQueueRecoveryTaskId.current = visibleTask?.id ?? null;
+      appliedQueueRecoveryVersion.current = 0;
+    }
     if (
       !visibleTask ||
       !composerDraft ||
