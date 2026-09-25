@@ -122,6 +122,7 @@ async function mount(script: readonly FakeEngineStep[]) {
     listTasks: async () => runtime.listTasks(),
     getTask: async (id: string) => runtime.getTask(id),
     getHistory: async (id: string) => runtime.getHistory(id),
+    getTaskSlashCommandCatalog: async () => ({ slashCommands: [] }),
     submitInput: async (input: Parameters<typeof runtime.submitInput>[0]) => {
       await runtime.submitInput(input);
     },

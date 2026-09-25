@@ -10,6 +10,7 @@ import type {
 import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TID_CHAT_SEND_BUTTON } from "@zcode/shared";
+import type { ZCodeSlashCommand } from "@zcode/shared";
 import { ArrowUpIcon, Hand, XIcon } from "lucide-react";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { Button } from "@/components/ui/button.js";
@@ -49,6 +50,7 @@ export function ChatPromptEditor({
   taskId,
   skillCatalogSessionId,
   taskSkillCatalogRequest,
+  slashCommandsOverride,
   initialValue,
   syncInitialValueOnMount = true,
   placeholder,
@@ -106,6 +108,7 @@ export function ChatPromptEditor({
   /** 仅供 Composer Skill catalog；可为草稿的 prewarm Session。 */
   skillCatalogSessionId?: string | null;
   taskSkillCatalogRequest?: TaskSkillReferenceCatalogRequest;
+  slashCommandsOverride?: readonly ZCodeSlashCommand[];
   initialValue?: string;
   syncInitialValueOnMount?: boolean;
   placeholder?: string;
@@ -396,6 +399,7 @@ export function ChatPromptEditor({
           taskId={taskId}
           skillCatalogSessionId={skillCatalogSessionId}
           taskSkillCatalogRequest={taskSkillCatalogRequest}
+          slashCommandsOverride={slashCommandsOverride}
           inputTestId={inputTestId}
           editorApiRef={resolvedInputApiRef}
           promptHistory={promptHistory}

@@ -63,6 +63,7 @@ export function SlashCommandPlugin({
   workspaceIdentity,
   sessionId,
   taskCatalogRequest,
+  slashCommandsOverride,
   provider,
   container,
   disabled = false,
@@ -74,7 +75,11 @@ export function SlashCommandPlugin({
   const [activeTrigger, setActiveTrigger] = useState<ActivePromptInputTrigger | null>(null);
   // 远程 workspace 的 slashCommands 写在 workspaceIdentity 桶。
   // 这里只按 workspacePath 读取会落到 path 桶，表现为 ZCode Agent 已收到 available_commands_update 但 / 面板为空。
-  const commands = useSlashCommands(workspacePath, workspaceIdentity);
+  const workspaceCommands = useSlashCommands(workspacePath, workspaceIdentity);
+  const commands = useMemo(
+    () => (slashCommandsOverride ? [...slashCommandsOverride] : workspaceCommands),
+    [slashCommandsOverride, workspaceCommands],
+  );
   const {
     agents,
     loading: subagentsLoading,

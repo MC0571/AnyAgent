@@ -263,6 +263,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     listTasks: async () => [taskRecord(taskId), taskRecord(taskBId)],
     getTask: async (id: string) => taskRecord(id),
     getHistory: async (id: string) => (id === taskBId ? historyB : history),
+    getTaskSlashCommandCatalog: async () => ({ slashCommands: [] }),
     stageAttachment: async (input: Record<string, unknown>) => {
       stagedAttachmentRequests.push(input);
       return {
@@ -3152,7 +3153,6 @@ test("an active ZCode Harness task switches models within its Session and submit
   );
   const zcodeSessionStore = useZCodeSessionStore.getState();
   const originalSlashCommands = zcodeSessionStore.getWorkspaceState(workspacePath).slashCommands;
-  zcodeSessionStore.setSlashCommands(workspacePath, zcodeSlashCommands);
   const modelView = {
     revision: 1,
     providers: [
@@ -3196,8 +3196,12 @@ test("an active ZCode Harness task switches models within its Session and submit
   const selectedTaskIds: string[] = [];
   let createTaskError: Error | null = null;
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
+  const slashCatalogLookups: Array<Record<string, unknown>> = [];
   const goalStatusLookups: Array<Record<string, unknown>> = [];
   const pluginCatalogLookups: Array<Record<string, unknown>> = [];
+  let delaySlashCatalogTaskId: string | null = null;
+  let releaseDelayedSlashCatalogRead: (() => void) | null = null;
+  let rejectNextSlashCatalogRead = false;
   let delayNextPluginCatalogRead = false;
   let releasePluginCatalogRead: (() => void) | null = null;
   let rejectNextGoalStatusRead: ((error: Error) => void) | null = null;
@@ -3366,6 +3370,25 @@ test("an active ZCode Harness task switches models within its Session and submit
         ],
       };
     },
+    getTaskSlashCommandCatalog: async (input: Record<string, unknown>) => {
+      slashCatalogLookups.push(input);
+      if (rejectNextSlashCatalogRead) {
+        rejectNextSlashCatalogRead = false;
+        throw new Error("native workspace runtime unavailable");
+      }
+      if (input.taskId === delaySlashCatalogTaskId) {
+        delaySlashCatalogTaskId = null;
+        return await new Promise((resolve) => {
+          releaseDelayedSlashCatalogRead = () =>
+            resolve({
+              slashCommands: [
+                { name: "b-task-only", description: "Task B command", source: "custom" as const },
+              ],
+            });
+        });
+      }
+      return { slashCommands: zcodeSlashCommands };
+    },
     getTaskGoalStatus: async (input: Record<string, unknown>) => {
       goalStatusLookups.push(input);
       if (delayNextGoalStatusRead) {
@@ -3466,6 +3489,7 @@ test("an active ZCode Harness task switches models within its Session and submit
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  let slashCatalogRefreshVersion = 0;
   const appFor = (selectedTaskId: string) =>
     createElement(
       TooltipProvider,
@@ -3490,6 +3514,7 @@ test("an active ZCode Harness task switches models within its Session and submit
               createElement(EngineConversation, {
                 service: service as never,
                 selectedTaskId,
+                refreshVersion: slashCatalogRefreshVersion,
                 onSelectTask: (id) => {
                   if (id) selectedTaskIds.push(id);
                 },
@@ -3619,8 +3644,91 @@ test("an active ZCode Harness task switches models within its Session and submit
       input.focus();
       input.__zcodeLexicalInputE2E!.setText("/goal");
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.ok(container.querySelector('[data-option-id="slash:goal"]'));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:goal"]')),
+      "the active M1 Task should hydrate its slash picker from the Host catalog",
+    );
+    assert.deepEqual(slashCatalogLookups[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+    });
+
+    rejectNextSlashCatalogRead = true;
+    slashCatalogRefreshVersion += 1;
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(
+      () =>
+        assert.equal(slashCatalogLookups.filter((lookup) => lookup.taskId === taskId).length, 2),
+      "refresh should retry the current Task slash catalog",
+    );
+    await waitFor(
+      () => assert.equal(container.querySelector('[data-option-id="slash:goal"]'), null),
+      "a failed qualified catalog read should leave an empty picker instead of a stale command",
+    );
+    assert.equal(
+      container.querySelector<HTMLElement>("[data-testid='engine-slash-catalog-unavailable']")
+        ?.textContent,
+      "当前 CLI 命令目录暂不可用；恢复或刷新当前 Task 后重试。",
+      "catalog read failure should be explained without calling the command unsupported",
+    );
+    delaySlashCatalogTaskId = zcodeTaskB.id;
+    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    assert.equal(
+      container.querySelector("[data-testid='engine-slash-catalog-unavailable']"),
+      null,
+      "changing Tasks should clear the previous Task's failure notice",
+    );
+    await waitFor(
+      () => assert.ok(slashCatalogLookups.some((lookup) => lookup.taskId === zcodeTaskB.id)),
+      "Task B should request its own Host slash catalog",
+    );
+    let taskBInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E?: { setText: (value: string) => void };
+    };
+    await act(async () => taskBInput.__zcodeLexicalInputE2E!.setText("/b-task-only"));
+    assert.equal(
+      container.querySelector('[data-option-id="slash:b-task-only"]'),
+      null,
+      "a Task catalog should stay empty while its qualified Host read is pending",
+    );
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(
+      () => assert.ok(slashCatalogLookups.filter((lookup) => lookup.taskId === taskId).length >= 3),
+      "returning to Task A should read its catalog again",
+    );
+    input = container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]') as
+      | (HTMLElement & {
+          __zcodeLexicalInputE2E?: {
+            setText: (value: string) => void;
+            setTextWithPluginMentions: (value: string) => void;
+            getText: () => string;
+          };
+        })
+      | null;
+    assert.ok(input?.__zcodeLexicalInputE2E);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/goal"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:goal"]')),
+      "returning to Task A should restore its Host catalog",
+    );
+    assert.equal(
+      container.querySelector("[data-testid='engine-slash-catalog-unavailable']"),
+      null,
+      "a successful catalog read should clear its failure notice",
+    );
+    assert.ok(
+      releaseDelayedSlashCatalogRead,
+      "Task B's delayed catalog read should still be pending",
+    );
+    await act(async () => releaseDelayedSlashCatalogRead!());
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:goal"]')),
+      "Task B's late result must not replace the selected Task A catalog",
+    );
     await act(async () => input.__zcodeLexicalInputE2E!.setText(""));
 
     for (const command of ["compact", "init", "skill"] as const) {
@@ -5124,6 +5232,7 @@ test("unknown native Session and Execution require explicit identity-bound recov
       };
       return activeTask;
     },
+    getTaskSlashCommandCatalog: async () => ({ slashCommands: [] }),
   };
   const services = {
     clientConfigService: { getSnapshot: async () => ({ pluginStoreOrder: null }) },

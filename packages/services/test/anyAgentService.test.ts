@@ -7,7 +7,10 @@ import { createAnyAgentService } from "../src/anyagent/createAnyAgentService.js"
 import { setDataBaseDir } from "../src/paths.js";
 import type { IConversationShareService } from "../src/conversation-share/conversationShare.js";
 import type { IPromptAttachmentTransferService } from "../src/prompt-attachment-transfer/promptAttachmentTransfer.js";
-import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
+import {
+  ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE,
+  type IZCodeAgentService,
+} from "../src/zcode-agent/zcodeAgent.js";
 import { readTrustedZCodeAgentV4Connection } from "../src/zcode-agent/zcodeAgentConnectionScope.js";
 
 async function waitForCompleted(
@@ -813,7 +816,9 @@ test("Host Skill catalog reads require the matching active Task Session", async 
   const nativeCatalogReads: Array<Record<string, unknown>> = [];
   const nativeGoalReads: Array<Record<string, unknown>> = [];
   const nativePluginReads: Array<Record<string, unknown>> = [];
+  const nativeSlashCatalogReads: Array<Record<string, unknown>> = [];
   let nativeSessionSequence = 0;
+  let slashCatalogRuntimeUnavailable = false;
   let catalogAuthority: "session" | "workspace" = "session";
   const host = createAnyAgentService({
     initialize: async ({ workspacePath }: { workspacePath: string }) => ({
@@ -860,6 +865,23 @@ test("Host Skill catalog reads require the matching active Task Session", async 
           },
         ],
         diagnostics: [],
+      };
+    },
+    readWorkspacePresentation: async (params: {
+      workspacePath: string;
+      runtimePolicy?: string;
+    }) => {
+      nativeSlashCatalogReads.push(params);
+      if (slashCatalogRuntimeUnavailable)
+        throw Object.assign(new Error("ZCode Agent runtime is not running."), {
+          code: ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE,
+        });
+      return {
+        workspace: { workspacePath: params.workspacePath },
+        mode: "build",
+        slashCommands: [
+          { name: "review-note", description: "Review note", source: "custom" as const },
+        ],
       };
     },
     readSession: async (params: Record<string, unknown>) => {
@@ -923,6 +945,29 @@ test("Host Skill catalog reads require the matching active Task Session", async 
       workspacePath: project,
       sessionId: first.session.nativeSessionId,
     });
+    await assert.rejects(
+      host.service.getTaskSlashCommandCatalog({ ...identity, sessionId: second.session.id }),
+      /ownership do not match/i,
+    );
+    assert.equal(
+      nativeSlashCatalogReads.length,
+      0,
+      "another Task's Session must not query the workspace slash command catalog",
+    );
+    assert.deepEqual(await host.service.getTaskSlashCommandCatalog(identity), {
+      slashCommands: [{ name: "review-note", description: "Review note", source: "custom" }],
+    });
+    assert.deepEqual(nativeSlashCatalogReads, [
+      { workspacePath: project, runtimePolicy: "existing-only" },
+    ]);
+    slashCatalogRuntimeUnavailable = true;
+    await assert.rejects(
+      host.service.getTaskSlashCommandCatalog(identity),
+      (error: unknown) =>
+        error instanceof Error && "kind" in error && error.kind === "temporarily-unavailable",
+      "an unavailable existing Agent runtime must not be reported as native unsupported",
+    );
+    assert.equal(nativeSlashCatalogReads.length, 2);
     await assert.rejects(
       host.service.getTaskPluginCatalog({ ...identity, sessionId: second.session.id }),
       /ownership do not match/i,

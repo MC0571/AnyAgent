@@ -13,7 +13,10 @@ import { Emitter } from "@zcode/rpc";
 import { getConversationWorkspaceDir, getDataBaseDir } from "../paths.js";
 import type { IPromptAttachmentTransferService } from "../prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IConversationShareService } from "../conversation-share/conversationShare.js";
-import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
+import {
+  ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE,
+  type IZCodeAgentService,
+} from "../zcode-agent/zcodeAgent.js";
 import { createZCodeAgentConnectionScope } from "../zcode-agent/zcodeAgentConnectionScope.js";
 import { createSharedContextImporter } from "./sharedContextImporter.js";
 import { createZCodeAdapter } from "./zcodeAdapter.js";
@@ -234,6 +237,53 @@ export function createAnyAgentService(
           description,
           scope,
           ...(pluginName ? { pluginName } : {}),
+        })),
+      };
+    },
+    async getTaskSlashCommandCatalog(input) {
+      const presentation = await runtime.readQualifiedTaskSession(input, async (target) => {
+        if (target.engineId !== "zcode")
+          throw new RuntimeEligibilityError(
+            "CLI slash command catalogs are available only for ZCode Tasks.",
+            "unsupported",
+          );
+        const workspacePath = target.environment.workDirectory;
+        if (target.environment.kind !== "workspace" || !workspacePath)
+          throw new RuntimeEligibilityError(
+            "The Task does not have a readable workspace for its CLI slash command catalog.",
+            "unsupported",
+          );
+        let current: Awaited<ReturnType<IZCodeAgentService["readWorkspacePresentation"]>>;
+        try {
+          current = await agentScope.service.readWorkspacePresentation({
+            workspacePath,
+            runtimePolicy: "existing-only",
+          });
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE
+          )
+            throw new RuntimeEligibilityError(
+              "The current ZCode Agent runtime is temporarily unavailable.",
+              "temporarily-unavailable",
+            );
+          throw error;
+        }
+        if (current.workspace.workspacePath !== workspacePath)
+          throw new RuntimeEligibilityError(
+            "The native Engine returned a slash command catalog for another workspace.",
+            "ownership",
+          );
+        return current;
+      });
+      return {
+        slashCommands: presentation.slashCommands.map((command) => ({
+          name: command.name,
+          description: command.description,
+          ...(command.inputHint === undefined ? {} : { inputHint: command.inputHint }),
+          ...(command.source === undefined ? {} : { source: command.source }),
         })),
       };
     },

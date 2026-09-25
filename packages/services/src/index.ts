@@ -6,6 +6,8 @@ export type {
   TaskSkillReference,
   TaskSkillReferenceCatalog,
   TaskSkillReferenceCatalogRequest,
+  TaskSlashCommand,
+  TaskSlashCommandCatalog,
   TaskPluginCatalog,
 } from "./anyagent/anyAgentService.js";
 export {

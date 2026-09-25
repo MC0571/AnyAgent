@@ -3734,7 +3734,7 @@ export function createZCodeAgentService(
       try {
         let presentation: ZCodeWorkspacePresentation | undefined;
         for (let attempt = 0; attempt < 2; attempt += 1) {
-          const client = await getReadOnlyClient(params);
+          const client = await getReadOnlyClient(params, params.runtimePolicy);
           try {
             await ensureAccountProviderConfigSynced({
               client,

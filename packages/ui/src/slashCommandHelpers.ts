@@ -17,6 +17,8 @@ export interface SlashCommandPluginProps {
   sessionId?: string | null;
   /** M1 product Task 的目录必须经 Host 授权读取；省略时保留 M0 native 路径。 */
   taskCatalogRequest?: TaskSkillReferenceCatalogRequest;
+  /** Task-scoped CLI catalog supplied by its Host-qualified read; undefined keeps workspace store behavior. */
+  slashCommandsOverride?: readonly ZCodeSlashCommand[];
   disabled?: boolean;
   excludedCommandNames?: readonly string[];
   /**

@@ -243,7 +243,10 @@ export interface ZCodeAgentReadSessionEventsParams extends ZCodeAgentSessionTarg
   limit?: number;
 }
 
-export type ZCodeAgentReadWorkspacePresentationParams = ZCodeAgentWorkspaceTarget;
+export interface ZCodeAgentReadWorkspacePresentationParams extends ZCodeAgentWorkspaceTarget {
+  /** Auxiliary presentation reads must not start a new workspace runtime unless explicitly requested. */
+  runtimePolicy?: ZCodeAgentRuntimePolicy;
+}
 
 export interface ZCodeAgentGrantWorkspaceHookTrustParams extends ZCodeAgentWorkspaceTarget {
   bundleDigest: string;

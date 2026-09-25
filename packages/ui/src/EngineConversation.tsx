@@ -39,6 +39,7 @@ import { ModelConfigSelect, type ModelSelectGroup } from "@/ModelConfigSelect.js
 import { ConfigSelect } from "@/chat-input-toolbar/display.js";
 import { useServices } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
+import { logger } from "@/logger.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import {
   buildRegistryModelSelectGroups,
@@ -89,6 +90,18 @@ type InheritedSource = {
 };
 type EngineComposerAttachment = EngineLocalAttachment & {
   readonly ticket?: QueueEditAttachmentTicket;
+};
+type TaskSlashCommandCatalogIdentity = {
+  taskId: string;
+  participantId: string;
+  sessionId: string;
+  nativeSessionId: string;
+  authorizationId: string;
+  environmentId: string;
+  workspacePath: string;
+};
+type TaskSlashCommandCatalogSnapshot = TaskSlashCommandCatalogIdentity & {
+  slashCommands: readonly ZCodeSlashCommand[];
 };
 export interface EngineTaskComposerDraft {
   readonly text: string;
@@ -404,6 +417,28 @@ function currentTaskBlock(
   return canActOnTask({ ...task, currentEngine: current }, capability);
 }
 
+function matchesTaskSlashCommandCatalogIdentity(
+  identity: TaskSlashCommandCatalogIdentity | null,
+  task: EngineTask | null,
+  workspacePath: string,
+): identity is TaskSlashCommandCatalogIdentity {
+  return Boolean(
+    identity &&
+    task &&
+    task.engine.engineId === "zcode" &&
+    task.session.status === "active" &&
+    task.currentAuthorization?.status === "current" &&
+    task.environment.kind === "workspace" &&
+    identity.taskId === task.id &&
+    identity.participantId === task.participant.id &&
+    identity.sessionId === task.session.id &&
+    identity.nativeSessionId === task.session.nativeSessionId &&
+    identity.authorizationId === task.authorizationId &&
+    identity.environmentId === task.environment.id &&
+    identity.workspacePath === workspacePath,
+  );
+}
+
 export function EngineConversation({
   service,
   selectedTaskId,
@@ -499,6 +534,10 @@ export function EngineConversation({
     taskId: string;
     catalog: TaskPluginCatalog;
   } | null>(null);
+  const [taskSlashCommandCatalog, setTaskSlashCommandCatalog] =
+    useState<TaskSlashCommandCatalogSnapshot | null>(null);
+  const [taskSlashCommandCatalogUnavailable, setTaskSlashCommandCatalogUnavailable] =
+    useState<TaskSlashCommandCatalogIdentity | null>(null);
   useEffect(() => setPluginCatalog(null), [selectedTaskId]);
   const [pendingEditQueueItemId, setPendingEditQueueItemId] = useState<string | null>(null);
   const [restoreErrors, setRestoreErrors] = useState<Record<string, string>>({});
@@ -681,6 +720,24 @@ export function EngineConversation({
     }
   }, [projection]);
   const visibleTask = task?.id === selectedTaskId ? task : null;
+  useLayoutEffect(() => {
+    setTaskSlashCommandCatalog(null);
+    setTaskSlashCommandCatalogUnavailable(null);
+  }, [
+    refreshVersion,
+    service,
+    selectedTaskId,
+    visibleTask?.authorizationId,
+    visibleTask?.currentAuthorization?.status,
+    visibleTask?.environment.id,
+    visibleTask?.environment.kind,
+    visibleTask?.environment.workDirectory,
+    visibleTask?.id,
+    visibleTask?.participant.id,
+    visibleTask?.session.id,
+    visibleTask?.session.nativeSessionId,
+    visibleTask?.session.status,
+  ]);
   const visibleHistory = visibleTask ? history : null;
   const {
     contexts: webElementContexts,
@@ -926,6 +983,79 @@ export function EngineConversation({
   const composerWorkspacePath = isZCodeHarness
     ? (visibleTask?.environment.workDirectory ?? "")
     : "";
+  useEffect(() => {
+    const target = visibleTask;
+    if (
+      !target ||
+      target.engine.engineId !== "zcode" ||
+      target.currentAuthorization?.status !== "current" ||
+      target.session.status !== "active" ||
+      !target.session.nativeSessionId ||
+      !composerWorkspacePath
+    )
+      return;
+
+    let cancelled = false;
+    const nativeSessionId = target.session.nativeSessionId;
+    const isCurrentTarget = () => !cancelled && selectedTaskIdRef.current === target.id;
+    void service
+      .getTaskSlashCommandCatalog({
+        taskId: target.id,
+        participantId: target.participant.id,
+        sessionId: target.session.id,
+        authorizationId: target.authorizationId,
+      })
+      .then(
+        ({ slashCommands }) => {
+          if (!isCurrentTarget()) return;
+          setTaskSlashCommandCatalogUnavailable(null);
+          setTaskSlashCommandCatalog({
+            taskId: target.id,
+            participantId: target.participant.id,
+            sessionId: target.session.id,
+            nativeSessionId,
+            authorizationId: target.authorizationId,
+            environmentId: target.environment.id,
+            workspacePath: composerWorkspacePath,
+            slashCommands: slashCommands.map((command) => ({ ...command })),
+          });
+        },
+        (error: unknown) => {
+          if (!isCurrentTarget()) return;
+          setTaskSlashCommandCatalogUnavailable({
+            taskId: target.id,
+            participantId: target.participant.id,
+            sessionId: target.session.id,
+            nativeSessionId,
+            authorizationId: target.authorizationId,
+            environmentId: target.environment.id,
+            workspacePath: composerWorkspacePath,
+          });
+          logger.warn("[engine-composer] failed to read the current Task slash command catalog", {
+            taskId: target.id,
+            error: errorText(error),
+          });
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    composerWorkspacePath,
+    refreshVersion,
+    service,
+    visibleTask?.authorizationId,
+    visibleTask?.currentAuthorization?.status,
+    visibleTask?.environment.id,
+    visibleTask?.environment.kind,
+    visibleTask?.environment.workDirectory,
+    visibleTask?.engine.engineId,
+    visibleTask?.id,
+    visibleTask?.participant.id,
+    visibleTask?.session.id,
+    visibleTask?.session.nativeSessionId,
+    visibleTask?.session.status,
+  ]);
   const promptHistoryWorkspacePath = visibleTask?.environment.workDirectory ?? "";
   const [promptHistory, setPromptHistory] = useState<readonly string[]>(() =>
     readPromptHistoryEntries(promptHistoryWorkspacePath),
@@ -937,7 +1067,22 @@ export function EngineConversation({
   }, [promptHistoryWorkspacePath]);
   const nativeSessionId = isZCodeHarness ? (visibleTask?.session.nativeSessionId ?? null) : null;
   const activeNativeSessionId = visibleTask?.session.status === "active" ? nativeSessionId : null;
-  const nativeSlashCommands = useSlashCommands(composerWorkspacePath);
+  const workspaceSlashCommands = useSlashCommands(composerWorkspacePath);
+  const currentTaskSlashCommandCatalog = matchesTaskSlashCommandCatalogIdentity(
+    taskSlashCommandCatalog,
+    visibleTask,
+    composerWorkspacePath,
+  )
+    ? taskSlashCommandCatalog
+    : null;
+  const hasCurrentTaskSlashCatalogUnavailable = matchesTaskSlashCommandCatalogIdentity(
+    taskSlashCommandCatalogUnavailable,
+    visibleTask,
+    composerWorkspacePath,
+  );
+  const nativeSlashCommands = isZCodeHarness
+    ? (currentTaskSlashCommandCatalog?.slashCommands ?? [])
+    : workspaceSlashCommands;
   const excludedSlashCommandNames = useMemo(
     () => excludedNativeSlashCommandNames(nativeSlashCommands, isZCodeHarness),
     [isZCodeHarness, nativeSlashCommands],
@@ -2962,6 +3107,16 @@ export function EngineConversation({
               </p>
             ) : null}
             <div className="chat-composer-region z-20 w-full shrink-0 @container/composer">
+              {hasCurrentTaskSlashCatalogUnavailable ? (
+                <p
+                  className="mb-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning"
+                  role="status"
+                  aria-live="polite"
+                  data-testid="engine-slash-catalog-unavailable"
+                >
+                  当前 CLI 命令目录暂不可用；恢复或刷新当前 Task 后重试。
+                </p>
+              ) : null}
               {draftStorageIssue ? (
                 <div
                   role="alert"
@@ -3048,6 +3203,7 @@ export function EngineConversation({
                         }
                       : undefined
                   }
+                  slashCommandsOverride={isZCodeHarness ? nativeSlashCommands : undefined}
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
                   onChange={(value) => {

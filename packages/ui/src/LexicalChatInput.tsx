@@ -23,6 +23,7 @@ import {
 import { useEffectiveShortcutBindings } from "@/shortcuts/useShortcutBindings.js";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
+import type { ZCodeSlashCommand } from "@zcode/shared";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -1333,6 +1334,7 @@ interface LexicalChatInputProps {
   onWhiteboardMentionSelected?: (boardId: string) => void | Promise<void>;
   onPaste?: (event: ChatComposerPasteEvent) => void;
   excludedSlashCommandNames?: readonly string[];
+  slashCommandsOverride?: readonly ZCodeSlashCommand[];
   /** App 层本地斜杠命令（如 `/side`），选中即执行 UI 行为，不发送。 */
   appSlashCommands?: readonly AppSlashCommand[];
   /** mention（@/#）面板开关。v4 数据面未就绪时显式关闭，入口保留。 */
@@ -1366,6 +1368,7 @@ export function LexicalChatInput({
   onWhiteboardMentionSelected,
   onPaste,
   excludedSlashCommandNames,
+  slashCommandsOverride,
   appSlashCommands,
   enableMentionPanel = true,
 }: LexicalChatInputProps) {
@@ -1511,6 +1514,7 @@ export function LexicalChatInput({
           container={triggerPanelContainer}
           disabled={disabled}
           excludedCommandNames={excludedSlashCommandNames}
+          slashCommandsOverride={slashCommandsOverride}
           appCommands={appSlashCommands}
         />
         {enableMentionPanel ? (
