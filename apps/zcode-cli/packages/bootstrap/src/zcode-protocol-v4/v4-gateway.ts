@@ -32,6 +32,7 @@ import type {
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import {
   SESSION_ENTRY_NATIVE_TURN_TERMINAL,
+  SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
   SessionEventType,
   isFileSystemPortError,
 } from "@zcode/contracts";
@@ -435,6 +436,8 @@ export interface V4GatewayHost {
   ): Promise<PersistedEventsLoadResult>;
   /** Durable live-native TurnComplete/TurnError facts for read-only Execution reconciliation. */
   loadNativeTurnTerminalEntries?(sessionId: string): Promise<SessionEntryInfo[]>;
+  /** Durable native Goal verification, used only to distinguish control from completed work. */
+  loadGoalVerificationEntries?(sessionId: string): Promise<SessionEntryInfo[]>;
   /** 仅用于低频生命周期和恢复裁决；高频 event/stream trace 禁止走生产日志。 */
   onDebug?(message: string): void;
   onError?(scope: string, error: unknown, context?: V4GatewayErrorContext): void;
@@ -547,6 +550,7 @@ function terminalEvidenceForRow(
   sourceCommandId: string,
   row: TurnHeaderRow,
   entries: SessionEntryInfo[],
+  goalVerificationEntries: SessionEntryInfo[],
 ): NativeTerminalEvidence | undefined {
   if (row.state === "running" || !row.sourceCommandId || row.sourceCommandId !== sourceCommandId) {
     return undefined;
@@ -564,9 +568,63 @@ function terminalEvidenceForRow(
     const data = entry.data as Record<string, unknown>;
     return data.inputId === sourceCommandId;
   });
-  if (matchingEntries.length !== 1) return undefined;
+  const firstGoalTerminalSequence =
+    row.executionKind === "controlOnly" && matchingEntries.length >= 2
+      ? Math.min(
+          ...matchingEntries.map((entry) => {
+            const sequence = (entry.data as Record<string, unknown>).sequenceNumber;
+            return typeof sequence === "number" && Number.isSafeInteger(sequence)
+              ? sequence
+              : Number.NaN;
+          }),
+        )
+      : undefined;
+  // A Goal command has a control-only turn followed by one or more native
+  // continuation turns under the same input ID. Its control terminal is not
+  // the product execution terminal. Require a durable, passed verification
+  // anchored to a continuation terminal before attributing success.
+  const candidates =
+    row.executionKind === "controlOnly"
+      ? matchingEntries.filter((entry) =>
+          goalVerificationEntries.some((verification) => {
+            if (
+              verification.sessionID !== sessionId ||
+              verification.type !== SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION ||
+              !verification.data ||
+              typeof verification.data !== "object" ||
+              Array.isArray(verification.data)
+            )
+              return false;
+            const payload = (verification.data as { payload?: unknown }).payload;
+            if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+            const fact = payload as Record<string, unknown>;
+            const result = fact.verification;
+            const terminalSequence = (entry.data as Record<string, unknown>).sequenceNumber;
+            const verificationSequence = (verification.data as Record<string, unknown>)
+              .sequenceNumber;
+            return (
+              verification.id === (verification.data as Record<string, unknown>).eventId &&
+              fact.status === "completed" &&
+              typeof fact.targetId === "string" &&
+              fact.targetId.trim().length > 0 &&
+              fact.anchorTurnId === (entry.data as Record<string, unknown>).turnId &&
+              typeof terminalSequence === "number" &&
+              typeof verificationSequence === "number" &&
+              firstGoalTerminalSequence !== undefined &&
+              Number.isSafeInteger(firstGoalTerminalSequence) &&
+              terminalSequence > firstGoalTerminalSequence &&
+              verificationSequence > terminalSequence &&
+              result !== null &&
+              typeof result === "object" &&
+              !Array.isArray(result) &&
+              (result as Record<string, unknown>).passed === true
+            );
+          }),
+        )
+      : matchingEntries;
+  if (candidates.length !== 1) return undefined;
 
-  const entry = matchingEntries[0]!;
+  const entry = candidates[0]!;
   const data = entry.data as Record<string, unknown>;
   const eventId = typeof data.eventId === "string" ? data.eventId : "";
   const eventType = data.eventType;
@@ -1656,6 +1714,9 @@ export class ConversationV4Gateway {
     const sourceCommandId = params.nativeTerminalSourceCommandId?.trim();
     if (!sourceCommandId || !this.host.loadNativeTurnTerminalEntries) return result;
     const entries = await this.host.loadNativeTurnTerminalEntries(params.sessionId);
+    const goalVerificationEntries = this.host.loadGoalVerificationEntries
+      ? await this.host.loadGoalVerificationEntries(params.sessionId)
+      : [];
     const sourceHeaders = publisher
       .getSnapshot()
       .rows.window.filter(
@@ -1681,6 +1742,7 @@ export class ConversationV4Gateway {
           sourceCommandId,
           row,
           entries,
+          goalVerificationEntries,
         );
         return nativeTerminalEvidence ? { ...baseRow, nativeTerminalEvidence } : baseRow;
       }),

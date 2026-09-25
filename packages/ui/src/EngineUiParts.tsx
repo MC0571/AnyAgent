@@ -175,6 +175,11 @@ export function provenanceLabel(provenance: Readonly<Record<string, string>> | u
 }
 
 export function canActOnTask(task: EngineTask, capability: CapabilityName): string | null {
+  if (task.currentAuthorization?.status !== "current")
+    return (
+      task.currentAuthorization?.reason ??
+      "Current Host authorization status is unknown; this Task is read-only."
+    );
   if (capability !== "execution.interrupt") {
     if (task.status !== "active") return "此对话已结束，不能继续发送。";
     if (task.session.status !== "active") return "此对话目前无法继续，历史仍可查看。";

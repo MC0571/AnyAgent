@@ -106,6 +106,12 @@ interface PendingRun {
   readonly streamId: string;
   readonly session: EngineSessionRef;
   readonly executionId: EngineExecutionRef;
+  readonly goalObjective: string | null;
+  goalTerminalCandidate: { readonly event: ZCodeSessionEvent } | null;
+  goalProbeTimer: ReturnType<typeof setTimeout> | null;
+  goalProbeInFlight: boolean;
+  goalProbeReadFailures: number;
+  goalStarted: boolean;
   inputId: string;
   acknowledged: boolean;
   readonly pendingEvents: ZCodeAgentServiceEvent[];
@@ -141,6 +147,8 @@ interface ZCodeSubmissionConfig {
   readonly mode?: ZCodeSubmissionMode;
   readonly planEnabled?: boolean;
   readonly modelSelection?: ModelSelection;
+  /** Adapter-owned native control mapping; product Runtime treats this as opaque input config. */
+  readonly control?: "goal";
 }
 
 const ZCODE_SUBMISSION_MODES = new Set<ZCodeSubmissionMode>(["build", "edit", "plan", "yolo"]);
@@ -150,7 +158,7 @@ function parseZCodeSubmissionConfig(
 ): { config: ZCodeSubmissionConfig } | { error: string } {
   if (value === undefined) return { config: {} };
   const unsupportedKey = Object.keys(value).find(
-    (key) => !["mode", "planEnabled", "modelSelection"].includes(key),
+    (key) => !["mode", "planEnabled", "modelSelection", "control"].includes(key),
   );
   if (unsupportedKey)
     return { error: `ZCode submission config field is unsupported: ${unsupportedKey}.` };
@@ -164,6 +172,9 @@ function parseZCodeSubmissionConfig(
   const planEnabled = value.planEnabled;
   if (planEnabled !== undefined && typeof planEnabled !== "boolean")
     return { error: "ZCode plan setting must be a boolean." };
+  const control = value.control;
+  if (control !== undefined && control !== "goal")
+    return { error: "ZCode submission control is unsupported." };
   let modelSelection: ModelSelection | undefined;
   if (value.modelSelection !== undefined) {
     const parsed = modelSelectionSchema.safeParse(value.modelSelection);
@@ -175,6 +186,7 @@ function parseZCodeSubmissionConfig(
       ...(mode ? { mode: mode as ZCodeSubmissionMode } : {}),
       ...(planEnabled !== undefined ? { planEnabled } : {}),
       ...(modelSelection ? { modelSelection } : {}),
+      ...(control ? { control } : {}),
     },
   };
 }
@@ -752,6 +764,73 @@ export function createZCodeAdapter(options: {
     }
   }
 
+  function scheduleGoalTerminalProbe(run: PendingRun, delayMs: number): void {
+    if (
+      !run.goalObjective ||
+      !run.goalTerminalCandidate ||
+      run.goalProbeTimer ||
+      run.goalProbeInFlight
+    )
+      return;
+    run.goalProbeTimer = setTimeout(() => {
+      run.goalProbeTimer = null;
+      if (run.finished || runs.get(run.session) !== run || !run.goalTerminalCandidate) return;
+      run.goalProbeInFlight = true;
+      const markUnknown = (reason: string) => {
+        publish(run, { type: "execution.unknown", reason });
+        run.goalTerminalCandidate = null;
+        run.finished = true;
+        if (runs.get(run.session) === run) runs.delete(run.session);
+        run.wake?.();
+      };
+      void options.agent
+        .readSession({ ...workspace, sessionId: run.session, runtimePolicy: "existing-only" })
+        .then((snapshot) => {
+          if (run.finished || runs.get(run.session) !== run || !run.goalTerminalCandidate) return;
+          run.goalProbeReadFailures = 0;
+          if (
+            snapshot.session.sessionId !== run.session ||
+            snapshot.session.target?.sessionId !== run.session ||
+            snapshot.session.target.objective !== run.goalObjective
+          ) {
+            markUnknown(
+              "Native Goal identity changed before its terminal state could be attributed.",
+            );
+            return;
+          }
+          const status = snapshot.session.target.status;
+          if (status === "complete") {
+            const candidate = run.goalTerminalCandidate;
+            publish(
+              run,
+              {
+                type: "execution.completed",
+                evidence: {
+                  source: "engine",
+                  evidenceId: candidate.event.eventId,
+                  detail: "Native Goal target is complete after its source turn terminal.",
+                },
+              },
+              candidate.event,
+            );
+          } else if (status === "paused" || status === "budget_limited") {
+            markUnknown(
+              `Native Goal target is ${status}; the submitted Input did not prove completion.`,
+            );
+          }
+        })
+        .catch(() => {
+          if (++run.goalProbeReadFailures >= 3)
+            markUnknown("Native Goal terminal could not be reconciled after three Session reads.");
+        })
+        .finally(() => {
+          run.goalProbeInFlight = false;
+          if (run.goalTerminalCandidate && runs.get(run.session) === run)
+            scheduleGoalTerminalProbe(run, 300);
+        });
+    }, delayMs);
+  }
+
   const lifecycle = options.agent.onAgentRuntimeLifecycle?.((event) => {
     if (event.workspaceKey !== nativeWorkspaceId || event.state !== "unavailable") return;
     availability = "temporarily-unavailable";
@@ -882,13 +961,20 @@ export function createZCodeAdapter(options: {
     const data = payloadRecord(event.payload);
     if (event.type === "turn.started") {
       if (data.inputId !== run.inputId) return;
+      if (run.goalObjective) {
+        run.goalTerminalCandidate = null;
+        if (run.goalProbeTimer) clearTimeout(run.goalProbeTimer);
+        run.goalProbeTimer = null;
+      }
       run.turnId = event.turnId ?? text(data.turnId) ?? null;
       run.nativeForegroundExecutionId = text(data.foregroundExecutionId) ?? null;
-      publish(
-        run,
-        { type: "execution.started", evidence: { source: "engine", evidenceId: event.eventId } },
-        event,
-      );
+      if (!run.goalObjective || !run.goalStarted)
+        publish(
+          run,
+          { type: "execution.started", evidence: { source: "engine", evidenceId: event.eventId } },
+          event,
+        );
+      run.goalStarted = true;
       for (const control of run.pendingTurnControls.splice(0)) receive(run, control);
       return;
     }
@@ -1061,7 +1147,10 @@ export function createZCodeAdapter(options: {
         const evidence = { source: "engine" as const, evidenceId: event.eventId };
         if (data.resultType === "cancelled")
           publish(run, { type: "execution.stopped", evidence }, event);
-        else if (data.resultType === "success")
+        else if (data.resultType === "success" && run.goalObjective) {
+          run.goalTerminalCandidate = { event };
+          scheduleGoalTerminalProbe(run, 0);
+        } else if (data.resultType === "success")
           publish(
             run,
             { type: "execution.completed", result: text(data.response), evidence },
@@ -1145,7 +1234,7 @@ export function createZCodeAdapter(options: {
     },
     getCapabilities: capabilities,
     refreshCapabilities,
-    async createSession(): Promise<EngineSessionRef> {
+    async createSession({ beforeDispatch } = {}): Promise<EngineSessionRef> {
       const state = await refreshCapabilities();
       if (state.capabilities["session.create"].availability !== "available") {
         throw operationError(
@@ -1158,6 +1247,7 @@ export function createZCodeAdapter(options: {
       const envelope = command("createSession", null, {
         workspaceId: nativeWorkspaceId,
       });
+      beforeDispatch?.();
       let ack;
       try {
         ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
@@ -1550,7 +1640,32 @@ export function createZCodeAdapter(options: {
       const parsedConfig = parseZCodeSubmissionConfig(submissionConfig);
       if ("error" in parsedConfig)
         throw operationError(operation, parsedConfig.error, "protocol-error", "none");
-      const { mode, planEnabled, modelSelection } = parsedConfig.config;
+      const { mode, planEnabled, modelSelection, control } = parsedConfig.config;
+      if (control === "goal" && (revision || attachments?.length || planEnabled))
+        throw operationError(
+          operation,
+          "Goal control cannot revise, attach files, or run in Plan mode.",
+          "unsupported",
+          "none",
+        );
+      if (control === "goal" && pendingSharedContextBySession.has(session))
+        throw operationError(
+          operation,
+          "Goal control cannot silently discard a pending shared-context import.",
+          "unsupported",
+          "none",
+        );
+      const goalObjective =
+        control === "goal"
+          ? /^\/(?:goal|target)\s+([\s\S]+)$/u.exec(input.trim())?.[1]?.trim()
+          : undefined;
+      if (control === "goal" && !goalObjective)
+        throw operationError(
+          operation,
+          "Goal control requires /goal <objective>.",
+          "protocol-error",
+          "none",
+        );
       if (!modelSelection)
         throw operationError(
           operation,
@@ -1653,7 +1768,7 @@ export function createZCodeAdapter(options: {
           "none",
         );
       const slashName = revision ? null : leadingSlashName(input);
-      if (slashName && !PROMPT_BUILTIN_SLASH_COMMANDS.has(slashName)) {
+      if (slashName && control !== "goal" && !PROMPT_BUILTIN_SLASH_COMMANDS.has(slashName)) {
         if (!options.agent.readWorkspacePresentation)
           throw operationError(
             operation,
@@ -1714,9 +1829,11 @@ export function createZCodeAdapter(options: {
               baseLogEpoch: nativeRevisionTarget.baseLogEpoch,
             }
           : {
-              ...command("sendText", session, {
-                text: input,
-                requestedDelivery: "startNow",
+              ...command(control === "goal" ? "sendGoalCommand" : "sendText", session, {
+                text: goalObjective ?? input,
+                ...(control === "goal"
+                  ? { displayText: input }
+                  : { requestedDelivery: "startNow" as const }),
                 ...(pendingSharedContextBySession.has(session)
                   ? {
                       context_refs: [
@@ -1743,6 +1860,30 @@ export function createZCodeAdapter(options: {
               }),
               ...(commandId ? { commandId } : {}),
             };
+      if (control === "goal") {
+        let nativeState;
+        try {
+          nativeState = await options.agent.readSession({ ...workspace, sessionId: session });
+        } catch (error) {
+          throw operationError(
+            operation,
+            error instanceof Error ? error.message : String(error),
+            "temporarily-unavailable",
+            "none",
+          );
+        }
+        if (
+          nativeState.runtime.activeTurnId ||
+          nativeState.runtime.pendingRequestIds.length > 0 ||
+          (nativeState.session.status !== "idle" && nativeState.session.status !== "completed")
+        )
+          throw operationError(
+            operation,
+            "Native Session is busy; Goal control must remain a product-queued Input until idle.",
+            "temporarily-unavailable",
+            "none",
+          );
+      }
       beforeDispatch?.();
       const executionId = envelope.commandId as EngineExecutionRef;
       let disposable: { dispose(): void } | undefined;
@@ -1750,6 +1891,12 @@ export function createZCodeAdapter(options: {
         streamId: randomUUID(),
         session,
         executionId,
+        goalObjective: goalObjective ?? null,
+        goalTerminalCandidate: null,
+        goalProbeTimer: null,
+        goalProbeInFlight: false,
+        goalProbeReadFailures: 0,
+        goalStarted: false,
         inputId: envelope.commandId,
         acknowledged: false,
         pendingEvents: [],
@@ -1768,6 +1915,8 @@ export function createZCodeAdapter(options: {
         deliverySequence: 0,
         finished: false,
         dispose() {
+          if (this.goalProbeTimer) clearTimeout(this.goalProbeTimer);
+          this.goalProbeTimer = null;
           disposable?.dispose();
           disposable = undefined;
           allRuns.delete(run);
@@ -1780,7 +1929,9 @@ export function createZCodeAdapter(options: {
         ...workspace,
         sessionId: session,
         deliveryKind: "desktop-continuous",
-        ...(run.lastSequence !== null ? { afterSeq: run.lastSequence } : {}),
+        // A fresh subscription can establish after a fast first turn starts.
+        // Native session/subscribe replays only when afterSeq is present.
+        afterSeq: run.lastSequence ?? 0,
       })((event) => receive(run, event));
       if (!providerWasPinned) providerIdBySession.set(session, modelSelection.providerId);
       let ack;
@@ -1828,6 +1979,7 @@ export function createZCodeAdapter(options: {
         !ack ||
         (ack.status !== "accepted" && !(revision && ack.status === "duplicate")) ||
         (!revision &&
+          control !== "goal" &&
           (ack.result?.type !== "inputAccepted" || ack.result.delivery !== "startNow")) ||
         (revision?.kind === "edit" &&
           (ack.result?.type !== "editUserQuery" || ack.result.disposition !== "rewind"))

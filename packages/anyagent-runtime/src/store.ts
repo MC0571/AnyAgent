@@ -20,6 +20,15 @@ export interface StoredRecord<T = unknown> {
   readonly data: T;
 }
 
+export interface StoredHostAuthorization {
+  readonly id: string;
+  readonly environmentId: string;
+  readonly scopes: readonly string[];
+  readonly expiresAt: number | null;
+  readonly revokedAt: number | null;
+  readonly revokeReason: string | null;
+}
+
 export class RuntimeStore {
   readonly #db: DatabaseSyncType;
 
@@ -49,7 +58,121 @@ export class RuntimeStore {
         ON runtime_records(task_id, native_key)
         WHERE kind = 'input' AND native_key IS NOT NULL;
       CREATE TABLE IF NOT EXISTS runtime_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS runtime_authorizations (
+        id TEXT PRIMARY KEY,
+        environment_id TEXT NOT NULL,
+        scopes TEXT NOT NULL,
+        expires_at INTEGER,
+        revoked_at INTEGER,
+        revoke_reason TEXT
+      );
     `);
+  }
+
+  backfillHostAuthorizationsOnce(): void {
+    const migrationKey = "host_authorization_backfill_v1";
+    if (this.getMeta(migrationKey) === "complete") return;
+    this.transaction(() => {
+      if (this.getMeta(migrationKey) === "complete") return;
+      const rows = this.#db
+        .prepare(
+          "SELECT id, data FROM runtime_records WHERE kind = 'task' ORDER BY created_at, rowid",
+        )
+        .all() as { id: string; data: string }[];
+      for (const row of rows) {
+        const task = JSON.parse(row.data) as {
+          authorization?: {
+            id?: unknown;
+            environmentId?: unknown;
+            scopes?: unknown;
+            expiresAt?: unknown;
+            issuer?: unknown;
+          };
+        };
+        const grant = task.authorization;
+        if (
+          !grant ||
+          typeof grant.id !== "string" ||
+          typeof grant.environmentId !== "string" ||
+          !Array.isArray(grant.scopes) ||
+          !grant.scopes.every((scope) => typeof scope === "string") ||
+          (grant.expiresAt !== null && typeof grant.expiresAt !== "number") ||
+          grant.issuer !== "host"
+        )
+          throw new Error(`Cannot backfill Host authorization from legacy Task ${row.id}.`);
+        this.registerHostAuthorization({
+          id: grant.id,
+          environmentId: grant.environmentId,
+          scopes: grant.scopes,
+          expiresAt: grant.expiresAt,
+        });
+      }
+      this.setMeta(migrationKey, "complete");
+    });
+  }
+
+  registerHostAuthorization(
+    grant: Pick<StoredHostAuthorization, "id" | "environmentId" | "scopes" | "expiresAt">,
+  ): StoredHostAuthorization {
+    const scopes = [...grant.scopes].sort();
+    this.#db
+      .prepare(`
+        INSERT INTO runtime_authorizations(id, environment_id, scopes, expires_at, revoked_at, revoke_reason)
+        VALUES (?, ?, ?, ?, NULL, NULL)
+        ON CONFLICT(id) DO NOTHING
+      `)
+      .run(grant.id, grant.environmentId, JSON.stringify(scopes), grant.expiresAt);
+    const current = this.getHostAuthorization(grant.id);
+    if (
+      !current ||
+      current.environmentId !== grant.environmentId ||
+      current.expiresAt !== grant.expiresAt ||
+      JSON.stringify([...current.scopes].sort()) !== JSON.stringify(scopes)
+    )
+      throw new Error(`Host authorization ${grant.id} conflicts with its persistent authority.`);
+    return current;
+  }
+
+  getHostAuthorization(id: string): StoredHostAuthorization | null {
+    const row = this.#db.prepare("SELECT * FROM runtime_authorizations WHERE id = ?").get(id) as
+      | RawHostAuthorization
+      | undefined;
+    if (!row) return null;
+    return {
+      id: row.id,
+      environmentId: row.environment_id,
+      scopes: JSON.parse(row.scopes) as string[],
+      expiresAt: row.expires_at,
+      revokedAt: row.revoked_at,
+      revokeReason: row.revoke_reason,
+    };
+  }
+
+  hasTaskAuthorization(id: string): boolean {
+    const rows = this.#db.prepare("SELECT data FROM runtime_records WHERE kind = 'task'").all() as {
+      data: string;
+    }[];
+    return rows.some((row) => {
+      const task = JSON.parse(row.data) as {
+        authorization?: { id?: unknown };
+      };
+      return task.authorization?.id === id;
+    });
+  }
+
+  revokeHostAuthorization(
+    id: string,
+    revokedAt: number,
+    reason: string,
+  ): StoredHostAuthorization | null {
+    this.#db
+      .prepare(`
+        UPDATE runtime_authorizations
+        SET revoked_at = ?, revoke_reason = ?
+        WHERE id = ? AND revoked_at IS NULL
+      `)
+      .run(revokedAt, reason, id);
+    return this.getHostAuthorization(id);
   }
 
   get<T = unknown>(kind: string, id: string): StoredRecord<T> | null {
@@ -200,6 +323,15 @@ interface RawRecord {
   created_at: number;
   updated_at: number;
   data: string;
+}
+
+interface RawHostAuthorization {
+  id: string;
+  environment_id: string;
+  scopes: string;
+  expires_at: number | null;
+  revoked_at: number | null;
+  revoke_reason: string | null;
 }
 
 function decode<T>(value: unknown): StoredRecord<T> {

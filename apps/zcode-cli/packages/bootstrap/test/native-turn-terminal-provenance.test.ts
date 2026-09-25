@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { SqliteSessionStore } from "@zcode/adapters/storage";
 import {
   SESSION_ENTRY_NATIVE_TURN_TERMINAL,
+  SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
   SessionEventType,
   createInMemorySessionEventStore,
   createMessageId,
@@ -198,6 +199,146 @@ test("native terminal provenance survives SQLite reopen and excludes cold synthe
   }
 });
 
+test("cold Goal reconciliation requires a verified continuation terminal, not its control turn", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "zcode-goal-terminal-"));
+  const sessionId = createSessionId("goal-terminal-session");
+  const inputId = "goal-source-command";
+  const controlTurnId = createTurnId("goal-control-turn");
+  const continuationTurnId = createTurnId("goal-continuation-turn");
+  const store = new SqliteSessionStore({ dbPath: join(directory, "session.sqlite") });
+  try {
+    await store.createSession({
+      id: sessionId,
+      projectID: createProjectId("goal-terminal-project"),
+      slug: "goal-terminal-session",
+      directory,
+      title: "Goal terminal provenance test",
+      version: "0.16.9",
+    });
+    await persistTranscriptTurn(store, {
+      sessionId,
+      inputId,
+      nativeTurnId: controlTurnId,
+      prompt: "/goal complete this task",
+      response: "control accepted",
+      createdAt: 1_700_000_000_000,
+      historyRoundCount: 1,
+      directory,
+      controlOnly: true,
+    });
+    const runtime = {
+      sessionId,
+      sessionStore: store,
+      eventStore: createInMemorySessionEventStore(),
+      notifyEventSinks: async () => undefined,
+    } as unknown as AgentRuntimeInternal;
+    const trace = createRootTraceContext({ sessionId, turnId: controlTurnId });
+    for (const turnId of [controlTurnId, continuationTurnId]) {
+      await appendEvent.call(
+        runtime,
+        createSessionEvent(
+          SessionEventType.TurnComplete,
+          sessionId,
+          {
+            duration: 1,
+            historyRoundCount: 1,
+            inputId,
+            response: "done",
+            resultType: "success",
+            tokenCount: 1,
+            toolCallCount: 0,
+          },
+          { turnId },
+        ),
+        trace,
+      );
+    }
+    const gateway = createColdGateway(
+      sessionId,
+      synthesizeEventsFromMessages(await store.messages({ sessionID: sessionId }), { sessionId }),
+      () =>
+        store.sessionEntries({ sessionID: sessionId, type: SESSION_ENTRY_NATIVE_TURN_TERMINAL }),
+      () =>
+        store.sessionEntries({
+          sessionID: sessionId,
+          type: SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
+        }),
+    );
+    try {
+      const before = await gateway.rowsRange({
+        sessionId,
+        nativeTerminalSourceCommandId: inputId,
+        limit: 20,
+      });
+      const beforeHeader = before.rows.find((row) => row.kind === "turnHeader");
+      assert.equal(beforeHeader?.kind, "turnHeader");
+      if (beforeHeader?.kind === "turnHeader") {
+        assert.equal(beforeHeader.executionKind, "controlOnly");
+        assert.equal(beforeHeader.nativeTerminalEvidence, undefined);
+      }
+
+      await store.saveSessionEntry({
+        id: "control-verification-cannot-finish-goal",
+        sessionID: sessionId,
+        type: SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
+        time: { created: Date.now(), updated: Date.now() },
+        data: {
+          eventId: "control-verification-cannot-finish-goal",
+          sequenceNumber: 3,
+          payload: {
+            status: "completed",
+            targetId: "goal-target",
+            anchorTurnId: controlTurnId,
+            verification: { passed: true },
+          },
+        },
+      });
+      const controlOnly = await gateway.rowsRange({
+        sessionId,
+        nativeTerminalSourceCommandId: inputId,
+        limit: 20,
+      });
+      const controlHeader = controlOnly.rows.find((row) => row.kind === "turnHeader");
+      assert.equal(controlHeader?.kind, "turnHeader");
+      if (controlHeader?.kind === "turnHeader")
+        assert.equal(controlHeader.nativeTerminalEvidence, undefined);
+
+      await store.saveSessionEntry({
+        id: "goal-verification-passed",
+        sessionID: sessionId,
+        type: SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
+        time: { created: Date.now(), updated: Date.now() },
+        data: {
+          eventId: "goal-verification-passed",
+          sequenceNumber: 4,
+          payload: {
+            status: "completed",
+            targetId: "goal-target",
+            anchorTurnId: continuationTurnId,
+            verification: { passed: true },
+          },
+        },
+      });
+      const after = await gateway.rowsRange({
+        sessionId,
+        nativeTerminalSourceCommandId: inputId,
+        limit: 20,
+      });
+      const afterHeader = after.rows.find((row) => row.kind === "turnHeader");
+      assert.equal(afterHeader?.kind, "turnHeader");
+      if (afterHeader?.kind === "turnHeader") {
+        assert.equal(afterHeader.nativeTerminalEvidence?.turnId, continuationTurnId);
+        assert.equal(afterHeader.nativeTerminalEvidence?.sourceCommandId, inputId);
+      }
+    } finally {
+      gateway.dispose();
+    }
+  } finally {
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 async function persistTranscriptTurn(
   store: SqliteSessionStore,
   input: {
@@ -209,6 +350,7 @@ async function persistTranscriptTurn(
     createdAt: number;
     historyRoundCount: number;
     directory: string;
+    controlOnly?: boolean;
   },
 ): Promise<void> {
   const userId = createMessageId(`user-${input.inputId}`);
@@ -227,6 +369,7 @@ async function persistTranscriptTurn(
       transcriptVisibility: "visible",
     },
     anchor: { origin: "realUser", sourceCommandId: input.inputId },
+    ...(input.controlOnly ? { metadata: { executionKind: "controlOnly" as const } } : {}),
   });
   await store.savePart({
     id: createPartId(`user-part-${input.inputId}`),
@@ -263,6 +406,7 @@ function createColdGateway(
   sessionId: ReturnType<typeof createSessionId>,
   events: SessionEvent[],
   loadNativeTerminalEntries: () => ReturnType<SqliteSessionStore["sessionEntries"]>,
+  loadGoalVerificationEntries?: () => ReturnType<SqliteSessionStore["sessionEntries"]>,
 ) {
   const host = {
     sessionExists: (candidateSessionId: string) => candidateSessionId === sessionId,
@@ -270,6 +414,8 @@ function createColdGateway(
     executeCommand: async () => undefined,
     loadPersistedEvents: async () => ({ events, synthesized: true, sourceEventSeq: 0 }),
     loadNativeTurnTerminalEntries: async () => await loadNativeTerminalEntries(),
+    loadGoalVerificationEntries: async () =>
+      loadGoalVerificationEntries ? await loadGoalVerificationEntries() : [],
   } as unknown as ConstructorParameters<typeof ConversationV4Gateway>[0];
   return new ConversationV4Gateway(host);
 }

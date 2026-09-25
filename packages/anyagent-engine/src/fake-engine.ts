@@ -86,8 +86,11 @@ export class FakeEngine implements EngineAdapter {
     this.#capabilities.set(capability, status);
   }
 
-  async createSession(): Promise<EngineSessionRef> {
+  async createSession(
+    input: { readonly beforeDispatch?: () => void } = {},
+  ): Promise<EngineSessionRef> {
     requireFakeCapability(this.#capabilities, "session.create");
+    input.beforeDispatch?.();
     this.#sessionSequence += 1;
     const session = `fake-session-${this.#sessionSequence}` as EngineSessionRef;
     this.#sessions.add(session);

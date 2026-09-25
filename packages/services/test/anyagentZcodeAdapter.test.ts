@@ -62,6 +62,8 @@ function harness({
   nativeActiveTurnId = null,
   nativePendingRequestIds = [],
   nativeSessionStatus = "idle",
+  nativeGoalStatus,
+  nativeGoalReadFails,
   resumeSessionId = "native-session",
   validateModelSelection,
   beforeRows,
@@ -91,6 +93,8 @@ function harness({
   nativeActiveTurnId?: string | null;
   nativePendingRequestIds?: string[];
   nativeSessionStatus?: string;
+  nativeGoalStatus?: () => "active" | "complete";
+  nativeGoalReadFails?: () => boolean;
   resumeSessionId?: string;
   validateModelSelection?: NonNullable<
     Parameters<typeof createZCodeAdapter>[0]["validateModelSelection"]
@@ -115,6 +119,7 @@ function harness({
     baseLogEpoch?: string;
   }> = [];
   const resumeCalls: string[] = [];
+  const subscriptionCursors: Array<number | undefined> = [];
   const nativeCompactCalls: Parameters<AgentPort["compactSession"]>[0][] = [];
   const rowQueries: Array<{
     beforeRowId?: number;
@@ -124,22 +129,39 @@ function harness({
   const remainingWatermarks = [...pageWatermarks];
   const agent = {
     initialize: async () => ({ available: true, workspaceKey: "/tmp/workspace" }),
-    onDynamicSessionEvent: () => (receive: (event: unknown) => void) => {
-      listeners.add(receive);
-      return {
-        dispose() {
-          listeners.delete(receive);
-        },
-      };
-    },
+    onDynamicSessionEvent:
+      (params: { afterSeq?: number }) => (receive: (event: unknown) => void) => {
+        subscriptionCursors.push(params.afterSeq);
+        listeners.add(receive);
+        return {
+          dispose() {
+            listeners.delete(receive);
+          },
+        };
+      },
     onAgentRuntimeLifecycle: (receive: (event: unknown) => void) => {
       lifecycleListener = receive;
       return { dispose: () => (lifecycleListener = undefined) };
     },
-    readSession: async () => ({
-      runtime: { activeTurnId: nativeActiveTurnId, pendingRequestIds: nativePendingRequestIds },
-      session: { status: nativeSessionStatus },
-    }),
+    readSession: async () => {
+      if (nativeGoalReadFails?.()) throw new Error("native Session read unavailable");
+      return {
+        runtime: { activeTurnId: nativeActiveTurnId, pendingRequestIds: nativePendingRequestIds },
+        session: {
+          sessionId: "native-session",
+          status: nativeSessionStatus,
+          ...(nativeGoalStatus
+            ? {
+                target: {
+                  sessionId: "native-session",
+                  objective: "finish isolated goal",
+                  status: nativeGoalStatus(),
+                },
+              }
+            : {}),
+        },
+      };
+    },
     readWorkspacePresentation: async () => ({
       workspace: { workspacePath: "/tmp/workspace" },
       mode: "build",
@@ -437,6 +459,7 @@ function harness({
     nativeCompactCalls,
     rowQueries,
     resumeCalls,
+    subscriptionCursors,
     rows,
     createFreshAdapter: () =>
       createZCodeAdapter({
@@ -483,6 +506,36 @@ function completeNativeSource(fixture: ReturnType<typeof harness>) {
     },
   });
 }
+
+test("ZCode rechecks authorization after capability refresh before native Session creation", async () => {
+  let enterRefresh!: () => void;
+  let releaseRefresh!: () => void;
+  const refreshEntered = new Promise<void>((resolve) => {
+    enterRefresh = resolve;
+  });
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let revoked = false;
+  const fixture = harness({
+    readConfigurationVersion: async () => {
+      enterRefresh();
+      await refreshGate;
+      return "test-configuration";
+    },
+  });
+  const creation = fixture.adapter.createSession({
+    beforeDispatch: () => {
+      if (revoked) throw new Error("authorization revoked before native create");
+    },
+  });
+  await refreshEntered;
+  revoked = true;
+  releaseRefresh();
+  await assert.rejects(creation, /authorization revoked before native create/);
+  assert.equal(fixture.commands.filter((command) => command.type === "createSession").length, 0);
+  fixture.adapter.dispose();
+});
 
 test("ZCode cold resume keeps the Session ID and reconciliation requires native terminal provenance", async () => {
   const states = [
@@ -856,8 +909,8 @@ test("ZCode reconciliation stays unknown without an exact stable native projecti
   unstableAdapter.dispose();
 });
 
-async function waitUntil(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+async function waitUntil(predicate: () => boolean, attempts = 100): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
@@ -1199,6 +1252,245 @@ test("Runtime preserves each input configuration and ZCode sends it through the 
     });
   } finally {
     runtime.close();
+    fixture.adapter.dispose();
+  }
+});
+
+test("ZCode Goal control uses a typed native command with the product Input identity", async () => {
+  const fixture = harness({ nativeSessionStatus: "idle", nativePendingRequestIds: [] });
+  const modelSelection = { providerId: "provider-a", modelId: "model-a" };
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({
+      session,
+      input: "/goal Finish the isolated task",
+      commandId: "input_goal_1",
+      submissionConfig: {
+        control: "goal",
+        modelSelection,
+        mode: "build",
+        planEnabled: false,
+      },
+    });
+    const native = fixture.commands.find((entry) => entry.type === "sendGoalCommand");
+    assert.equal(native?.commandId, "input_goal_1");
+    assert.deepEqual(native?.payload, {
+      text: "Finish the isolated task",
+      displayText: "/goal Finish the isolated task",
+      mode: "build",
+      planEnabled: false,
+      modelSelection,
+    });
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 0);
+    assert.ok(run.events);
+    await assert.rejects(
+      () =>
+        fixture.adapter.run({
+          session,
+          input: "/goal no plan overlap",
+          commandId: "input_goal_2",
+          submissionConfig: { control: "goal", modelSelection, planEnabled: true },
+        }),
+      /Goal control cannot/,
+    );
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("Runtime persists a Goal Input and only the original Task can dispatch its typed command", async () => {
+  const fixture = harness({ nativeSessionStatus: "idle", nativePendingRequestIds: [] });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "host-goal-grant",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run"],
+      },
+    });
+    const config = {
+      control: "goal",
+      mode: "build",
+      planEnabled: false,
+      modelSelection: { providerId: "provider-a", modelId: "model-a" },
+    };
+    await assert.rejects(
+      () =>
+        runtime.submitInput({
+          taskId: task.id,
+          participantId: task.participant.id,
+          sessionId: task.session.id,
+          authorizationId: "wrong-grant",
+          text: "/goal finish",
+          submissionConfig: config,
+        }),
+      /authorization/i,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendGoalCommand").length, 0);
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "/goal finish",
+      submissionConfig: config,
+    });
+    const [input] = runtime.getHistory(task.id)?.inputs ?? [];
+    assert.equal(input?.text, "/goal finish");
+    assert.equal((input?.submissionConfig as { control?: string })?.control, "goal");
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendGoalCommand").length, 1);
+    assert.equal(
+      fixture.commands.find((entry) => entry.type === "sendGoalCommand")?.commandId,
+      input?.id,
+    );
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+  }
+});
+
+test("ZCode refuses Goal control when native Session became busy before dispatch", async () => {
+  const fixture = harness({
+    nativeSessionStatus: "running",
+    nativeActiveTurnId: "earlier-turn",
+    nativePendingRequestIds: [],
+  });
+  try {
+    const session = await fixture.adapter.createSession();
+    await assert.rejects(
+      () =>
+        fixture.adapter.run({
+          session,
+          input: "/goal do not interrupt prior turn",
+          commandId: "input_goal_busy",
+          submissionConfig: {
+            control: "goal",
+            modelSelection: { providerId: "provider-a", modelId: "model-a" },
+          },
+        }),
+      /Goal control must remain a product-queued Input/,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendGoalCommand").length, 0);
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("Goal remains running across native setup and continuation turns until the target is complete", async () => {
+  let goalStatus: "active" | "complete" = "active";
+  let goalReads = 0;
+  const fixture = harness({
+    nativeSessionStatus: "idle",
+    nativePendingRequestIds: [],
+    nativeGoalStatus: () => {
+      goalReads += 1;
+      return goalStatus;
+    },
+  });
+  const observed: string[] = [];
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({
+      session,
+      input: "/goal finish isolated goal",
+      commandId: "goal-two-turns",
+      submissionConfig: {
+        control: "goal",
+        modelSelection: { providerId: "provider-a", modelId: "model-a" },
+      },
+    });
+    assert.equal(fixture.subscriptionCursors.at(-1), 0);
+    void (async () => {
+      for await (const event of run.events) observed.push(event.type);
+    })();
+    const emit = (seq: number, turnId: string, type: "turn.started" | "turn.completed") =>
+      fixture.emit({
+        type: "session.event",
+        event: {
+          eventId: `goal-${seq}`,
+          seq,
+          sessionId: "native-session",
+          turnId,
+          timestamp: seq,
+          type,
+          payload:
+            type === "turn.started"
+              ? { inputId: "goal-two-turns", foregroundExecutionId: `work-${turnId}` }
+              : { inputId: "goal-two-turns", resultType: "success" },
+        },
+      });
+    emit(1, "setup", "turn.started");
+    emit(2, "setup", "turn.completed");
+    await waitUntil(() => goalReads > 0);
+    assert.equal(observed.includes("execution.completed"), false);
+    emit(3, "continuation", "turn.started");
+    goalStatus = "complete";
+    emit(4, "continuation", "turn.completed");
+    await waitUntil(() => observed.includes("execution.completed"));
+    assert.equal(observed.filter((type) => type === "execution.started").length, 1);
+    assert.equal(observed.filter((type) => type === "execution.completed").length, 1);
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("Goal terminal reconciliation becomes unknown after repeated native Session read failures", async () => {
+  let failReads = false;
+  const fixture = harness({
+    nativeGoalStatus: () => "active",
+    nativeGoalReadFails: () => failReads,
+  });
+  const observed: string[] = [];
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({
+      session,
+      input: "/goal finish isolated goal",
+      commandId: "goal-read-loss",
+      submissionConfig: {
+        control: "goal",
+        modelSelection: { providerId: "provider-a", modelId: "model-a" },
+      },
+    });
+    void (async () => {
+      for await (const event of run.events) observed.push(event.type);
+    })();
+    failReads = true;
+    for (const [seq, type] of [
+      [1, "turn.started"],
+      [2, "turn.completed"],
+    ] as const)
+      fixture.emit({
+        type: "session.event",
+        event: {
+          eventId: `goal-read-loss-${seq}`,
+          seq,
+          sessionId: "native-session",
+          turnId: "goal-read-loss-turn",
+          timestamp: seq,
+          type,
+          payload:
+            type === "turn.started"
+              ? { inputId: "goal-read-loss", foregroundExecutionId: "work-goal-read-loss" }
+              : { inputId: "goal-read-loss", resultType: "success" },
+        },
+      });
+    await waitUntil(() => observed.includes("execution.unknown"), 500);
+    assert.equal(observed.includes("execution.completed"), false);
+  } finally {
     fixture.adapter.dispose();
   }
 });

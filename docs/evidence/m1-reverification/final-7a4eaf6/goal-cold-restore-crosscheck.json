@@ -1,0 +1,64 @@
+{
+  "scenario": "M1 Harness Goal two completed rounds, App exit and restart, explicit same-Task same-native-Session restore, third completed round",
+  "testedProductCommit": "7d766707c82b24d8dd105ba7262505160baea3c2",
+  "followUpDisplayCommit": "7a4eaf68053bee5d22d75fe92a98e767968e72a1",
+  "runtime": {
+    "os": "Darwin arm64",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "electron": "41.0.3",
+    "zcodeCli": "0.16.9",
+    "model": "OpenCode Go (Anthropic)/qwen3.8-flash",
+    "reasoning": "xhigh",
+    "dataRoot": "/tmp/anyagent-opencode-go.aBEA0z",
+    "workspace": "/tmp/anyagent-opencode-go.aBEA0z/project"
+  },
+  "identity": {
+    "taskId": "task_4d7098c6-b7f8-42cc-b7b3-66b2aa4afb09",
+    "participantId": "participant_d9d48fe9-6b45-481c-9e77-d770343f47c4",
+    "productSessionId": "session_3213f3df-1967-4175-b3c6-84cc4255e620",
+    "nativeSessionId": "sess_78a55cb4-76fd-4633-acb3-635f11535cac"
+  },
+  "rounds": [
+    {
+      "marker": "M2_GOAL_FIXED_R1_925",
+      "inputId": "input_f8068439-2640-462c-802c-2d4614cf3a5f",
+      "executionId": "execution_d8f3d562-eb2f-4eea-9ac4-7e2df6a58ae6",
+      "productInputStatus": "completed",
+      "productExecutionStatus": "completed",
+      "nativeInputStatus": "promoted",
+      "nativeTerminalResults": ["success", "success"]
+    },
+    {
+      "marker": "M2_GOAL_FIXED_R2_925",
+      "inputId": "input_5e55e86d-772d-4fb5-8880-102fb48e1e1f",
+      "executionId": "execution_d187699a-b94c-4d50-806f-e6b2ef2810d2",
+      "productInputStatus": "completed",
+      "productExecutionStatus": "completed",
+      "nativeInputStatus": "promoted",
+      "nativeTerminalResults": ["success", "success"]
+    },
+    {
+      "marker": "M2_GOAL_FIXED_R3_COLD_925",
+      "inputId": "input_6fc13a51-0d1b-44e7-8c06-76f53a8ef645",
+      "executionId": "execution_c03af451-9c21-4958-b655-78a04354ad31",
+      "productInputStatus": "completed",
+      "productExecutionStatus": "completed",
+      "nativeInputStatus": "promoted",
+      "nativeTerminalResults": ["success", "success"]
+    }
+  ],
+  "productEventTypeCounts": {
+    "input.accepted": 3,
+    "execution.started": 3,
+    "message.delta": 6,
+    "execution.completed": 3
+  },
+  "queries": {
+    "product": "SELECT kind,id,task_id,session_id,input_id,execution_id,native_key,status FROM runtime_records WHERE task_id='<taskId>' AND kind IN ('task','participant','session','input','execution') ORDER BY created_at;",
+    "nativeInputs": "SELECT id,kind,status,promoted_message_id FROM session_input WHERE session_id='<nativeSessionId>' ORDER BY admitted_sequence;",
+    "nativeTerminals": "SELECT json_extract(data,'$.inputId'), count(*), group_concat(json_extract(data,'$.resultType')) FROM session_entry WHERE session_id='<nativeSessionId>' AND type='runtime/native_turn_terminal' GROUP BY json_extract(data,'$.inputId') ORDER BY min(time_created);",
+    "productEvents": "SELECT json_extract(data,'$.type'), count(*) FROM runtime_records WHERE task_id='<taskId>' AND kind='event' GROUP BY 1;"
+  },
+  "observation": "The original sidebar Task and product Participant/Session remain stable; explicit restore requalifies before the third send. Three native sendGoalCommand inputs were promoted exactly once in one native Session. The formal UI showed all three unique markers and returned to send-ready after each round. A later App restart makes the Session conditionally unknown until another explicit restore; history remains readable."
+}

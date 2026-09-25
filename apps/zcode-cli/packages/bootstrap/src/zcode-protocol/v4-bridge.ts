@@ -1909,6 +1909,14 @@ export function createConversationV4Gateway(
         type: SESSION_ENTRY_NATIVE_TURN_TERMINAL,
       });
     },
+    loadGoalVerificationEntries: async (sessionId) => {
+      const store = context.deps.sessionStore;
+      if (!store?.sessionEntries) return [];
+      return store.sessionEntries({
+        sessionID: sessionId as SessionId,
+        type: SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
+      });
+    },
     onError: (scope, error, errorContext) =>
       context.logger?.warn("ZCode Protocol v4 gateway error", {
         ...errorContext,
