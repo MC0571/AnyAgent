@@ -32,4 +32,6 @@ M0 原生会话“创建 m1-rewind.txt 文件”的回答提供“1 个文件已
 
 其后 `1c0b29248c30609b317f352720fe8b3c72db2711` 修复旧 Task 恢复后的原生反馈刷新，并重跑正常冷恢复、同 Session 续聊、Fake A→B→A、同进程中断及关闭 M1 的 M0 对照；见[该候选证据](final-1c0b292/README.md)。
 
-当前产品代码 `432eb7075024639b1e5e9f0692c20666f85d7fa7` 的正式 App、真实 CLI 与双 SQLite 复验见[当前候选记录](final-432eb70/README.md)：同 Session 逐轮换模型、冷恢复、Stop 后原生历史撤回与队列 B→A、Write 允许／拒绝、结构化用户提问、网页元素、分享上下文、文件 mention、compact、文件撤销、分叉及关闭 M1 的 M0 原路径均有当前提交证据。`/goal` 仅无参只读查询；其余可用 slash 命令、真实断线对账、失效答复、失败重试和其他未测组合仍按[唯一收口矩阵](README.md#m0-单参与者能力收口矩阵)列 D，不能拿本增量记录的旧候选截图代替。
+历史产品代码 `432eb7075024639b1e5e9f0692c20666f85d7fa7` 的正式 App、真实 CLI 与双 SQLite 复验见[该候选记录](final-432eb70/README.md)：同 Session 逐轮换模型、冷恢复、Stop 后原生历史撤回与队列 B→A、Write 允许／拒绝、结构化用户提问、网页元素、分享上下文、文件 mention、compact、文件撤销、分叉及关闭 M1 的 M0 原路径均有该提交证据。
+
+当前产品代码 `f47e6b7679f199d82d2f78fc8534aa417b110367` 的[增量记录](final-f47e6b7/README.md)补充双附件及历史编辑、只读 `/plugins status`、真实 `/compact` 后续聊、真实 Stop 原生 cancelled 对账、Fake A→B→A 和关闭 M1 的 M0 原路径。较早的[冷恢复与工具反馈记录](final-dda479f/README.md)仍绑定 `dda479f031212729dfcb289a983161e32686e872`。当前候选仍缺可交付的窗口截图／录屏及若干失败和组合路径，全部最终状态只按[唯一收口矩阵](README.md#m0-单参与者能力收口矩阵)最后一列判断；旧候选单项截图不能替代当前必测。
