@@ -36,6 +36,13 @@ export interface TaskLifecycleRequest {
   readonly authorizationId: string;
 }
 
+/** Product-owned Task identity for local sidebar metadata, independent of Engine grants. */
+export interface TaskSidebarIdentity {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+}
+
 export interface ReconcileExecution extends TaskLifecycleRequest {
   readonly executionId: string;
 }

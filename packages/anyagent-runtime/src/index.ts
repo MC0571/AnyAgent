@@ -52,6 +52,7 @@ import type {
   RuntimeSession,
   RuntimeStopRequest,
   RuntimeTask,
+  TaskSidebarIdentity,
   RuntimeTaskStatus,
   RuntimeUserInput,
   SubmitInput,
@@ -113,6 +114,8 @@ interface TaskData {
   readonly sessionId: string;
   readonly forkedFrom?: RuntimeTask["forkedFrom"];
   readonly sharedContext?: RuntimeTask["sharedContext"];
+  sidebarMetadata?: RuntimeTask["sidebarMetadata"];
+  sidebarUnreadWatermark?: number;
   readonly nativeForkCommandId?: string;
   status: RuntimeTaskStatus;
   createdAt: number;
@@ -471,6 +474,80 @@ export class TaskRuntime {
     this.#assertOpen();
     const record = this.#store.get<TaskData>("task", taskId);
     return record ? this.#taskProjection(record) : null;
+  }
+
+  setTaskPinned(input: TaskSidebarIdentity & { readonly pinned: boolean }): RuntimeTask {
+    this.#assertOpen();
+    if (typeof input.pinned !== "boolean")
+      throw new RuntimeEligibilityError("Task pinned state must be a boolean.");
+    const task = this.#qualifyTaskSidebarMutation(input);
+    const current = this.#taskSidebarMetadata(task.data);
+    if (current.pinned === input.pinned) return this.#taskProjection(task);
+    const pinOrder = input.pinned
+      ? this.#store
+          .list<TaskData>("task")
+          .reduce((max, record) => Math.max(max, record.data.sidebarMetadata?.pinOrder ?? 0), 0) + 1
+      : null;
+    return this.#saveTaskSidebarMetadata(task, {
+      ...current,
+      pinned: input.pinned,
+      pinOrder,
+    });
+  }
+
+  renameTask(input: TaskSidebarIdentity & { readonly title: string }): RuntimeTask {
+    this.#assertOpen();
+    const task = this.#qualifyTaskSidebarMutation(input);
+    if (typeof input.title !== "string" || input.title.length > 200)
+      throw new RuntimeEligibilityError("Task title must be a string of at most 200 characters.");
+    const current = this.#taskSidebarMetadata(task.data);
+    const title = input.title.trim() || null;
+    if (current.title === title) return this.#taskProjection(task);
+    return this.#saveTaskSidebarMetadata(task, { ...current, title });
+  }
+
+  setTaskArchived(input: TaskSidebarIdentity & { readonly archived: boolean }): RuntimeTask {
+    this.#assertOpen();
+    if (typeof input.archived !== "boolean")
+      throw new RuntimeEligibilityError("Task archived state must be a boolean.");
+    const task = this.#qualifyTaskSidebarMutation(input);
+    const current = this.#taskSidebarMetadata(task.data);
+    const archivedAt = input.archived ? (current.archivedAt ?? this.#now()) : null;
+    if (current.archivedAt === archivedAt) return this.#taskProjection(task);
+    return this.#saveTaskSidebarMetadata(task, { ...current, archivedAt });
+  }
+
+  setTaskUnread(
+    input: TaskSidebarIdentity & {
+      readonly unread: boolean;
+      readonly expectedUnreadAt?: number;
+    },
+  ): RuntimeTask {
+    this.#assertOpen();
+    if (typeof input.unread !== "boolean")
+      throw new RuntimeEligibilityError("Task unread state must be a boolean.");
+    if (
+      input.expectedUnreadAt !== undefined &&
+      (!Number.isSafeInteger(input.expectedUnreadAt) || input.expectedUnreadAt < 0)
+    )
+      throw new RuntimeEligibilityError("Expected unread marker must be a non-negative integer.");
+    const task = this.#qualifyTaskSidebarMutation(input);
+    const current = this.#taskSidebarMetadata(task.data);
+    if (
+      !input.unread &&
+      input.expectedUnreadAt !== undefined &&
+      current.unreadAt !== input.expectedUnreadAt
+    )
+      return this.#taskProjection(task);
+    if (input.unread) {
+      const previousUnreadAt = task.data.sidebarUnreadWatermark ?? current.unreadAt ?? 0;
+      const unreadAt = Math.max(Math.floor(this.#now()), previousUnreadAt + 1);
+      if (current.unreadAt === unreadAt) return this.#taskProjection(task);
+      task.data.sidebarUnreadWatermark = unreadAt;
+      return this.#saveTaskSidebarMetadata(task, { ...current, unreadAt });
+    }
+    if (current.unreadAt === null) return this.#taskProjection(task);
+    return this.#saveTaskSidebarMetadata(task, { ...current, unreadAt: null });
   }
 
   /** Register an opaque Host-issued grant in this Runtime's current authority. */
@@ -5335,6 +5412,70 @@ export class TaskRuntime {
     return { task, session };
   }
 
+  /** Sidebar metadata is product-owned; it remains manageable when an Engine grant is revoked. */
+  #qualifyTaskSidebarMutation(input: TaskSidebarIdentity): StoredRecord<TaskData> {
+    const task = this.#require<TaskData>("task", input.taskId);
+    const participant = this.#store.get<RuntimeParticipant>("participant", task.data.participantId);
+    const session = this.#store.get<SessionData>("session", task.data.sessionId);
+    if (
+      !participant ||
+      !session ||
+      task.id !== input.taskId ||
+      task.data.participantId !== input.participantId ||
+      participant.id !== input.participantId ||
+      participant.taskId !== task.id ||
+      task.data.sessionId !== input.sessionId ||
+      session.id !== input.sessionId ||
+      session.taskId !== task.id ||
+      session.data.projection.environmentId !== task.data.environment.id
+    )
+      throw new RuntimeEligibilityError(
+        "Task, participant, and Session ownership do not match.",
+        "ownership",
+      );
+    return task;
+  }
+
+  #taskSidebarMetadata(task: TaskData): RuntimeTask["sidebarMetadata"] {
+    const metadata = task.sidebarMetadata;
+    const pinOrder = metadata?.pinOrder;
+    const pinned =
+      metadata?.pinned === true && Number.isSafeInteger(pinOrder) && (pinOrder ?? 0) > 0;
+    return {
+      title: typeof metadata?.title === "string" ? metadata.title : null,
+      pinned,
+      pinOrder: pinned ? pinOrder! : null,
+      archivedAt:
+        typeof metadata?.archivedAt === "number" && Number.isFinite(metadata.archivedAt)
+          ? metadata.archivedAt
+          : null,
+      unreadAt:
+        Number.isSafeInteger(metadata?.unreadAt) && (metadata?.unreadAt ?? -1) >= 0
+          ? metadata!.unreadAt!
+          : null,
+    };
+  }
+
+  #saveTaskSidebarMetadata(
+    task: StoredRecord<TaskData>,
+    sidebarMetadata: RuntimeTask["sidebarMetadata"],
+  ): RuntimeTask {
+    task.data.sidebarMetadata = sidebarMetadata;
+    this.#save(
+      "task",
+      task.id,
+      task.id,
+      null,
+      null,
+      task.data,
+      task.data.status,
+      task.createdAt,
+      task.data.updatedAt,
+    );
+    this.#publish(task.id, "task", task.id);
+    return this.#requireTaskProjection(task.id);
+  }
+
   #assertNoUnknownInput(taskId: string, sessionId: string): void {
     const unknown = this.#store
       .list<InputData>("input", taskId)
@@ -6032,6 +6173,7 @@ export class TaskRuntime {
           ),
       environment: record.data.environment,
       credentialSource: record.data.credentialSource,
+      sidebarMetadata: this.#taskSidebarMetadata(record.data),
       participant: participant.data,
       session: { ...session.data.projection, nativeSessionId: session.data.nativeSessionId },
     });

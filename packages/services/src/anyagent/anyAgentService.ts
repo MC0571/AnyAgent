@@ -25,6 +25,7 @@ import type {
   SubmitInput,
   TaskHistory,
   TaskLifecycleRequest,
+  TaskSidebarIdentity,
   ReconcileExecution,
   ReconcileInput,
   RuntimeInput,
@@ -48,6 +49,20 @@ export interface IAnyAgentService {
     workspaceIdentity?: string;
   }): Promise<readonly RuntimeCurrentEngineProjection[]>;
   listTasks(): Promise<readonly RuntimeTask[]>;
+  /** Local product metadata remains available for history Tasks after Engine grant revocation. */
+  setTaskPinned(input: TaskSidebarIdentity & { readonly pinned: boolean }): Promise<RuntimeTask>;
+  renameTask(input: TaskSidebarIdentity & { readonly title: string }): Promise<RuntimeTask>;
+  /** `archived: false` restores a Task from the archived sidebar view. */
+  setTaskArchived(
+    input: TaskSidebarIdentity & { readonly archived: boolean },
+  ): Promise<RuntimeTask>;
+  /** `unread: false` marks the selected Task as read. */
+  setTaskUnread(
+    input: TaskSidebarIdentity & {
+      readonly unread: boolean;
+      readonly expectedUnreadAt?: number;
+    },
+  ): Promise<RuntimeTask>;
   getTask(taskId: string): Promise<RuntimeTask | null>;
   getHistory(taskId: string): Promise<TaskHistory | null>;
   getTaskSkillReferenceCatalog(

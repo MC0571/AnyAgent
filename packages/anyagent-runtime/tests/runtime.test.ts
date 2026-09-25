@@ -398,6 +398,98 @@ test("Runtime persists and forwards generic submission JSON without interpreting
   }
 });
 
+test("sidebar metadata stays product-owned across Engine revocation, Task closure, and Runtime restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-sidebar-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+    };
+    const terminalTask = runtime.closeTask({
+      ...identity,
+      authorizationId: task.authorizationId,
+      outcome: "abandoned",
+    });
+    runtime.revokeHostAuthorization(task.authorizationId, "provider grant revoked");
+
+    const pinned = runtime.setTaskPinned({ ...identity, pinned: true });
+    assert.equal(pinned.sidebarMetadata.pinOrder, 1);
+    assert.equal(
+      runtime.renameTask({ ...identity, title: "  local title  " }).sidebarMetadata.title,
+      "local title",
+    );
+    const archived = runtime.setTaskArchived({ ...identity, archived: true });
+    const firstUnread = runtime.setTaskUnread({ ...identity, unread: true });
+    runtime.setTaskUnread({
+      ...identity,
+      unread: false,
+      expectedUnreadAt: firstUnread.sidebarMetadata.unreadAt!,
+    });
+    const unread = runtime.setTaskUnread({ ...identity, unread: true });
+    const staleRead = runtime.setTaskUnread({
+      ...identity,
+      unread: false,
+      expectedUnreadAt: firstUnread.sidebarMetadata.unreadAt!,
+    });
+    assert.equal(staleRead.sidebarMetadata.unreadAt, unread.sidebarMetadata.unreadAt);
+    assert.ok(unread.sidebarMetadata.unreadAt! > firstUnread.sidebarMetadata.unreadAt!);
+    assert.ok(archived.sidebarMetadata.archivedAt !== null);
+    assert.ok(unread.sidebarMetadata.unreadAt !== null);
+    assert.equal(runtime.getTask(task.id)?.status, "abandoned");
+    assert.equal(runtime.getTask(task.id)?.updatedAt, terminalTask.updatedAt);
+    assert.equal(runtime.getTask(task.id)?.currentAuthorization.status, "revoked");
+    assert.ok(runtime.listTasks().some((item) => item.id === task.id));
+    assert.equal(engine.createSessionCalls, 1);
+    assert.equal(engine.runs.length, 0);
+    assert.equal(engine.interrupts, 0);
+
+    runtime.close();
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", new ManualEngine()]]),
+    });
+    const restored = runtime.getTask(task.id)!;
+    assert.deepEqual(restored.sidebarMetadata, {
+      title: "local title",
+      pinned: true,
+      pinOrder: 1,
+      archivedAt: archived.sidebarMetadata.archivedAt,
+      unreadAt: unread.sidebarMetadata.unreadAt,
+    });
+    assert.equal(restored.status, "abandoned");
+    assert.equal(restored.currentAuthorization.status, "revoked");
+    assert.equal(
+      runtime.setTaskArchived({ ...identity, archived: false }).sidebarMetadata.archivedAt,
+      null,
+    );
+    assert.equal(
+      runtime.setTaskUnread({
+        ...identity,
+        unread: false,
+        expectedUnreadAt: unread.sidebarMetadata.unreadAt!,
+      }).sidebarMetadata.unreadAt,
+      null,
+    );
+    assert.equal(
+      runtime.setTaskPinned({ ...identity, pinned: false }).sidebarMetadata.pinOrder,
+      null,
+    );
+    assert.throws(
+      () =>
+        runtime.setTaskPinned({ ...identity, participantId: "other-participant", pinned: true }),
+      /ownership/i,
+    );
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("Runtime queues text as Input history and promotes FIFO only after terminal evidence", async () => {
   const engine = new ManualEngine();
   const runtime = createTaskRuntime({

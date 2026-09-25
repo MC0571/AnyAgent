@@ -119,6 +119,99 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
   }
 });
 
+test("Host persists M1 Task sidebar metadata by Task ID and validates mutation ownership", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-host-sidebar-"));
+  setDataBaseDir(directory);
+  const createHost = () => createAnyAgentService({} as IZCodeAgentService);
+  let host = createHost();
+  try {
+    const first = await host.service.createTask({ engineId: "fake" });
+    const second = await host.service.createTask({ engineId: "fake" });
+    const taskUpdatedAt = first.updatedAt;
+    const identity = {
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+    };
+
+    assert.deepEqual(first.sidebarMetadata, {
+      title: null,
+      pinned: false,
+      pinOrder: null,
+      archivedAt: null,
+      unreadAt: null,
+    });
+    assert.equal(
+      (await host.service.setTaskPinned({ ...identity, pinned: true })).sidebarMetadata.pinOrder,
+      1,
+    );
+    assert.equal(
+      (
+        await host.service.setTaskPinned({
+          taskId: second.id,
+          participantId: second.participant.id,
+          sessionId: second.session.id,
+          pinned: true,
+        })
+      ).sidebarMetadata.pinOrder,
+      2,
+    );
+    await host.service.setTaskPinned({ ...identity, pinned: false });
+    assert.equal(
+      (await host.service.setTaskPinned({ ...identity, pinned: true })).sidebarMetadata.pinOrder,
+      3,
+    );
+    assert.equal(
+      (await host.service.renameTask({ ...identity, title: "  product title  " })).sidebarMetadata
+        .title,
+      "product title",
+    );
+    const unread = await host.service.setTaskUnread({ ...identity, unread: true });
+    assert.ok(unread.sidebarMetadata.unreadAt !== null);
+    const archived = await host.service.setTaskArchived({ ...identity, archived: true });
+    assert.ok(archived.sidebarMetadata.archivedAt !== null);
+    assert.ok((await host.service.listTasks()).some((task) => task.id === first.id));
+    assert.equal((await host.service.getTask(first.id))?.updatedAt, taskUpdatedAt);
+    await assert.rejects(
+      host.service.setTaskPinned({
+        ...identity,
+        participantId: second.participant.id,
+        pinned: false,
+      }),
+      /ownership/i,
+    );
+    host.host.revokeAuthorization(first.authorizationId, "sidebar test revocation");
+    const revokedUnread = await host.service.setTaskUnread({ ...identity, unread: true });
+    assert.ok(revokedUnread.sidebarMetadata.unreadAt !== null);
+
+    host.close();
+    host = createHost();
+    const restored = (await host.service.getTask(first.id))!;
+    assert.equal(restored.currentAuthorization.status, "revoked");
+    assert.deepEqual(restored.sidebarMetadata, {
+      title: "product title",
+      pinned: true,
+      pinOrder: 3,
+      archivedAt: archived.sidebarMetadata.archivedAt,
+      unreadAt: revokedUnread.sidebarMetadata.unreadAt,
+    });
+    assert.ok((await host.service.listTasks()).some((task) => task.id === first.id));
+    assert.equal(
+      (await host.service.setTaskArchived({ ...identity, archived: false })).sidebarMetadata
+        .archivedAt,
+      null,
+    );
+    assert.equal(
+      (await host.service.setTaskUnread({ ...identity, unread: false })).sidebarMetadata.unreadAt,
+      null,
+    );
+  } finally {
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("Host cold ZCode recovery keeps Task ownership and waits for compatible configuration", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-host-zcode-restore-"));
   setDataBaseDir(directory);
