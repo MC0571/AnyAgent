@@ -1,8 +1,8 @@
 # M1 修复集成候选复验（截至 2026-09-26）
 
-PR #37 已合并；当前已测 `main` 为 `9270714f827a4f4ddd01a0fe0051514dc32caabf`，合并前完整产品代码为 `d2c621e09693660a89e1fd290357ce5fa804c3f4`，比较基线为 `8732e7117666352e6252df3992a2cf25a2ccf478`；合并前最后一提交仅改证据，产品代码树相同。[合并后同一代码的真实 CLI 双轮与完成前流式](final-9270714/README.md)补齐 #21 的最终候选多轮场景。[本候选检查、正式桌面截图和双库存储核对](final-d2c621e/README.md)记录普通 Task 草稿、Fake A→B→A、真实 ZCode 旧 Session 显式恢复与新一轮、以及 M0 flag-off。`5b2a386` 发现的草稿丢失和 `ee88aa9` 独立复审发现的普通草稿／队列撤回稿竞态，均在 `d2c621e` 修复；前两提交仍作为历史缺陷证据，不充作最终候选通过。此前 [`3ca6872` 组合复验](final-3ca6872/README.md)及 [`2b06484` 原生能力复验](final-2b06484/README.md)保留各自产品提交归属；下方当前矩阵明确有限继承范围。
+PR #37 已合并；最终被测产品 `main` 提交为 `9270714f827a4f4ddd01a0fe0051514dc32caabf`，PR #38 仅补证据后当前 `main` 为 `83d4f2f60e7fa20752e84e32569245b374f8569f`，合并前完整产品代码为 `d2c621e09693660a89e1fd290357ce5fa804c3f4`，比较基线为 `8732e7117666352e6252df3992a2cf25a2ccf478`；合并前最后一提交仅改证据，产品代码树相同。[合并后同一代码的真实 CLI 双轮与完成前流式](final-9270714/README.md)补齐 #21 的最终候选多轮场景。[本候选检查、正式桌面截图和双库存储核对](final-d2c621e/README.md)记录普通 Task 草稿、Fake A→B→A、真实 ZCode 旧 Session 显式恢复与新一轮、以及 M0 flag-off。`5b2a386` 发现的草稿丢失和 `ee88aa9` 独立复审发现的普通草稿／队列撤回稿竞态，均在 `d2c621e` 修复；前两提交仍作为历史缺陷证据，不充作最终候选通过。此前 [`3ca6872` 组合复验](final-3ca6872/README.md)及 [`2b06484` 原生能力复验](final-2b06484/README.md)保留各自产品提交归属；下方当前矩阵明确有限继承范围。
 
-截至 2026-09-26 从 GitHub 核对，[#26](https://github.com/MC0571/AnyAgent/issues/26)、[#21](https://github.com/MC0571/AnyAgent/issues/21) 与 [#11](https://github.com/MC0571/AnyAgent/issues/11) 均保持 open（#11 已重新打开）。本文件更新收口证据状态；PR #37 已合并，Milestone #2 和上述 Issue 尚未关闭。
+截至 2026-09-26 最终收口，[PR #38](https://github.com/MC0571/AnyAgent/pull/38) 已合并，`main=83d4f2f60e7fa20752e84e32569245b374f8569f`；[#8](https://github.com/MC0571/AnyAgent/issues/8)、[#10](https://github.com/MC0571/AnyAgent/issues/10)、[#11](https://github.com/MC0571/AnyAgent/issues/11)、[#18](https://github.com/MC0571/AnyAgent/issues/18)、[#19](https://github.com/MC0571/AnyAgent/issues/19)、[#20](https://github.com/MC0571/AnyAgent/issues/20)、[#21](https://github.com/MC0571/AnyAgent/issues/21)、[#26](https://github.com/MC0571/AnyAgent/issues/26) 均附验收评论后关闭，[Milestone #2](https://github.com/MC0571/AnyAgent/milestone/2) 为 closed、0 open Issue。最终独立 reviewer 对该收口结论及 PR #38 证据复审通过，无未解决 P1/P2/P3 或 closure blocker。
 
 ## PR #35 原生提问空答复增量（`a314e828e378cdc85bebe480aad2dfea14c7a7cf`）
 
@@ -157,9 +157,9 @@ PR #37 合并后 `main=9270714f827a4f4ddd01a0fe0051514dc32caabf` 的产品树与
 | 当前能力与历史快照、配置／授权变化、业务终态、零 fallback／提权               | Host 派发前资格复核、Runtime 当前能力与历史分离；当前定向测试包含撤销／旧异步结果／越界零派发  | [当前测试](final-d2c621e/README.md)、上文 PR #28 授权撤销增量；旧 Task 冷恢复在本候选重新显式执行                                                                                           |
 | Approval／question 过期、重复、迟到与归属                                     | Runtime／Adapter 原请求绑定和一次答复约束；当前相关自动化通过                                  | [`2b06484` 真 CLI allow／deny／question](final-2b06484/README.md)、[`a314e82` 空答复](final-a314e82/README.md)；异常注入属于自动化层                                                        |
 | Stop request 与原生终态、unknown／对账、safe retry／副作用去重                | Runtime／Adapter 区分请求、送达、原生终态及未知；当前 failpoint 与 Runtime 测试通过            | [`b92d523` 真 CLI unknown-running Stop](final-b92d523/README.md)、[`92b66f2` 运行中观测中断](final-92b66f2/README.md)、上文 `7074b10` 安全重试增量；原始 stdio 物理断开不在这些证据证明范围 |
-| Core／Adapter 边界、产品／原生存储各自权威、越界切换拒绝                      | 当前类型、架构及全套检查通过；UI 不直接派发原生命令                                            | [`2b06484` 双库及负例](final-2b06484/README.md)、[本候选双库](final-d2c621e/crosscheck.json)；独立最终 closure review 尚待完成                                                              |
+| Core／Adapter 边界、产品／原生存储各自权威、越界切换拒绝                      | 当前类型、架构及全套检查通过；UI 不直接派发原生命令                                            | [`2b06484` 双库及负例](final-2b06484/README.md)、[本候选双库](final-d2c621e/crosscheck.json)；独立最终 closure review 已通过                                                                |
 
-**当前分类**：已复现的两个草稿 Product Parity 缺陷在 `d2c621e` 修复并有当前桌面／mounted DOM 证据；合并后 `9270714` 的同一产品代码又完成真实 CLI 双轮和完成前流式实测。目前没有已确认的未修产品或 Contract 技术缺陷。旧候选的附件／编辑、审批／question、Stop／unknown、Queue／compact、slash 保留原提交归属和适用的当前自动化复验，不写成 `9270714` 的实机重跑。当前没有已经确认的 Required／Conditional 豁免；最终独立 reviewer 补审新证据前 Milestone 与 Issues 保持 open。
+**当前分类**：已复现的两个草稿 Product Parity 缺陷在 `d2c621e` 修复并有当前桌面／mounted DOM 证据；合并后 `9270714` 的同一产品代码又完成真实 CLI 双轮和完成前流式实测。目前没有已确认的未修产品或 Contract 技术缺陷。旧候选的附件／编辑、审批／question、Stop／unknown、Queue／compact、slash 保留原提交归属和适用的当前自动化复验，不写成 `9270714` 的实机重跑。当前没有已经确认的 Required／Conditional 豁免；最终独立 reviewer 已核对新证据，PR #38 和 Milestone #2 均已关闭。本行只概述收口事实；各场景的产品提交仍以对应证据包为准。
 
 ## 历史候选收口矩阵（`5b2a386`，基线 `8732e711`）
 
