@@ -7,7 +7,10 @@ import { createAnyAgentService } from "../src/anyagent/createAnyAgentService.js"
 import { setDataBaseDir } from "../src/paths.js";
 import type { IConversationShareService } from "../src/conversation-share/conversationShare.js";
 import type { IPromptAttachmentTransferService } from "../src/prompt-attachment-transfer/promptAttachmentTransfer.js";
-import type { IZCodeAgentService } from "../src/zcode-agent/zcodeAgent.js";
+import {
+  ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE,
+  type IZCodeAgentService,
+} from "../src/zcode-agent/zcodeAgent.js";
 import { readTrustedZCodeAgentV4Connection } from "../src/zcode-agent/zcodeAgentConnectionScope.js";
 
 async function waitForCompleted(
@@ -110,6 +113,99 @@ test("one Host service drives Fake multiround and reports ZCode unavailability w
     );
   } finally {
     subscription.dispose();
+    host.close();
+    setDataBaseDir(null);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Host persists M1 Task sidebar metadata by Task ID and validates mutation ownership", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-host-sidebar-"));
+  setDataBaseDir(directory);
+  const createHost = () => createAnyAgentService({} as IZCodeAgentService);
+  let host = createHost();
+  try {
+    const first = await host.service.createTask({ engineId: "fake" });
+    const second = await host.service.createTask({ engineId: "fake" });
+    const taskUpdatedAt = first.updatedAt;
+    const identity = {
+      taskId: first.id,
+      participantId: first.participant.id,
+      sessionId: first.session.id,
+    };
+
+    assert.deepEqual(first.sidebarMetadata, {
+      title: null,
+      pinned: false,
+      pinOrder: null,
+      archivedAt: null,
+      unreadAt: null,
+    });
+    assert.equal(
+      (await host.service.setTaskPinned({ ...identity, pinned: true })).sidebarMetadata.pinOrder,
+      1,
+    );
+    assert.equal(
+      (
+        await host.service.setTaskPinned({
+          taskId: second.id,
+          participantId: second.participant.id,
+          sessionId: second.session.id,
+          pinned: true,
+        })
+      ).sidebarMetadata.pinOrder,
+      2,
+    );
+    await host.service.setTaskPinned({ ...identity, pinned: false });
+    assert.equal(
+      (await host.service.setTaskPinned({ ...identity, pinned: true })).sidebarMetadata.pinOrder,
+      3,
+    );
+    assert.equal(
+      (await host.service.renameTask({ ...identity, title: "  product title  " })).sidebarMetadata
+        .title,
+      "product title",
+    );
+    const unread = await host.service.setTaskUnread({ ...identity, unread: true });
+    assert.ok(unread.sidebarMetadata.unreadAt !== null);
+    const archived = await host.service.setTaskArchived({ ...identity, archived: true });
+    assert.ok(archived.sidebarMetadata.archivedAt !== null);
+    assert.ok((await host.service.listTasks()).some((task) => task.id === first.id));
+    assert.equal((await host.service.getTask(first.id))?.updatedAt, taskUpdatedAt);
+    await assert.rejects(
+      host.service.setTaskPinned({
+        ...identity,
+        participantId: second.participant.id,
+        pinned: false,
+      }),
+      /ownership/i,
+    );
+    host.host.revokeAuthorization(first.authorizationId, "sidebar test revocation");
+    const revokedUnread = await host.service.setTaskUnread({ ...identity, unread: true });
+    assert.ok(revokedUnread.sidebarMetadata.unreadAt !== null);
+
+    host.close();
+    host = createHost();
+    const restored = (await host.service.getTask(first.id))!;
+    assert.equal(restored.currentAuthorization.status, "revoked");
+    assert.deepEqual(restored.sidebarMetadata, {
+      title: "product title",
+      pinned: true,
+      pinOrder: 3,
+      archivedAt: archived.sidebarMetadata.archivedAt,
+      unreadAt: revokedUnread.sidebarMetadata.unreadAt,
+    });
+    assert.ok((await host.service.listTasks()).some((task) => task.id === first.id));
+    assert.equal(
+      (await host.service.setTaskArchived({ ...identity, archived: false })).sidebarMetadata
+        .archivedAt,
+      null,
+    );
+    assert.equal(
+      (await host.service.setTaskUnread({ ...identity, unread: false })).sidebarMetadata.unreadAt,
+      null,
+    );
+  } finally {
     host.close();
     setDataBaseDir(null);
     await rm(directory, { recursive: true, force: true });
@@ -813,7 +909,9 @@ test("Host Skill catalog reads require the matching active Task Session", async 
   const nativeCatalogReads: Array<Record<string, unknown>> = [];
   const nativeGoalReads: Array<Record<string, unknown>> = [];
   const nativePluginReads: Array<Record<string, unknown>> = [];
+  const nativeSlashCatalogReads: Array<Record<string, unknown>> = [];
   let nativeSessionSequence = 0;
+  let slashCatalogRuntimeUnavailable = false;
   let catalogAuthority: "session" | "workspace" = "session";
   const host = createAnyAgentService({
     initialize: async ({ workspacePath }: { workspacePath: string }) => ({
@@ -860,6 +958,23 @@ test("Host Skill catalog reads require the matching active Task Session", async 
           },
         ],
         diagnostics: [],
+      };
+    },
+    readWorkspacePresentation: async (params: {
+      workspacePath: string;
+      runtimePolicy?: string;
+    }) => {
+      nativeSlashCatalogReads.push(params);
+      if (slashCatalogRuntimeUnavailable)
+        throw Object.assign(new Error("ZCode Agent runtime is not running."), {
+          code: ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE,
+        });
+      return {
+        workspace: { workspacePath: params.workspacePath },
+        mode: "build",
+        slashCommands: [
+          { name: "review-note", description: "Review note", source: "custom" as const },
+        ],
       };
     },
     readSession: async (params: Record<string, unknown>) => {
@@ -923,6 +1038,29 @@ test("Host Skill catalog reads require the matching active Task Session", async 
       workspacePath: project,
       sessionId: first.session.nativeSessionId,
     });
+    await assert.rejects(
+      host.service.getTaskSlashCommandCatalog({ ...identity, sessionId: second.session.id }),
+      /ownership do not match/i,
+    );
+    assert.equal(
+      nativeSlashCatalogReads.length,
+      0,
+      "another Task's Session must not query the workspace slash command catalog",
+    );
+    assert.deepEqual(await host.service.getTaskSlashCommandCatalog(identity), {
+      slashCommands: [{ name: "review-note", description: "Review note", source: "custom" }],
+    });
+    assert.deepEqual(nativeSlashCatalogReads, [
+      { workspacePath: project, runtimePolicy: "existing-only" },
+    ]);
+    slashCatalogRuntimeUnavailable = true;
+    await assert.rejects(
+      host.service.getTaskSlashCommandCatalog(identity),
+      (error: unknown) =>
+        error instanceof Error && "kind" in error && error.kind === "temporarily-unavailable",
+      "an unavailable existing Agent runtime must not be reported as native unsupported",
+    );
+    assert.equal(nativeSlashCatalogReads.length, 2);
     await assert.rejects(
       host.service.getTaskPluginCatalog({ ...identity, sessionId: second.session.id }),
       /ownership do not match/i,

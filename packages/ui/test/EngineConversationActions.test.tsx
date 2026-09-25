@@ -690,6 +690,7 @@ test("product conversation forks into a fresh Task and displays only its verifie
       }
       return id === childTask.id && childCreated ? childHistory : null;
     },
+    getTaskSlashCommandCatalog: async () => ({ slashCommands: [] }),
     listEngines: async () => [engine],
     onDidChange: () => ({ dispose: () => {} }),
     stageAttachment: async (request: Record<string, unknown>) => {

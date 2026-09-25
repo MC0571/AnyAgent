@@ -225,6 +225,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     executionId: string;
     attachments?: Array<Record<string, unknown>>;
   }> = [];
+  const submittedTaskIds: string[] = [];
   const queuedRequests: Array<{
     text: string;
     delivery: string;
@@ -242,7 +243,11 @@ test("EngineConversation sends through the product composer and renders ordered 
   let clock = 1_000;
   const taskRecord = (id: string) => {
     const current = id === taskBId ? activeTaskB : activeTask;
-    return { ...current, currentEngine: engineProjection };
+    const currentEngineMatchesTask = current.currentEngine?.engineId === current.engine?.engineId;
+    return {
+      ...current,
+      currentEngine: currentEngineMatchesTask ? current.currentEngine : engineProjection,
+    };
   };
   const emit = (changedTaskId = taskId, changedHistory = history) => {
     for (const listener of changes) {
@@ -258,11 +263,15 @@ test("EngineConversation sends through the product composer and renders ordered 
       engineProbePaths.push(workspace?.workspacePath);
       if (workspace?.workspacePath === unavailableWorkspacePath)
         throw new Error("Project directory unavailable");
-      return [engineProjection];
+      return activeTaskB.engine.engineId === "zcode"
+        ? [engineProjection, activeTaskB.currentEngine]
+        : [engineProjection];
     },
     listTasks: async () => [taskRecord(taskId), taskRecord(taskBId)],
     getTask: async (id: string) => taskRecord(id),
     getHistory: async (id: string) => (id === taskBId ? historyB : history),
+    getTaskSlashCommandCatalog: async () => ({ slashCommands: [] }),
+    getAssistantFeedback: async () => ({ state: "current", values: {} }),
     stageAttachment: async (input: Record<string, unknown>) => {
       stagedAttachmentRequests.push(input);
       return {
@@ -285,6 +294,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       delivery?: string;
       idempotencyKey?: string;
     }) => {
+      submittedTaskIds.push(submittedTaskId);
       if (failNextSubmit) {
         failNextSubmit = false;
         throw new Error("Fake host rejected this input");
@@ -1585,7 +1595,10 @@ test("EngineConversation sends through the product composer and renders ordered 
             selectedTaskId,
             onSelectTask: () => {},
             composerDraft: drafts.drafts[selectedTaskId],
+            queueDraftStatus: drafts.queueDraftStatus,
+            taskComposerDraft: drafts.taskComposerDrafts[selectedTaskId],
             onRecoveredDraftChange: drafts.onRecoveredDraftChange,
+            onTaskComposerDraftChange: drafts.onTaskComposerDraftChange,
             onRecoveredConfigChange: drafts.onRecoveredConfigChange,
             onRecoveredAttachmentTicketsChange: drafts.onRecoveredAttachmentTicketsChange,
             draftStorageIssue: drafts.issues[selectedTaskId],
@@ -1599,7 +1612,11 @@ test("EngineConversation sends through the product composer and renders ordered 
           })
         : createElement("div", { "data-testid": "automation-page" });
     }
-    const queueAppFor = (selectedTaskId: string, page: "engine" | "automations" = "engine") =>
+    const queueAppFor = (
+      selectedTaskId: string,
+      page: "engine" | "automations" = "engine",
+      ownerKey = "queue-edit-workspace",
+    ) =>
       createElement(
         TooltipProvider,
         null,
@@ -1615,7 +1632,7 @@ test("EngineConversation sends through the product composer and renders ordered 
               createElement(
                 TabStoreProvider,
                 null,
-                createElement(QueueEditWorkspace, { selectedTaskId, page }),
+                createElement(QueueEditWorkspace, { key: ownerKey, selectedTaskId, page }),
               ),
             ),
           ),
@@ -1676,6 +1693,76 @@ test("EngineConversation sends through the product composer and renders ordered 
       readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)?.text,
       "Recovered after navigation",
     );
+
+    const coldRemountTaskScope = `anyagent-task-composer:${taskId}`;
+    const coldRemountQueueScope = `anyagent-queue-edit:${taskId}`;
+    const coldRemountTaskDraft = "Ordinary Task draft D";
+    const coldRemountQueueDraft = `${coldRemountTaskDraft}\n\nQueue draft Q`;
+    const coldRemountTicket = {
+      id: "cold-remount-queue-ticket",
+      fileName: "cold-remount-kept.txt",
+      mimeType: "text/plain",
+      sizeBytes: 6,
+    };
+    assert.equal(clearV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope), true);
+    assert.equal(clearV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope), true);
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope, {
+        text: coldRemountTaskDraft,
+      }),
+      true,
+    );
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope, {
+        text: coldRemountQueueDraft,
+        queueEditAttachmentTickets: [coldRemountTicket],
+        queueEditRecoveredInputIds: ["cold-remount-queue-item"],
+      }),
+      true,
+    );
+
+    // A fresh shell owner reloads both scopes. The queue recovery must remain authoritative
+    // after ChatPromptEditor's initial-value animation frame has run.
+    await act(async () => root.render(appFor(taskBId)));
+    queueControls = null;
+    await act(async () =>
+      root.render(queueAppFor(taskId, "engine", "queue-draft-precedence-cold-remount")),
+    );
+    const coldRemountedEditor = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & { __zcodeLexicalInputE2E?: { getText: () => string } };
+    await waitFor(
+      () => assert.equal(coldRemountedEditor.getAttribute("data-e2e-lexical-bridge"), "ready"),
+      "the cold-remounted composer should mount before checking queue recovery",
+    );
+    await act(async () => {
+      await new Promise<void>((resolve) => dom.window.requestAnimationFrame(() => resolve()));
+    });
+    assert.equal(coldRemountedEditor.__zcodeLexicalInputE2E?.getText(), coldRemountQueueDraft);
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope)?.text,
+      coldRemountQueueDraft,
+      "the composer mount must not erase recovered Q from the queue scope",
+    );
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope)?.text,
+      coldRemountTaskDraft,
+      "queue recovery must preserve the ordinary Task-scoped draft",
+    );
+    assert.match(
+      container.querySelector('[data-testid="engine-composer-attachments"]')?.textContent ?? "",
+      /cold-remount-kept\.txt/,
+      "the recovered queue attachment ticket should remain mounted",
+    );
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope, {
+        text: "Recovered after navigation",
+        queueEditRecoveredInputIds: ["input-queued-late"],
+      }),
+      true,
+    );
+    assert.equal(clearV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope), true);
+
     assert.equal(
       queueControls!.onQueueEditPrepare(taskBId, "queued-before-restart", {
         text: "Only after cancellation",
@@ -1825,6 +1912,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       "ordinary Composer text must not become a queue recovery draft",
     );
     await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText(""));
+    assert.equal(recoveredFileEditor.__zcodeLexicalInputE2E.getText(), "");
     historyB = {
       ...historyB,
       inputs: [
@@ -2282,6 +2370,117 @@ test("EngineConversation sends through the product composer and renders ordered 
       assert.ok(container.textContent?.includes("Host policy changed"));
       assert.ok(container.textContent?.includes("read-only"));
     }, "a revoked current Host grant should keep history available and block new work with its reason");
+
+    // Ordinary M1 drafts are scoped by product Task, including Fake Tasks without a native ID.
+    const taskDraftText = "DRAFT_A_UNSENT_5B2_926";
+    const taskDraftScope = `anyagent-task-composer:${taskId}`;
+    const taskBDraftScope = `anyagent-task-composer:${taskBId}`;
+    activeTask = { ...task, currentEngine: engineProjection };
+    activeTaskB = {
+      ...task,
+      id: taskBId,
+      authorizationId: "authorization-old-zcode-b",
+      engine: { ...task.engine, engineId: "zcode" },
+      currentEngine: { ...engineProjection, engineId: "zcode" },
+      participant: { ...task.participant, id: "participant-old-zcode-b" },
+      environment: { ...task.environment, id: "environment-old-zcode-b" },
+      session: {
+        ...task.session,
+        id: "session-old-zcode-b",
+        nativeSessionId: "native-old-zcode-b",
+      },
+    };
+    history = emptyHistory(taskId);
+    historyB = emptyHistory(taskBId);
+    unavailableWorkspacePath = null;
+    inspectorOpen = false;
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`);
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`);
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope);
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, taskBDraftScope);
+
+    const mountedComposerInput = () =>
+      container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]') as
+        | (HTMLElement & {
+            __zcodeLexicalInputE2E: {
+              getText: () => string;
+              setText: (text: string) => void;
+            };
+          })
+        | null;
+    await act(async () => root.render(queueAppFor(taskId, "engine", "draft-isolation-owner")));
+    await waitFor(() => {
+      const input = mountedComposerInput();
+      assert.ok(input?.__zcodeLexicalInputE2E);
+      assert.equal(input.__zcodeLexicalInputE2E.getText(), "");
+    }, "a fresh Fake Task should start with an empty composer");
+    await act(async () => mountedComposerInput()!.__zcodeLexicalInputE2E.setText(taskDraftText));
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope)?.text,
+      taskDraftText,
+    );
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`),
+      null,
+      "an ordinary unsent prompt must not be stored as a queue edit",
+    );
+
+    await act(async () => root.render(queueAppFor(taskBId, "engine", "draft-isolation-owner")));
+    await waitFor(() => {
+      const input = mountedComposerInput();
+      assert.ok(input?.__zcodeLexicalInputE2E);
+      assert.equal(input.__zcodeLexicalInputE2E.getText(), "");
+    }, "the old ZCode Task must not inherit Fake Task A's composer draft");
+    assert.equal(readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskBDraftScope), null);
+
+    // A new hook owner models a cold workspace remount and proves the V4 draft scope restores A.
+    await act(async () =>
+      root.render(queueAppFor(taskId, "engine", "draft-isolation-cold-remount")),
+    );
+    const returnedTaskAInput = mountedComposerInput();
+    assert.ok(returnedTaskAInput?.__zcodeLexicalInputE2E);
+    await waitFor(
+      () => assert.equal(returnedTaskAInput.__zcodeLexicalInputE2E.getText(), taskDraftText),
+      "Task A's ordinary draft should restore from the existing V4 composer store",
+    );
+
+    const submissionsBeforeDraft = submissions.length;
+    const taskSubmissionsBeforeDraft = submittedTaskIds.length;
+    failNextSubmit = true;
+    await act(async () =>
+      returnedTaskAInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    await waitFor(() => assert.equal(submittedTaskIds.length, taskSubmissionsBeforeDraft + 1));
+    assert.equal(submittedTaskIds.at(-1), taskId);
+    assert.equal(returnedTaskAInput.__zcodeLexicalInputE2E.getText(), taskDraftText);
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope)?.text,
+      taskDraftText,
+      "a rejected Host submission must leave A's draft recoverable",
+    );
+
+    await act(async () =>
+      returnedTaskAInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforeDraft + 1));
+    assert.deepEqual(submittedTaskIds.slice(-2), [taskId, taskId]);
+    assert.equal(submissions.at(-1)?.text, taskDraftText);
+    await waitFor(() => {
+      assert.equal(returnedTaskAInput.__zcodeLexicalInputE2E.getText(), "");
+      assert.equal(readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope), null);
+    }, "accepted Task A input should clear the corresponding saved draft");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -3152,7 +3351,6 @@ test("an active ZCode Harness task switches models within its Session and submit
   );
   const zcodeSessionStore = useZCodeSessionStore.getState();
   const originalSlashCommands = zcodeSessionStore.getWorkspaceState(workspacePath).slashCommands;
-  zcodeSessionStore.setSlashCommands(workspacePath, zcodeSlashCommands);
   const modelView = {
     revision: 1,
     providers: [
@@ -3196,8 +3394,12 @@ test("an active ZCode Harness task switches models within its Session and submit
   const selectedTaskIds: string[] = [];
   let createTaskError: Error | null = null;
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
+  const slashCatalogLookups: Array<Record<string, unknown>> = [];
   const goalStatusLookups: Array<Record<string, unknown>> = [];
   const pluginCatalogLookups: Array<Record<string, unknown>> = [];
+  let delaySlashCatalogTaskId: string | null = null;
+  let releaseDelayedSlashCatalogRead: (() => void) | null = null;
+  let rejectNextSlashCatalogRead = false;
   let delayNextPluginCatalogRead = false;
   let releasePluginCatalogRead: (() => void) | null = null;
   let rejectNextGoalStatusRead: ((error: Error) => void) | null = null;
@@ -3366,6 +3568,25 @@ test("an active ZCode Harness task switches models within its Session and submit
         ],
       };
     },
+    getTaskSlashCommandCatalog: async (input: Record<string, unknown>) => {
+      slashCatalogLookups.push(input);
+      if (rejectNextSlashCatalogRead) {
+        rejectNextSlashCatalogRead = false;
+        throw new Error("native workspace runtime unavailable");
+      }
+      if (input.taskId === delaySlashCatalogTaskId) {
+        delaySlashCatalogTaskId = null;
+        return await new Promise((resolve) => {
+          releaseDelayedSlashCatalogRead = () =>
+            resolve({
+              slashCommands: [
+                { name: "b-task-only", description: "Task B command", source: "custom" as const },
+              ],
+            });
+        });
+      }
+      return { slashCommands: zcodeSlashCommands };
+    },
     getTaskGoalStatus: async (input: Record<string, unknown>) => {
       goalStatusLookups.push(input);
       if (delayNextGoalStatusRead) {
@@ -3466,6 +3687,7 @@ test("an active ZCode Harness task switches models within its Session and submit
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  let slashCatalogRefreshVersion = 0;
   const appFor = (selectedTaskId: string) =>
     createElement(
       TooltipProvider,
@@ -3490,6 +3712,7 @@ test("an active ZCode Harness task switches models within its Session and submit
               createElement(EngineConversation, {
                 service: service as never,
                 selectedTaskId,
+                refreshVersion: slashCatalogRefreshVersion,
                 onSelectTask: (id) => {
                   if (id) selectedTaskIds.push(id);
                 },
@@ -3619,8 +3842,91 @@ test("an active ZCode Harness task switches models within its Session and submit
       input.focus();
       input.__zcodeLexicalInputE2E!.setText("/goal");
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.ok(container.querySelector('[data-option-id="slash:goal"]'));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:goal"]')),
+      "the active M1 Task should hydrate its slash picker from the Host catalog",
+    );
+    assert.deepEqual(slashCatalogLookups[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+    });
+
+    rejectNextSlashCatalogRead = true;
+    slashCatalogRefreshVersion += 1;
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(
+      () =>
+        assert.equal(slashCatalogLookups.filter((lookup) => lookup.taskId === taskId).length, 2),
+      "refresh should retry the current Task slash catalog",
+    );
+    await waitFor(
+      () => assert.equal(container.querySelector('[data-option-id="slash:goal"]'), null),
+      "a failed qualified catalog read should leave an empty picker instead of a stale command",
+    );
+    assert.equal(
+      container.querySelector<HTMLElement>("[data-testid='engine-slash-catalog-unavailable']")
+        ?.textContent,
+      "当前 CLI 命令目录暂不可用；恢复或刷新当前 Task 后重试。",
+      "catalog read failure should be explained without calling the command unsupported",
+    );
+    delaySlashCatalogTaskId = zcodeTaskB.id;
+    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    assert.equal(
+      container.querySelector("[data-testid='engine-slash-catalog-unavailable']"),
+      null,
+      "changing Tasks should clear the previous Task's failure notice",
+    );
+    await waitFor(
+      () => assert.ok(slashCatalogLookups.some((lookup) => lookup.taskId === zcodeTaskB.id)),
+      "Task B should request its own Host slash catalog",
+    );
+    let taskBInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E?: { setText: (value: string) => void };
+    };
+    await act(async () => taskBInput.__zcodeLexicalInputE2E!.setText("/b-task-only"));
+    assert.equal(
+      container.querySelector('[data-option-id="slash:b-task-only"]'),
+      null,
+      "a Task catalog should stay empty while its qualified Host read is pending",
+    );
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(
+      () => assert.ok(slashCatalogLookups.filter((lookup) => lookup.taskId === taskId).length >= 3),
+      "returning to Task A should read its catalog again",
+    );
+    input = container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]') as
+      | (HTMLElement & {
+          __zcodeLexicalInputE2E?: {
+            setText: (value: string) => void;
+            setTextWithPluginMentions: (value: string) => void;
+            getText: () => string;
+          };
+        })
+      | null;
+    assert.ok(input?.__zcodeLexicalInputE2E);
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/goal"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:goal"]')),
+      "returning to Task A should restore its Host catalog",
+    );
+    assert.equal(
+      container.querySelector("[data-testid='engine-slash-catalog-unavailable']"),
+      null,
+      "a successful catalog read should clear its failure notice",
+    );
+    assert.ok(
+      releaseDelayedSlashCatalogRead,
+      "Task B's delayed catalog read should still be pending",
+    );
+    await act(async () => releaseDelayedSlashCatalogRead!());
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:goal"]')),
+      "Task B's late result must not replace the selected Task A catalog",
+    );
     await act(async () => input.__zcodeLexicalInputE2E!.setText(""));
 
     for (const command of ["compact", "init", "skill"] as const) {
@@ -5124,6 +5430,7 @@ test("unknown native Session and Execution require explicit identity-bound recov
       };
       return activeTask;
     },
+    getTaskSlashCommandCatalog: async () => ({ slashCommands: [] }),
   };
   const services = {
     clientConfigService: { getSnapshot: async () => ({ pluginStoreOrder: null }) },

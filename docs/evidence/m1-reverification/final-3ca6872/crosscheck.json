@@ -1,0 +1,194 @@
+{
+  "testedProductCommit": "3ca6872e3a5464f2149e5c5c4c25eb35e8397589",
+  "scenario": "cold restart, product Task sidebar actions, explicit native Session resume, one next turn",
+  "isolation": {
+    "home": "/tmp/anyagent-opencode-go.aBEA0z/home",
+    "project": "/tmp/anyagent-opencode-go.aBEA0z/m2-final-project"
+  },
+  "productTask": {
+    "id": "task_31653add-af35-4377-897e-0bfc228ce437",
+    "status": "active",
+    "participantId": "participant_28392658-7fde-4617-9f7a-15af24cacfd9",
+    "sessionId": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+    "sidebarMetadata": {
+      "title": "M2_RC_3CA_SIDEBAR_TASK_926",
+      "pinned": false,
+      "pinOrder": null,
+      "archivedAt": null,
+      "unreadAt": null
+    },
+    "sidebarUnreadWatermark": 1790359271378,
+    "updatedAt": 1790355457279
+  },
+  "productSession": {
+    "id": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+    "status": "active",
+    "nativeSessionId": "sess_37e4b711-bef4-4ed3-beb0-9527cee45f30"
+  },
+  "resumeRound": {
+    "marker": "M2_RC_3CA_RESUME_R6_926",
+    "productInputId": "input_274fc664-4a77-4169-8831-61fdbe10ebb2",
+    "productInputStatus": "completed",
+    "productSessionId": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+    "productParticipantId": "participant_28392658-7fde-4617-9f7a-15af24cacfd9",
+    "productExecutionId": "execution_7abbe50a-d93f-4060-bcf5-c25b99a6c4fa",
+    "productExecutionStatus": "completed",
+    "nativeInput": {
+      "id": "queue_input_274fc664-4a77-4169-8831-61fdbe10ebb2",
+      "session_id": "sess_37e4b711-bef4-4ed3-beb0-9527cee45f30",
+      "status": "promoted",
+      "delivery": "startNow",
+      "admitted_sequence": 5,
+      "promoted_sequence": 5
+    },
+    "matchingProductInputCount": 1,
+    "matchingNativeInputCount": 1
+  },
+  "limits": [
+    "Final sidebarMetadata is after archive/restore and unpin; screenshots and App UI steps record intermediate states.",
+    "This scenario reuses an isolated native Session created on product commit 2b06484; this commit tests cold resume and a new turn, not first creation."
+  ],
+  "realNewTask": {
+    "taskId": "task_da128efe-ac23-4d02-82de-f72aee558285",
+    "participantId": "participant_15d3a79f-ad2d-400b-a788-cdd46552c9bb",
+    "sessionId": "session_0f21ac0b-77a2-48de-8aed-22d2c220fbf8",
+    "inputs": [
+      {
+        "id": "input_d84ddd68-f20e-4567-85d0-93ced96d9c1c",
+        "marker": "M2_RC_3CA_NEW_TASK_R1_926",
+        "status": "completed",
+        "executionId": "execution_3963dabd-4f8c-4586-91e1-5f61c258be19",
+        "executionStatus": "completed",
+        "submissionConfig": {
+          "mode": "build",
+          "planEnabled": false,
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "options": {
+              "reasoningLevel": "xhigh"
+            }
+          }
+        },
+        "nativeInput": {
+          "id": "queue_input_d84ddd68-f20e-4567-85d0-93ced96d9c1c",
+          "session_id": "sess_7add0d96-d4b1-44d1-a180-f0882a7f0e9a",
+          "status": "promoted",
+          "admitted_sequence": 0,
+          "promoted_sequence": 0
+        },
+        "nativeMessage": {
+          "id": "msg_muh9ujpd_158d70d5-b8be-4d16-8916-af15813b73ea",
+          "sequence": 0,
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "options": {
+              "reasoningLevel": "xhigh"
+            }
+          },
+          "planEnabled": 0
+        }
+      },
+      {
+        "id": "input_86fa3078-afaf-4ac4-8b79-8b932723550c",
+        "marker": "M2_RC_3CA_R2_MODEL_PLAN_926",
+        "status": "completed",
+        "executionId": "execution_804918d0-cc16-40ba-8060-dfbf23f2fbe8",
+        "executionStatus": "completed",
+        "submissionConfig": {
+          "mode": "build",
+          "planEnabled": true,
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "deepseek-v4.1-flash",
+            "options": {
+              "reasoningLevel": "max"
+            }
+          }
+        },
+        "nativeInput": {
+          "id": "queue_input_86fa3078-afaf-4ac4-8b79-8b932723550c",
+          "session_id": "sess_7add0d96-d4b1-44d1-a180-f0882a7f0e9a",
+          "status": "promoted",
+          "admitted_sequence": 1,
+          "promoted_sequence": 1
+        },
+        "nativeMessage": {
+          "id": "msg_muh9w0p9_18f7bef4-c2fd-47c7-996a-293a870e6d8f",
+          "sequence": 2,
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "deepseek-v4.1-flash",
+            "options": {
+              "reasoningLevel": "max"
+            }
+          },
+          "planEnabled": 1
+        }
+      }
+    ],
+    "nativeSessionId": "sess_7add0d96-d4b1-44d1-a180-f0882a7f0e9a"
+  },
+  "fakeTaskA": {
+    "taskId": "task_a38ae930-aeff-4c92-afa1-ddfee627e7c4",
+    "participantId": "participant_5815111e-ebf5-40d6-a938-3c0efc7b5c37",
+    "sessionId": "session_bdb61eb9-c992-4b2e-affb-343c32af7d7a",
+    "inputs": [
+      {
+        "id": "input_d1a661a0-8bf6-49a4-9594-2a1883c575b8",
+        "marker": "M2_RC_3CA_FAKE_A_R1_926",
+        "status": "completed",
+        "executionId": "execution_606ca725-7abb-4581-82fc-99b60ba7c213",
+        "executionStatus": "completed"
+      },
+      {
+        "id": "input_a273028a-fe24-4a97-8702-da96d381845c",
+        "marker": "M2_RC_3CA_FAKE_A_R2_926",
+        "status": "completed",
+        "executionId": "execution_ff8f4b48-af39-4d66-ab65-e59d326e3e69",
+        "executionStatus": "completed"
+      }
+    ]
+  },
+  "fakeTaskB": {
+    "taskId": "task_700cb64a-d713-41fa-a2b6-f5ea0ce0332b",
+    "participantId": "participant_71ba636a-6a3d-4412-ac3d-2d9d1faf8a7f",
+    "sessionId": "session_bfda4ba6-e3c3-4991-9f48-5cd80a513fc5",
+    "inputs": [
+      {
+        "id": "input_c3f0d8ed-2274-45f8-8b99-e05349497756",
+        "marker": "M2_RC_3CA_FAKE_B_R1_926",
+        "status": "completed",
+        "executionId": "execution_0b08ae65-3e33-4a3c-a25f-dcaa1ebc6272",
+        "executionStatus": "completed"
+      }
+    ]
+  },
+  "m0FlagOff": {
+    "marker": "M2_RC_3CA_M0_FLAG_OFF_926",
+    "result": "M0_3CA_OK_926",
+    "nativeSessionId": "sess_984fc9aa-3d58-4451-a927-67df394c1da2",
+    "nativeInputId": "queue_01a0d9c5-985c-701f-a852-268b5906770f",
+    "nativeUserMessageId": "msg_muha49t3_c1b74cd0-0b87-4c10-9fae-2d40ab1fc30f",
+    "nativeAssistantMessageId": "msg_muha49tf_28ba2f02-78bd-43ae-99a8-c0ed0a870622",
+    "flag": "ANYAGENT_M1_WORKBENCH=0",
+    "profile": "/tmp/anyagent-opencode-go.aBEA0z/electron-final-m0"
+  },
+  "streamingRetake": {
+    "marker": "M2_RC_3CA_STREAM_RETAKE_926",
+    "taskId": "task_da128efe-ac23-4d02-82de-f72aee558285",
+    "sessionId": "session_0f21ac0b-77a2-48de-8aed-22d2c220fbf8",
+    "inputId": "input_dbc296d1-db38-4b01-b64a-206149c9d0ec",
+    "status": "completed",
+    "nativeSessionId": "sess_7add0d96-d4b1-44d1-a180-f0882a7f0e9a",
+    "nativeInputId": "queue_input_dbc296d1-db38-4b01-b64a-206149c9d0ec",
+    "nativeUserMessageId": "msg_muhaanr8_f048f199-c613-4247-8d65-5f35d5c570b9",
+    "nativeAssistantMessageId": "msg_muhaanrr_123c6d7d-86ad-47f6-b14a-ec08fa5c1620",
+    "messageDeltaCount": 24,
+    "firstDeltaAt": 1790360316202,
+    "executionCompletedAt": 1790360322291,
+    "visibleBeforeCompletion": ["START_STREAM_RETAKE_926", "请求中断"],
+    "visibleAfterCompletion": ["END_STREAM_RETAKE_926", "发送"]
+  }
+}

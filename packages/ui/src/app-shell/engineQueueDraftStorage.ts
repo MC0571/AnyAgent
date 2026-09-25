@@ -8,6 +8,8 @@ import {
 } from "@/v4/composer/composerDraftStore.js";
 import { submissionModeSchema } from "@zcode/shared/zcode-protocol-v4";
 
+export const queueEditDraftScopeForTask = (taskId: string) => `anyagent-queue-edit:${taskId}`;
+
 export function prepareQueueEditDraft(
   workspacePath: string,
   workspaceIdentity: string | undefined,
@@ -39,7 +41,7 @@ export function recoverPreparedQueueEditDraft(
   taskId: string,
   inputId: string,
 ) {
-  const taskScope = `anyagent-queue-edit:${taskId}`;
+  const taskScope = queueEditDraftScopeForTask(taskId);
   const preparedScope = `${taskScope}:${inputId}`;
   const prepared = readV4ComposerDraft(workspacePath, workspaceIdentity, preparedScope);
   if (!prepared) return null;
@@ -89,7 +91,7 @@ export function updateRecoveredQueueAttachmentTickets(
 ): "ignored" | "updated" | "cleared" | "review-required" | "storage-failed" {
   if (!previous?.queueEditRecoveredInputIds?.length) return "ignored";
   if (previous.queueEditRequiresReview) return "review-required";
-  const taskScope = `anyagent-queue-edit:${taskId}`;
+  const taskScope = queueEditDraftScopeForTask(taskId);
   if (!tickets.length && !previous.text.trim()) {
     if (
       previous.queueEditRecoveredInputIds.some((inputId) =>
@@ -116,7 +118,7 @@ export function clearRecoveredQueueDraftText(
   taskId: string,
   previous: V4ComposerDraft,
 ): { cleared: boolean; marked: boolean } {
-  const taskScope = `anyagent-queue-edit:${taskId}`;
+  const taskScope = queueEditDraftScopeForTask(taskId);
   const unclearedIds = previous.queueEditRecoveredInputIds?.filter((inputId) =>
     readV4ComposerDraft(workspacePath, workspaceIdentity, `${taskScope}:${inputId}`),
   );
@@ -144,21 +146,26 @@ export function persistRecoveredQueueDraftText(
   text: string,
   editorStateJson?: string,
 ) {
-  return persistV4ComposerDraft(workspacePath, workspaceIdentity, `anyagent-queue-edit:${taskId}`, {
-    text,
-    ...(editorStateJson ? { editorStateJson } : {}),
-    ...(previous.mode ? { mode: previous.mode } : {}),
-    ...(previous.queueEditOriginalMode
-      ? { queueEditOriginalMode: previous.queueEditOriginalMode }
-      : {}),
-    ...(previous.modelSelection ? { modelSelection: previous.modelSelection } : {}),
-    ...(previous.queueEditAttachmentTickets
-      ? { queueEditAttachmentTickets: previous.queueEditAttachmentTickets }
-      : {}),
-    ...(previous.queueEditRecoveredInputIds
-      ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
-      : {}),
-  });
+  return persistV4ComposerDraft(
+    workspacePath,
+    workspaceIdentity,
+    queueEditDraftScopeForTask(taskId),
+    {
+      text,
+      ...(editorStateJson ? { editorStateJson } : {}),
+      ...(previous.mode ? { mode: previous.mode } : {}),
+      ...(previous.queueEditOriginalMode
+        ? { queueEditOriginalMode: previous.queueEditOriginalMode }
+        : {}),
+      ...(previous.modelSelection ? { modelSelection: previous.modelSelection } : {}),
+      ...(previous.queueEditAttachmentTickets
+        ? { queueEditAttachmentTickets: previous.queueEditAttachmentTickets }
+        : {}),
+      ...(previous.queueEditRecoveredInputIds
+        ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
+        : {}),
+    },
+  );
 }
 
 export function persistRecoveredQueueDraftConfig(
@@ -169,23 +176,28 @@ export function persistRecoveredQueueDraftConfig(
   config: NonNullable<EngineTaskComposerDraft["config"]>,
 ) {
   const mode = submissionModeSchema.safeParse(config.mode);
-  return persistV4ComposerDraft(workspacePath, workspaceIdentity, `anyagent-queue-edit:${taskId}`, {
-    text: previous.text,
-    ...(previous.editorStateJson ? { editorStateJson: previous.editorStateJson } : {}),
-    ...(mode.success ? { mode: mode.data } : previous.mode ? { mode: previous.mode } : {}),
-    ...(mode.success
-      ? { queueEditOriginalMode: mode.data }
-      : previous.queueEditOriginalMode
-        ? { queueEditOriginalMode: previous.queueEditOriginalMode }
+  return persistV4ComposerDraft(
+    workspacePath,
+    workspaceIdentity,
+    queueEditDraftScopeForTask(taskId),
+    {
+      text: previous.text,
+      ...(previous.editorStateJson ? { editorStateJson: previous.editorStateJson } : {}),
+      ...(mode.success ? { mode: mode.data } : previous.mode ? { mode: previous.mode } : {}),
+      ...(mode.success
+        ? { queueEditOriginalMode: mode.data }
+        : previous.queueEditOriginalMode
+          ? { queueEditOriginalMode: previous.queueEditOriginalMode }
+          : {}),
+      ...(config.modelSelection ? { modelSelection: config.modelSelection } : {}),
+      ...(previous.queueEditAttachmentTickets
+        ? { queueEditAttachmentTickets: previous.queueEditAttachmentTickets }
         : {}),
-    ...(config.modelSelection ? { modelSelection: config.modelSelection } : {}),
-    ...(previous.queueEditAttachmentTickets
-      ? { queueEditAttachmentTickets: previous.queueEditAttachmentTickets }
-      : {}),
-    ...(previous.queueEditRecoveredInputIds
-      ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
-      : {}),
-  });
+      ...(previous.queueEditRecoveredInputIds
+        ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
+        : {}),
+    },
+  );
 }
 
 export function finalizeSubmittedQueueDraft(
@@ -197,7 +209,7 @@ export function finalizeSubmittedQueueDraft(
 ): { textMatched: boolean; cleared: boolean; reviewRequired: boolean } {
   if (previous.text.trim() !== submittedText)
     return { textMatched: false, cleared: false, reviewRequired: true };
-  const taskScope = `anyagent-queue-edit:${taskId}`;
+  const taskScope = queueEditDraftScopeForTask(taskId);
   const unclearedIds = previous.queueEditRecoveredInputIds?.filter((inputId) =>
     readV4ComposerDraft(workspacePath, workspaceIdentity, `${taskScope}:${inputId}`),
   );
@@ -272,7 +284,7 @@ export function reconcilePreparedQueueEdits(
       (left.queuePosition ?? left.receivedAt ?? 0) -
         (right.queuePosition ?? right.receivedAt ?? 0) || left.id.localeCompare(right.id),
   )) {
-    const scopeId = `anyagent-queue-edit:${taskId}:${input.id}`;
+    const scopeId = `${queueEditDraftScopeForTask(taskId)}:${input.id}`;
     if (!readV4ComposerDraft(workspacePath, workspaceIdentity, scopeId)) continue;
     if (input.status === "cancelled") onCancelled(input.id);
     else if (["completed", "rejected", "stopped", "failed"].includes(input.status))

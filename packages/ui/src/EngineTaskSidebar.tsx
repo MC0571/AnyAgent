@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Ellipsis } from "lucide-react";
 import type { IAnyAgentService } from "@zcode/services";
 import { TaskListRowShell } from "@/TaskListRowShell.js";
@@ -28,50 +21,27 @@ import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
 import {
+  EngineTaskMenuItems,
+  engineTaskSidebarMetadata,
+  engineTaskTitle,
+  isEngineTaskArchived,
+  isEngineTaskPinned,
+  taskSidebarIdentity,
+  useEngineTaskRename,
+} from "@/EngineTaskSidebarMenu.js";
+export {
+  engineTaskSidebarMetadata,
+  engineTaskTitle,
+  isEngineTaskArchived,
+  isEngineTaskPinned,
+} from "@/EngineTaskSidebarMenu.js";
+import {
   TASK_GROUP_ROW_CLASS,
   TASK_GROUP_ROW_LINE_CLASS,
 } from "@/workspace-grouped-tasks/types.js";
 
 export type EngineTask = NonNullable<Awaited<ReturnType<IAnyAgentService["getTask"]>>>;
 type EngineHistory = Awaited<ReturnType<IAnyAgentService["getHistory"]>>;
-
-function EngineTaskMenuItems({
-  Item,
-  taskId,
-  intl,
-}: {
-  Item: ComponentType<{
-    children: ReactNode;
-    disabled?: boolean;
-    title?: string;
-    onSelect?: () => void;
-  }>;
-  taskId: string;
-  intl: { formatMessage: (message: { id: string }) => string };
-}) {
-  const unsupported = intl.formatMessage({ id: "taskList.engineActionUnsupported" });
-  return (
-    <>
-      {(["pin", "rename", "archive", "markAsUnread"] as const).map((action) => (
-        <Item key={action} disabled title={unsupported}>
-          {intl.formatMessage({ id: `taskList.${action}` })}
-          <span className="ml-auto text-foreground-subtlest">
-            {intl.formatMessage({ id: "taskList.engineActionUnavailableShort" })}
-          </span>
-        </Item>
-      ))}
-      <Item
-        onSelect={() => {
-          void navigator.clipboard
-            .writeText(taskId)
-            .catch(() => toast(intl.formatMessage({ id: "taskList.copyTaskIdFailed" })));
-        }}
-      >
-        {intl.formatMessage({ id: "taskList.copyTaskId" })}
-      </Item>
-    </>
-  );
-}
 
 function titleFromHistory(history: EngineHistory): string | null {
   const first = history?.inputs.reduce<(typeof history.inputs)[number] | null>(
@@ -207,6 +177,7 @@ export function EngineTaskRow({
   task,
   title,
   active,
+  service = null,
   onSelectTask,
   onOpenContextMenu,
   variant = "default",
@@ -214,11 +185,13 @@ export function EngineTaskRow({
   task: EngineTask;
   title: string;
   active: boolean;
+  service?: IAnyAgentService | null;
   onSelectTask: (taskId: string) => void;
   onOpenContextMenu?: (taskId: string) => void;
   variant?: "default" | "grouped";
 }) {
   const { intl } = useZCodeIntl();
+  const rename = useEngineTaskRename(task, title, service);
   const menu = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -239,10 +212,28 @@ export function EngineTaskRow({
         align="end"
         onClick={(event) => event.stopPropagation()}
       >
-        <EngineTaskMenuItems Item={DropdownMenuItem} taskId={task.id} intl={intl} />
+        <EngineTaskMenuItems
+          Item={DropdownMenuItem}
+          task={task}
+          service={service}
+          onRename={rename.start}
+          intl={intl}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
+  const handleSelectTask = () => {
+    onSelectTask(task.id);
+    const expectedUnreadAt = engineTaskSidebarMetadata(task).unreadAt;
+    if (!service || expectedUnreadAt === null) return;
+    void service
+      .setTaskUnread({
+        ...taskSidebarIdentity(task),
+        unread: false,
+        expectedUnreadAt,
+      })
+      .catch(() => toast(intl.formatMessage({ id: "taskList.markAsUnreadFailed" })));
+  };
   if (variant === "grouped") {
     return (
       <div className="rounded-lg border border-transparent py-px">
@@ -256,17 +247,20 @@ export function EngineTaskRow({
             TASK_GROUP_ROW_CLASS,
             active ? "bg-selected" : "hover:bg-surface-hover",
           )}
-          onClick={() => onSelectTask(task.id)}
+          onClick={handleSelectTask}
           onContextMenu={() => onOpenContextMenu?.(task.id)}
           onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
-              onSelectTask(task.id);
+              handleSelectTask();
             }
           }}
         >
           <span className={TASK_GROUP_ROW_LINE_CLASS}>
+            {engineTaskSidebarMetadata(task).unreadAt !== null ? (
+              <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-primary" />
+            ) : null}
             <TaskTitleOverflowText as="span" className="text-foreground" title={title}>
               {title}
             </TaskTitleOverflowText>
@@ -276,33 +270,39 @@ export function EngineTaskRow({
             {menu}
           </span>
         </div>
+        {rename.dialog}
       </div>
     );
   }
   return (
-    <TaskListRowShell
-      taskId={task.id}
-      isActive={active}
-      onActivate={() => onSelectTask(task.id)}
-      onContextMenu={() => onOpenContextMenu?.(task.id)}
-      aria-current={active ? "page" : undefined}
-      className="items-center"
-      leading={
-        task.status === "failed" || task.status === "abandoned" ? (
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
-        ) : task.status === "active" ? (
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-border" />
-        ) : null
-      }
-    >
-      <span className="flex min-w-0 flex-1 items-center justify-between gap-2 text-ui-base">
-        <span className="truncate text-foreground">{title}</span>
-        <span className="shrink-0 text-foreground-subtle">
-          {formatTaskRelativeTime(task.updatedAt, intl)}
+    <>
+      <TaskListRowShell
+        taskId={task.id}
+        isActive={active}
+        onActivate={handleSelectTask}
+        onContextMenu={() => onOpenContextMenu?.(task.id)}
+        aria-current={active ? "page" : undefined}
+        className="items-center"
+        leading={
+          engineTaskSidebarMetadata(task).unreadAt !== null ? (
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
+          ) : task.status === "failed" || task.status === "abandoned" ? (
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
+          ) : task.status === "active" ? (
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-border" />
+          ) : null
+        }
+      >
+        <span className="flex min-w-0 flex-1 items-center justify-between gap-2 text-ui-base">
+          <span className="truncate text-foreground">{title}</span>
+          <span className="shrink-0 text-foreground-subtle">
+            {formatTaskRelativeTime(task.updatedAt, intl)}
+          </span>
         </span>
-      </span>
-      {menu}
-    </TaskListRowShell>
+        {menu}
+      </TaskListRowShell>
+      {rename.dialog}
+    </>
   );
 }
 
@@ -310,11 +310,13 @@ export function EngineGroupedTaskRow({
   task,
   title,
   active,
+  service,
   onSelectTask,
 }: {
   task: EngineTask;
   title: string;
   active: boolean;
+  service?: IAnyAgentService | null;
   onSelectTask: (taskId: string) => void;
 }) {
   return (
@@ -325,21 +327,40 @@ export function EngineGroupedTaskRow({
             task={task}
             title={title}
             active={active}
+            service={service}
             onSelectTask={onSelectTask}
             variant="grouped"
           />
         </div>
       </ContextMenuTrigger>
-      <EngineTaskContextMenuContent taskId={task.id} />
+      <EngineTaskContextMenuContent task={task} title={title} service={service} />
     </ContextMenu>
   );
 }
 
-export function EngineTaskContextMenuContent({ taskId }: { taskId: string }) {
+export function EngineTaskContextMenuContent({
+  task,
+  title,
+  service = null,
+}: {
+  task: EngineTask;
+  title?: string;
+  service?: IAnyAgentService | null;
+}) {
   const { intl } = useZCodeIntl();
+  const rename = useEngineTaskRename(task, title ?? engineTaskTitle(task), service);
   return (
-    <ContextMenuContent className="w-52">
-      <EngineTaskMenuItems Item={ContextMenuItem} taskId={taskId} intl={intl} />
-    </ContextMenuContent>
+    <>
+      <ContextMenuContent className="w-52">
+        <EngineTaskMenuItems
+          Item={ContextMenuItem}
+          task={task}
+          service={service}
+          onRename={rename.start}
+          intl={intl}
+        />
+      </ContextMenuContent>
+      {rename.dialog}
+    </>
   );
 }

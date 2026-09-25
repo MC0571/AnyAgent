@@ -19,6 +19,7 @@ import { createSharedContextImporter } from "./sharedContextImporter.js";
 import { createZCodeAdapter } from "./zcodeAdapter.js";
 import { createAnyAgentHostAuthorizationControl } from "./hostAuthorizationControl.js";
 import type { IAnyAgentService } from "./anyAgentService.js";
+import { createTaskSlashCommandCatalogReader } from "./taskSlashCommandCatalog.js";
 
 /** One Host-owned Runtime behind the desktop product channel. */
 export function createAnyAgentService(
@@ -196,15 +197,13 @@ export function createAnyAgentService(
       };
     },
     listEngines,
-    async listTasks() {
-      return runtime.listTasks();
-    },
-    async getTask(taskId) {
-      return runtime.getTask(taskId);
-    },
-    async getHistory(taskId) {
-      return runtime.getHistory(taskId);
-    },
+    listTasks: async () => runtime.listTasks(),
+    setTaskPinned: async (input) => runtime.setTaskPinned(input),
+    renameTask: async (input) => runtime.renameTask(input),
+    setTaskArchived: async (input) => runtime.setTaskArchived(input),
+    setTaskUnread: async (input) => runtime.setTaskUnread(input),
+    getTask: async (taskId) => runtime.getTask(taskId),
+    getHistory: async (taskId) => runtime.getHistory(taskId),
     async getTaskSkillReferenceCatalog(input) {
       const catalog = await runtime.readQualifiedTaskSession(input, async (target) => {
         if (target.engineId !== "zcode")
@@ -237,6 +236,7 @@ export function createAnyAgentService(
         })),
       };
     },
+    ...createTaskSlashCommandCatalogReader(runtime, agentScope.service),
     async getTaskPluginCatalog(input) {
       const catalog = await runtime.readQualifiedTaskSession(input, async (target) => {
         if (target.engineId !== "zcode")

@@ -1924,7 +1924,16 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                                   ? engineComposerDrafts.drafts[engineSelectedTaskId]
                                   : undefined
                               }
+                              queueDraftStatus={engineComposerDrafts.queueDraftStatus}
+                              taskComposerDraft={
+                                engineSelectedTaskId
+                                  ? engineComposerDrafts.taskComposerDrafts[engineSelectedTaskId]
+                                  : undefined
+                              }
                               onRecoveredDraftChange={engineComposerDrafts.onRecoveredDraftChange}
+                              onTaskComposerDraftChange={
+                                engineComposerDrafts.onTaskComposerDraftChange
+                              }
                               onRecoveredConfigChange={engineComposerDrafts.onRecoveredConfigChange}
                               draftStorageIssue={
                                 engineSelectedTaskId

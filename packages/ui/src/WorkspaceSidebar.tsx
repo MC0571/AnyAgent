@@ -587,10 +587,9 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     taskOrganizeBy,
   });
   const engineTaskData = useEngineTaskSidebarData({
-    service: taskViewMode === "workspace" && onSelectEngineTask ? (engineService ?? null) : null,
-    onRefresh: taskViewMode === "workspace" ? onRefreshEngineState : undefined,
-    onNativeSessionIdsChange:
-      taskViewMode === "workspace" ? handleNativeSessionIdsChange : undefined,
+    service: onSelectEngineTask ? (engineService ?? null) : null,
+    onRefresh: onRefreshEngineState,
+    onNativeSessionIdsChange: handleNativeSessionIdsChange,
   });
   const projectEngineTasksByPath = useMemo(() => {
     const grouped = new Map<string, EngineTask[]>();
@@ -1430,6 +1429,10 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                   activeWorkspaceIdentity={workspaceIdentity}
                   activeTaskId={activeTaskId}
                   taskSortBy={taskSortBy}
+                  engineTasks={engineTaskData.tasks}
+                  engineTitles={engineTaskData.titles}
+                  engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
+                  onSelectEngineTask={onSelectEngineTask}
                   onSelectTask={handleTaskRowSelect}
                   onOpenFileTree={(target) => {
                     setFileTreeTarget(target);
@@ -1445,8 +1448,12 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                     activeWorkspacePath={workspacePath}
                     activeWorkspaceIdentity={workspaceIdentity}
                     activeTaskId={activeTaskId}
+                    engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
                     sortBy={taskSortBy}
                     onSelectTask={onSelectTask}
+                    engineTasks={engineTaskData.tasks}
+                    engineTitles={engineTaskData.titles}
+                    onSelectEngineTask={onSelectEngineTask}
                   />
                 ) : taskViewMode === "grouped" ? (
                   <WorkspaceGroupedTasksSection
@@ -1469,6 +1476,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                     onOpenAutomations={handleOpenAutomationsMain}
                     hiddenNativeTaskIds={hiddenNativeTaskIds}
                     engineService={engineService}
+                    engineTaskData={engineTaskData}
                     engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
                     onSelectEngineTask={onSelectEngineTask}
                     onRefreshEngineState={onRefreshEngineState}
@@ -1484,6 +1492,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                     hiddenTaskIds={hiddenNativeTaskIds}
                     onSelectTask={handleTaskRowSelect}
                     engineService={engineService}
+                    engineTaskData={engineTaskData}
                     engineSelectedTaskId={engineActive ? engineSelectedTaskId : null}
                     onSelectEngineTask={onSelectEngineTask}
                     onRefreshEngineState={onRefreshEngineState}

@@ -2,6 +2,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { ZCodeTaskMeta } from "@zcode/shared";
+import {
+  EngineTaskRow,
+  engineTaskSidebarMetadata,
+  engineTaskTitle,
+  type EngineTask,
+} from "@/EngineTaskSidebar.js";
+import { shortId } from "@/EngineUiParts.js";
 import { toast } from "@/components/ui/toast.js";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
@@ -49,6 +56,10 @@ export function WorkspacePinnedTasksSection({
   activeWorkspaceIdentity,
   activeTaskId,
   taskSortBy,
+  engineTasks = [],
+  engineTitles = {},
+  engineSelectedTaskId,
+  onSelectEngineTask,
   onSelectTask,
   onOpenFileTree,
 }: {
@@ -57,6 +68,10 @@ export function WorkspacePinnedTasksSection({
   activeWorkspaceIdentity?: string;
   activeTaskId: string | null;
   taskSortBy: "created" | "updated";
+  engineTasks?: readonly EngineTask[];
+  engineTitles?: Readonly<Record<string, string>>;
+  engineSelectedTaskId?: string | null;
+  onSelectEngineTask?: (taskId: string) => void;
   onSelectTask: (
     targetWorkspacePath: string,
     taskId: string,
@@ -139,7 +154,26 @@ export function WorkspacePinnedTasksSection({
       compareZCodeTaskListItems(left, right, taskSortBy),
     );
   }, [localItems, remoteItems, taskSortBy]);
-  const items = showAllTasks ? sortedItems : sortedItems.slice(0, collapsedLimit);
+  const enginePinnedTasks = useMemo(
+    () =>
+      engineTasks
+        .filter((task) => {
+          const metadata = engineTaskSidebarMetadata(task);
+          return metadata.pinned && metadata.archivedAt === null;
+        })
+        .sort((left, right) => {
+          const leftOrder = engineTaskSidebarMetadata(left).pinOrder ?? Number.MAX_SAFE_INTEGER;
+          const rightOrder = engineTaskSidebarMetadata(right).pinOrder ?? Number.MAX_SAFE_INTEGER;
+          return leftOrder - rightOrder || right.updatedAt - left.updatedAt;
+        }),
+    [engineTasks],
+  );
+  const items = showAllTasks
+    ? sortedItems
+    : sortedItems.slice(0, Math.max(0, collapsedLimit - enginePinnedTasks.length));
+  const visibleEnginePinnedTasks = showAllTasks
+    ? enginePinnedTasks
+    : enginePinnedTasks.slice(0, Math.max(0, collapsedLimit - items.length));
   const total = sortedItems.length;
   const syncingRemoteWorkspaces = workspaceTabs.some((tab) => {
     if (!tab.workspaceIdentity && !tab.remoteTarget && !tab.remoteSessionId) {
@@ -151,7 +185,7 @@ export function WorkspacePinnedTasksSection({
       ],
     );
   });
-  const canToggleExpanded = total > collapsedLimit;
+  const canToggleExpanded = total + enginePinnedTasks.length > collapsedLimit;
   const sectionTitle = intl.formatMessage({ id: "taskList.pinnedSection" });
   const activeWorkspaceKey = buildTaskWorkspaceKey(activeWorkspacePath, activeWorkspaceIdentity);
   const itemByKey = useMemo(() => {
@@ -461,7 +495,7 @@ export function WorkspacePinnedTasksSection({
     ? resolveTaskServices(contextMenuItem.workspaceIdentity)
     : null;
 
-  if (items.length === 0) {
+  if (items.length === 0 && visibleEnginePinnedTasks.length === 0) {
     // 切换/加入工作区时 pinned 查询会先进入 loading，但此时没有可展示的数据。
     // 不能仍渲染“已置顶 + 正在获取任务”，否则侧栏每次切换都出现一次无实际帮助的 loading。
     // 有缓存数据时继续走下面的正常渲染路径，保持 stale-while-revalidate 的展示体验。
@@ -571,6 +605,19 @@ export function WorkspacePinnedTasksSection({
                   onOpenTaskContextMenu={handlers.onOpenTaskContextMenu}
                   onOpenFileTree={onOpenFileTree ? handlers.onOpenFileTree : undefined}
                   intl={intl}
+                />
+              );
+            })}
+            {visibleEnginePinnedTasks.map((task) => {
+              const title = engineTaskTitle(task, engineTitles[task.id]) || shortId(task.id);
+              return (
+                <EngineTaskRow
+                  key={`engine:${task.id}`}
+                  task={task}
+                  title={title}
+                  active={task.id === engineSelectedTaskId}
+                  service={baseServices.anyAgentService}
+                  onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
                 />
               );
             })}

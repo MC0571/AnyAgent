@@ -1,0 +1,1172 @@
+{
+  "schemaVersion": 1,
+  "candidate": {
+    "productCommit": "f8f0d9cd0dcff67caefe6835d79467d03dcce91e",
+    "branch": "fix/m2-final-rc",
+    "verificationScope": "final macOS desktop RC; isolated AnyAgent product store, ZCode native CLI DB and isolated project"
+  },
+  "sources": {
+    "productDatabaseAlias": "isolatedHome/anyagent-m1.sqlite",
+    "nativeDatabaseAlias": "isolatedHome/.zcode/cli/db/db.sqlite",
+    "nativeTablesRead": ["session_input", "session_entry", "message", "part"],
+    "productTablesRead": ["runtime_records"],
+    "fileChecks": "isolated project files checked by path, size and SHA-256; raw contents were not written to this report",
+    "privacy": "No credentials, provider configuration secrets, full prompts, answer text or raw event payloads are included."
+  },
+  "realZcode": {
+    "taskA": {
+      "identity": {
+        "taskId": "task_be2ae963-20c2-4f07-9c0b-b16dee2bccb5",
+        "participantId": "participant_bb034b3d-d6a4-4843-86f4-018413a97ac2",
+        "sessionId": "session_1cd1d6fc-675c-44f6-bd1a-4b9adf275ed3",
+        "nativeSessionId": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+        "taskStatus": "active",
+        "participantStatus": "active",
+        "sessionRecordStatus": "unknown",
+        "engineId": "zcode",
+        "engineLabel": null,
+        "productSessionRecordCount": 1
+      },
+      "inputs": [
+        {
+          "scenario": "initialRealCliTurn",
+          "inputId": "input_d1d79119-aa20-45af-9c4a-c6013860b061",
+          "createdAtMs": 1790346813952,
+          "productStatus": "completed",
+          "requestedDelivery": "startNow",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_7056c761-22a1-4296-85f3-f34f15fdf3ab",
+            "status": "completed",
+            "nativeKey": "input_d1d79119-aa20-45af-9c4a-c6013860b061",
+            "startedAtMs": 1790346814016,
+            "terminalAtMs": 1790346823406
+          },
+          "nativeCrosscheck": {
+            "nativeInputId": "queue_input_d1d79119-aa20-45af-9c4a-c6013860b061",
+            "nativeStatus": "promoted",
+            "admittedSequence": 0,
+            "promotedSequence": 0,
+            "promotedMessageId": "msg_muh29mwt_786b63e1-03ea-4c97-bda0-c19e39ea8ff3",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        },
+        {
+          "scenario": "sameProviderMimoFailure",
+          "inputId": "input_5586a0e1-8238-4881-b880-1e156b8d1a66",
+          "createdAtMs": 1790346919473,
+          "productStatus": "failed",
+          "requestedDelivery": "startNow",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "mimo-v2.6-flash-free",
+            "reasoningLevel": "enabled"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_11bfcb20-120d-4bcc-8120-8556794b22d2",
+            "status": "failed",
+            "nativeKey": "input_5586a0e1-8238-4881-b880-1e156b8d1a66",
+            "startedAtMs": 1790346919494,
+            "terminalAtMs": 1790346921281
+          },
+          "nativeCrosscheck": {
+            "nativeInputId": "queue_input_5586a0e1-8238-4881-b880-1e156b8d1a66",
+            "nativeStatus": "promoted",
+            "admittedSequence": 1,
+            "promotedSequence": 1,
+            "promotedMessageId": "msg_muh2bwar_7421f8fa-770c-4a3c-a887-beca37f5b23b",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "mimo-v2.6-flash-free",
+              "reasoningLevel": "enabled"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        },
+        {
+          "scenario": "sameProviderDeepseekSuccess",
+          "inputId": "input_c71e4aad-41ae-417a-9cd9-330ea0b27800",
+          "createdAtMs": 1790346950803,
+          "productStatus": "completed",
+          "requestedDelivery": "startNow",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "deepseek-v4.1-flash",
+            "reasoningLevel": "max"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_d6dca44f-3136-489c-9925-fd621ad7b67e",
+            "status": "completed",
+            "nativeKey": "input_c71e4aad-41ae-417a-9cd9-330ea0b27800",
+            "startedAtMs": 1790346950820,
+            "terminalAtMs": 1790346954317
+          },
+          "nativeCrosscheck": {
+            "nativeInputId": "queue_input_c71e4aad-41ae-417a-9cd9-330ea0b27800",
+            "nativeStatus": "promoted",
+            "admittedSequence": 2,
+            "promotedSequence": 2,
+            "promotedMessageId": "msg_muh2ckgw_8e8ac2ae-6691-48e8-94f6-ebef055cbdb9",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "deepseek-v4.1-flash",
+              "reasoningLevel": "max"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        },
+        {
+          "scenario": "firstPostRestartResumeTurn",
+          "inputId": "input_00f838f0-8cf0-46f5-8799-0fedd72fce99",
+          "createdAtMs": 1790347135417,
+          "productStatus": "completed",
+          "requestedDelivery": "startNow",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "deepseek-v4.1-flash",
+            "reasoningLevel": "max"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_cfe1d306-3186-4524-a649-323f37d46e01",
+            "status": "completed",
+            "nativeKey": "input_00f838f0-8cf0-46f5-8799-0fedd72fce99",
+            "startedAtMs": 1790347135455,
+            "terminalAtMs": 1790347138519
+          },
+          "nativeCrosscheck": {
+            "nativeInputId": "queue_input_00f838f0-8cf0-46f5-8799-0fedd72fce99",
+            "nativeStatus": "promoted",
+            "admittedSequence": 3,
+            "promotedSequence": 3,
+            "promotedMessageId": "msg_muh2gixn_18c5b7b0-f440-4819-a533-a9f7379bbebe",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "deepseek-v4.1-flash",
+              "reasoningLevel": "max"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        },
+        {
+          "scenario": "sameProviderQwenFollowup",
+          "inputId": "input_7f9b26e3-fb02-432c-8f5d-937092ed513b",
+          "createdAtMs": 1790347186489,
+          "productStatus": "completed",
+          "requestedDelivery": "startNow",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_6ebdf81d-6937-4f6e-94ea-b3bd1ea19176",
+            "status": "completed",
+            "nativeKey": "input_7f9b26e3-fb02-432c-8f5d-937092ed513b",
+            "startedAtMs": 1790347186510,
+            "terminalAtMs": 1790347201951
+          },
+          "nativeCrosscheck": {
+            "nativeInputId": "queue_input_7f9b26e3-fb02-432c-8f5d-937092ed513b",
+            "nativeStatus": "promoted",
+            "admittedSequence": 4,
+            "promotedSequence": 4,
+            "promotedMessageId": "msg_muh2hmbv_7974bc2e-ea8f-4eef-aec2-50e26275e6c2",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        },
+        {
+          "scenario": "secondPostRestartStreamingTurn",
+          "inputId": "input_5c14df3a-b4bf-430b-99ba-e3bc65cb303d",
+          "createdAtMs": 1790348402946,
+          "productStatus": "completed",
+          "requestedDelivery": "startNow",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_46bd62d8-73a3-4b36-83d4-7371296c0f48",
+            "status": "completed",
+            "nativeKey": "input_5c14df3a-b4bf-430b-99ba-e3bc65cb303d",
+            "startedAtMs": 1790348402976,
+            "terminalAtMs": 1790348451876
+          },
+          "nativeCrosscheck": {
+            "nativeInputId": "queue_input_5c14df3a-b4bf-430b-99ba-e3bc65cb303d",
+            "nativeStatus": "promoted",
+            "admittedSequence": 5,
+            "promotedSequence": 5,
+            "promotedMessageId": "msg_muh37oyk_da9fd6fa-8414-49fd-96f2-3552424bd78e",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        }
+      ],
+      "sameProviderModelSelection": {
+        "providerId": "opencode-go-messages",
+        "failedModel": "mimo-v2.6-flash-free",
+        "failedProductInputId": "input_5586a0e1-8238-4881-b880-1e156b8d1a66",
+        "failedInputStatus": "failed",
+        "storedErrorPresent": true,
+        "failureReason": "Not copied from database; the structured crosscheck does not include provider error text.",
+        "successfulModel": "deepseek-v4.1-flash",
+        "successfulProductInputId": "input_c71e4aad-41ae-417a-9cd9-330ea0b27800",
+        "successfulInputStatus": "completed",
+        "nativeMessageSelectionMatchedProductConfiguration": true
+      },
+      "coldRestartRestore": {
+        "sameTaskParticipantProductSessionAndNativeSession": true,
+        "productSessionRecordCount": 1,
+        "nativeSessionId": "sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916",
+        "firstPostRestartInputId": "input_00f838f0-8cf0-46f5-8799-0fedd72fce99",
+        "secondPostRestartInputId": "input_5c14df3a-b4bf-430b-99ba-e3bc65cb303d",
+        "resumeActionCreatedNewSession": false,
+        "resumeActionInsertedBusinessInput": false,
+        "basis": "The operator observed explicit restore after two cold restarts; database crosscheck confirms the existing Task/Participant/Session/native Session identities and subsequent Inputs remain attached to that same identity. Restore UI action itself is not a persisted Input."
+      },
+      "streamingBeforeCompletion": {
+        "inputId": "input_5c14df3a-b4bf-430b-99ba-e3bc65cb303d",
+        "inputStatus": "completed",
+        "executionId": "execution_46bd62d8-73a3-4b36-83d4-7371296c0f48",
+        "executionStatus": "completed",
+        "messageDeltaCount": 78,
+        "firstMessageDeltaAtMs": 1790348428248,
+        "lastMessageDeltaAtMs": 1790348451847,
+        "executionTerminalAtMs": 1790348451876,
+        "lastDeltaPrecedesTerminal": true,
+        "nativeInputCrosscheck": {
+          "nativeInputId": "queue_input_5c14df3a-b4bf-430b-99ba-e3bc65cb303d",
+          "nativeStatus": "promoted",
+          "admittedSequence": 5,
+          "promotedSequence": 5,
+          "promotedMessageId": "msg_muh37oyk_da9fd6fa-8414-49fd-96f2-3552424bd78e",
+          "nativeMessageSelection": {
+            "role": "user",
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "productAndNativeModelSelectionMatch": true,
+          "nativeAttachmentNames": [],
+          "nativeAttachmentReferenceNames": [],
+          "nativeFileParts": []
+        }
+      }
+    },
+    "taskC": {
+      "identity": {
+        "taskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+        "participantId": "participant_3bb1e616-d843-4faa-a364-a1ed692a7ba8",
+        "sessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+        "nativeSessionId": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+        "taskStatus": "active",
+        "participantStatus": "active",
+        "sessionRecordStatus": "active",
+        "engineId": "zcode",
+        "engineLabel": null,
+        "productSessionRecordCount": 1
+      },
+      "approvalsAndFileEffects": [
+        {
+          "scenario": "allowOnce",
+          "inputId": "input_0f203355-1bf8-4398-9a1a-429e7c7ba407",
+          "inputStatus": "completed",
+          "executionId": "execution_c59bab1f-2cc0-4dba-8fb3-1831e420bf8e",
+          "executionStatus": "completed",
+          "approvalId": "approval_8fd9933f-6fab-4614-9d5c-6883dc5028ab",
+          "approvalStatus": "forwarded",
+          "replyOptionId": "allow_once",
+          "nativePermissionId": "perm_52ce8442-d330-4940-96a8-7fed051e69de",
+          "writeToolCallsInSameExecution": [
+            {
+              "partId": "part_muh2ir7k_30e904e1-8f31-4140-b3bf-a7d36e51b13b",
+              "createdAtMs": 1790347239488,
+              "tool": "Write",
+              "callId": "toolu_90e3280552764883bfc96bb9",
+              "state": "completed"
+            }
+          ],
+          "marker": "M2_FINAL_RC_FRESH_ALLOW_925",
+          "inputOccurrenceCountForMarker": 1,
+          "projectFileState": {
+            "filename": "m2-final-allow-925.txt",
+            "exists": true,
+            "sizeBytes": 15,
+            "sha256": "b33a69f3b2517245262a080ac15042ea5d57375a876fbbb7d4beaadda1437f1f",
+            "expectedTestMarkerMatches": true
+          },
+          "nativeInputCrosscheck": {
+            "nativeInputId": "queue_input_0f203355-1bf8-4398-9a1a-429e7c7ba407",
+            "nativeStatus": "promoted",
+            "admittedSequence": 0,
+            "promotedSequence": 0,
+            "promotedMessageId": "msg_muh2in2r_216fc245-6d19-45a1-8a4d-3f4cc436f283",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        },
+        {
+          "scenario": "deny",
+          "inputId": "input_0b8815ed-6fb7-4559-8daa-8b8625759a3d",
+          "inputStatus": "completed",
+          "executionId": "execution_7da812f4-7128-4d2d-8f94-6969774ecde6",
+          "executionStatus": "completed",
+          "approvalId": "approval_c7d18823-c320-4f44-8698-119dbe062086",
+          "approvalStatus": "rejected",
+          "replyOptionId": "deny",
+          "nativePermissionId": "perm_6eeaed4f-0538-4ea3-9a7d-b41f6f1a1374",
+          "writeToolCallsInSameExecution": [
+            {
+              "partId": "part_muh2jhd3_ed996d82-5aa5-4772-8bf5-576cba445e27",
+              "createdAtMs": 1790347273383,
+              "tool": "Write",
+              "callId": "toolu_8677e1e64cb54337b207fedd",
+              "state": "error"
+            }
+          ],
+          "marker": "M2_FINAL_RC_FRESH_DENY_925",
+          "inputOccurrenceCountForMarker": 1,
+          "projectFileState": {
+            "filename": "m2-final-deny-925.txt",
+            "exists": false
+          },
+          "nativeInputCrosscheck": {
+            "nativeInputId": "queue_input_0b8815ed-6fb7-4559-8daa-8b8625759a3d",
+            "nativeStatus": "promoted",
+            "admittedSequence": 1,
+            "promotedSequence": 1,
+            "promotedMessageId": "msg_muh2jcyo_a65ad93f-b609-4cf2-ba21-702957247ac5",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        },
+        {
+          "scenario": "restoredPendingApprovalDenied",
+          "inputId": "input_3a21a103-0b11-478d-8de5-b6a1adf3fe9d",
+          "inputStatus": "completed",
+          "executionId": "execution_651559c0-d939-4a16-91be-6d0703cb40ae",
+          "executionStatus": "completed",
+          "approvalId": "approval_7350f46f-50c5-419d-bf1d-0017cce43e69",
+          "approvalStatus": "rejected",
+          "replyOptionId": "deny",
+          "nativePermissionId": "perm_50ffe137-a936-4e4b-a46a-4f4eb02c8e5d",
+          "writeToolCallsInSameExecution": [
+            {
+              "partId": "part_muh39mux_dcfcb32d-6a3d-4762-8f7b-36115cc1170a",
+              "createdAtMs": 1790348493561,
+              "tool": "Write",
+              "callId": "toolu_a29ba5e1fa60496d9957a011",
+              "state": "error"
+            }
+          ],
+          "marker": "M2_FINAL_RC_PENDING_DENY_925",
+          "inputOccurrenceCountForMarker": 1,
+          "projectFileState": {
+            "filename": "m2-final-pending-deny-925.txt",
+            "exists": false
+          },
+          "nativeInputCrosscheck": {
+            "nativeInputId": "queue_input_3a21a103-0b11-478d-8de5-b6a1adf3fe9d",
+            "nativeStatus": "promoted",
+            "admittedSequence": 9,
+            "promotedSequence": 8,
+            "promotedMessageId": "msg_muh39igr_4b026b16-ff6c-4715-a446-abc21d1b3329",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          }
+        }
+      ],
+      "mentionAndAttachmentEdits": {
+        "mentionInputId": "input_83aff8b0-304f-4a38-bb7d-1fc828a9bdec",
+        "productInputContainsWorkspaceREADMEReference": true,
+        "nativeInputCrosscheck": {
+          "nativeInputId": "queue_input_83aff8b0-304f-4a38-bb7d-1fc828a9bdec",
+          "nativeStatus": "promoted",
+          "admittedSequence": 2,
+          "promotedSequence": 2,
+          "promotedMessageId": "msg_muh2mn8p_f1845a81-7d79-4e69-8292-04ec6c151e2b",
+          "nativeMessageSelection": {
+            "role": "user",
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "productAndNativeModelSelectionMatch": true,
+          "nativeAttachmentNames": ["m2-final-allow-925.txt"],
+          "nativeAttachmentReferenceNames": ["m2-final-allow-925.txt"],
+          "nativeFileParts": [
+            {
+              "filename": "m2-final-allow-925.txt",
+              "mime": "text/plain"
+            }
+          ]
+        },
+        "initialAttachmentId": "attachment_544fe5b6-2c3d-4b41-a5c7-e5869b656b06",
+        "initialAttachmentFilename": "m2-final-allow-925.txt",
+        "editKeepInputId": "input_d4519e86-d1bf-4337-b937-52f8cabdc0e2",
+        "editKeepReferencesOriginalInput": true,
+        "editKeepRetainsOriginalAttachment": true,
+        "editRemoveAddInputId": "input_9c25659f-4311-4a30-a2cb-039e7d556cbb",
+        "editRemoveAddReferencesPriorEdit": true,
+        "editRemoveAddDoesNotRetainOriginalAttachment": true,
+        "editRemoveAddNewAttachment": [
+          {
+            "id": "attachment_2116a652-c2b5-43c4-9df6-3ce0a5c4a4f2",
+            "fileName": "README.md",
+            "mimeType": "text/markdown",
+            "sizeBytes": 34
+          }
+        ],
+        "nativeCrosschecks": {
+          "mentionAndLocalAttachment": {
+            "nativeInputId": "queue_input_83aff8b0-304f-4a38-bb7d-1fc828a9bdec",
+            "nativeStatus": "promoted",
+            "admittedSequence": 2,
+            "promotedSequence": 2,
+            "promotedMessageId": "msg_muh2mn8p_f1845a81-7d79-4e69-8292-04ec6c151e2b",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": ["m2-final-allow-925.txt"],
+            "nativeAttachmentReferenceNames": ["m2-final-allow-925.txt"],
+            "nativeFileParts": [
+              {
+                "filename": "m2-final-allow-925.txt",
+                "mime": "text/plain"
+              }
+            ]
+          },
+          "editKeepAttachment": {
+            "nativeInputId": "queue_revision_c451f134-250c-4f55-9410-624e6600f47d",
+            "nativeStatus": "promoted",
+            "admittedSequence": 3,
+            "promotedSequence": 3,
+            "promotedMessageId": "msg_muh2nml8_0a132c20-6ad5-4a5c-a3ed-0c6d63b0393a",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": ["m2-final-allow-925.txt"],
+            "nativeAttachmentReferenceNames": ["m2-final-allow-925.txt"],
+            "nativeFileParts": [
+              {
+                "filename": "m2-final-allow-925.txt",
+                "mime": "text/plain"
+              }
+            ]
+          },
+          "editRemoveOldAddNew": {
+            "nativeInputId": "queue_revision_5ead2b97-5c60-4830-9008-482d76c589e3",
+            "nativeStatus": "promoted",
+            "admittedSequence": 4,
+            "promotedSequence": 4,
+            "promotedMessageId": "msg_muh2qgzq_bb433a2b-5cd6-42c4-a6b4-0a3c47ef458c",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": ["README.md"],
+            "nativeAttachmentReferenceNames": ["README.md"],
+            "nativeFileParts": [
+              {
+                "filename": "README.md",
+                "mime": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "queue": {
+        "uiInputA": {
+          "scenario": "queueA",
+          "inputId": "input_ce5070bc-1fac-4f73-91ab-7085734c9a8e",
+          "createdAtMs": 1790347696289,
+          "productStatus": "completed",
+          "requestedDelivery": "startNow",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_456bb19b-b2e2-442e-9153-4c9124461964",
+            "status": "completed",
+            "nativeKey": "input_ce5070bc-1fac-4f73-91ab-7085734c9a8e",
+            "startedAtMs": 1790347696307,
+            "terminalAtMs": 1790347809462
+          }
+        },
+        "uiInputB": {
+          "scenario": "queueB",
+          "inputId": "input_7dcc64df-5121-4b80-9b2e-b36474b248c9",
+          "createdAtMs": 1790347708886,
+          "productStatus": "completed",
+          "requestedDelivery": "queue",
+          "modelSelection": {
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "revisionOf": null,
+          "attachments": [],
+          "execution": {
+            "executionId": "execution_33edfdc1-b293-4a43-a0b3-0eff716fecb2",
+            "status": "completed",
+            "nativeKey": "input_7dcc64df-5121-4b80-9b2e-b36474b248c9",
+            "startedAtMs": 1790347809586,
+            "terminalAtMs": 1790347813979
+          }
+        },
+        "nativeInputA": {
+          "nativeInputId": "queue_input_ce5070bc-1fac-4f73-91ab-7085734c9a8e",
+          "nativeStatus": "promoted",
+          "admittedSequence": 5,
+          "promotedSequence": 5,
+          "promotedMessageId": "msg_muh2sjox_d0a30afa-c253-4d76-80f0-7c4d33b442f8",
+          "nativeMessageSelection": {
+            "role": "user",
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "productAndNativeModelSelectionMatch": true,
+          "nativeAttachmentNames": [],
+          "nativeAttachmentReferenceNames": [],
+          "nativeFileParts": []
+        },
+        "nativeInputB": {
+          "nativeInputId": "queue_input_7dcc64df-5121-4b80-9b2e-b36474b248c9",
+          "nativeStatus": "promoted",
+          "admittedSequence": 6,
+          "promotedSequence": 6,
+          "promotedMessageId": "msg_muh2uz39_fff4e766-2b04-4271-ac21-c9dbea705014",
+          "nativeMessageSelection": {
+            "role": "user",
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          },
+          "productAndNativeModelSelectionMatch": true,
+          "nativeAttachmentNames": [],
+          "nativeAttachmentReferenceNames": [],
+          "nativeFileParts": []
+        },
+        "BRequestedQueue": true,
+        "BExecutionStartsAfterAExecutionTerminal": true,
+        "nativePromotionSequenceAThenB": true
+      },
+      "compact": {
+        "productCompactOperationId": "compact_1320d336-cc33-41e5-aeb1-7190717e9b2b",
+        "productCompactStatus": "completed",
+        "productRequestedAtMs": 1790347867921,
+        "productTerminalAtMs": 1790347915314,
+        "productInputIdsCreatedDuringCompactOperation": [],
+        "nativeSessionInput": {
+          "id": "queue_compact_1320d336-cc33-41e5-aeb1-7190717e9b2b",
+          "kind": "compact",
+          "status": "discarded",
+          "admittedSequence": 7
+        },
+        "nativeCommandFact": {
+          "id": "v4_command_fact:timeline:compact_1320d336-cc33-41e5-aeb1-7190717e9b2b",
+          "ackStatus": "accepted",
+          "commandId": "compact_1320d336-cc33-41e5-aeb1-7190717e9b2b",
+          "lifecycleStatus": "success"
+        },
+        "sameSessionAfterCompactInputId": "input_d04eceb9-b7d4-4e31-b10b-0abd3aeb544a"
+      },
+      "conditionalCommand": {
+        "command": "goal",
+        "uiObservedComposerBehavior": "Submitting /goal changed the visible Composer content to Goal; UI showed the exact M2_FINAL_GOAL_OK_925 reply.",
+        "productInput": {
+          "id": "input_b57d2ae5-d3a4-4aa2-a4d9-33d9a14f943a",
+          "taskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
+          "sessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
+          "status": "completed",
+          "createdAtMs": 1790349650621,
+          "nativeCommandId": "input_b57d2ae5-d3a4-4aa2-a4d9-33d9a14f943a",
+          "nativeExecutionId": "input_b57d2ae5-d3a4-4aa2-a4d9-33d9a14f943a",
+          "commandMarkerPresent": true,
+          "associatedProductExecutionCount": 1,
+          "inputAndNativeCommandIdMatch": true,
+          "sameTaskAndSession": true
+        },
+        "native": {
+          "sessionId": "sess_8ac3e0a6-7a07-4358-8c10-cbc537f33eaf",
+          "input": {
+            "id": "queue_input_b57d2ae5-d3a4-4aa2-a4d9-33d9a14f943a",
+            "kind": "sendGoalCommand",
+            "status": "promoted",
+            "sourceCommandId": "input_b57d2ae5-d3a4-4aa2-a4d9-33d9a14f943a",
+            "admittedSequence": 10,
+            "promotedSequence": 9,
+            "promotedMessageId": "msg_muh3yfqj_98c58657-5c75-4758-9da5-95eb7abc1950",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "qwen3.8-flash",
+              "reasoningLevel": "xhigh"
+            },
+            "testMarkerPresent": true
+          },
+          "terminalEventsForInput": [
+            {
+              "id": "native-turn-terminal:091f9e24-0ed2-4f3d-b54e-0fd0442bc7b5",
+              "type": "runtime/native_turn_terminal",
+              "createdAtMs": 1790349650738,
+              "inputId": "input_b57d2ae5-d3a4-4aa2-a4d9-33d9a14f943a",
+              "turnId": "turn_40f94278-bbe0-4fca-931a-04b52d09b642",
+              "resultType": "success",
+              "eventType": "turn_complete",
+              "sequenceNumber": 57
+            },
+            {
+              "id": "native-turn-terminal:4abbc572-f6e9-47e2-bddf-f271645b43ca",
+              "type": "runtime/native_turn_terminal",
+              "createdAtMs": 1790349656678,
+              "inputId": "input_b57d2ae5-d3a4-4aa2-a4d9-33d9a14f943a",
+              "turnId": "turn_6591206b-caf6-4a73-9a5e-a45553956543",
+              "resultType": "success",
+              "eventType": "turn_complete",
+              "sequenceNumber": 101
+            }
+          ],
+          "commandFactsCorrelatedByCommandId": []
+        },
+        "visualEvidence": {
+          "file": "docs/evidence/m1-reverification/final-f8f0d9c/goal-command.jpg",
+          "exists": true
+        },
+        "evidenceLimit": "The native sendGoalCommand input is linked by sourceCommandId to the Product Input, and native terminal events are recorded for it. No v4/command_fact matching this command ID was found; the UI observation supplies the visible Goal rendering and exact reply."
+      }
+    },
+    "taskUnknownStop": {
+      "identity": {
+        "taskId": "task_f9b8cf36-ac2b-4cc2-9c94-830bb619c0a5",
+        "participantId": "participant_f74c4283-de7e-46f6-92f3-d4652d4b30e1",
+        "sessionId": "session_c48e7f9a-795e-4d1d-b473-4efa5998ea77",
+        "nativeSessionId": "sess_5fa1f43f-9605-4083-aa51-f295516c7409",
+        "taskStatus": "active",
+        "participantStatus": "active",
+        "sessionRecordStatus": "unknown",
+        "engineId": "zcode",
+        "engineLabel": null,
+        "productSessionRecordCount": 1
+      },
+      "scope": {
+        "failpointConsumedAtUtc": "2026-09-25T15:10:37.871Z",
+        "failpointConsumedAtMs": 1790349037871,
+        "observation": "Failpoint-scoped event observation loss followed by explicit Stop and reconciliation.",
+        "physicalHostCliStdioDisconnectClaimed": false
+      },
+      "input": {
+        "inputId": "input_809e584e-ea51-42e1-aec7-397c641b5c1c",
+        "executionId": "execution_703eead6-93e7-4109-8efc-0ba711b8fd8f",
+        "productInputStatusAfterReconciliation": "stopped",
+        "productExecutionStatusAfterReconciliation": "stopped",
+        "productStartedAtMs": 1790348950967,
+        "productUnknownObservedAtMs": 1790349037872,
+        "executionTerminalAtMs": 1790349104879,
+        "reconciledAtMs": 1790349104879,
+        "productInputRecordCountForId": 1,
+        "executionRecordCountForInput": 1
+      },
+      "stopRequest": {
+        "id": "stop_f99feb4f-9a8a-41a0-b1a3-59498fe5e791",
+        "statusAfterReconciliation": "confirmed",
+        "deliveryStatus": "delivered",
+        "requestedAtMs": 1790349067942,
+        "reconciliationConfirmedAtMs": 1790349104879,
+        "requestTargetsExecutionId": "execution_703eead6-93e7-4109-8efc-0ba711b8fd8f",
+        "uiAcknowledgementMeaning": "已送达不表示停止"
+      },
+      "native": {
+        "nativeSessionId": "sess_5fa1f43f-9605-4083-aa51-f295516c7409",
+        "nativeInput": {
+          "id": "queue_input_809e584e-ea51-42e1-aec7-397c641b5c1c",
+          "status": "promoted",
+          "admittedSequence": 1,
+          "promotedSequence": 1,
+          "promotedMessageId": "msg_muh3jfsl_ef2f7294-b1f4-4fb0-be07-5320ada1709d"
+        },
+        "terminalEvents": [
+          {
+            "id": "native-turn-terminal:f031bb76-1670-4fab-922c-932aea7323c6",
+            "type": "runtime/native_turn_terminal",
+            "createdAtMs": 1790349067964,
+            "inputId": "input_809e584e-ea51-42e1-aec7-397c641b5c1c",
+            "turnId": "turn_80462c26-e841-41fe-a4c8-734999631334",
+            "resultType": "cancelled",
+            "eventType": "turn_complete",
+            "sequenceNumber": 1418
+          }
+        ],
+        "nativeTerminalAbsentAtProductUnknown": true,
+        "nativeTerminalAfterStopRequest": true,
+        "nativeWriteToolCallsBeforeStop": [
+          {
+            "partId": "part_muh3ks8d_b5ddd40b-e153-4032-8852-5f303925ef19",
+            "createdAtMs": 1790349013741,
+            "tool": "Write",
+            "callId": "toolu_f98a289b604f4ec2a21b7fca",
+            "state": "completed"
+          }
+        ]
+      },
+      "fileStateAfterStopAndFollowups": {
+        "filename": "m2-final-stop-925.txt",
+        "exists": true,
+        "sizeBytes": 13,
+        "sha256": "17471156b71a6aa35a18b2217dd4ade948dbfa9ac7c61e6c4cd881d99d4617cb",
+        "expectedTestMarkerMatches": true
+      },
+      "postStopFollowups": {
+        "firstFollowupInterrupted": {
+          "inputId": "input_d63563cb-ec18-4510-aa64-1d40b890f9c9",
+          "inputStatus": "stopped",
+          "executionId": "execution_ddec5046-6309-4c8c-858c-21a28cff1801",
+          "executionStatus": "stopped",
+          "countedAsSuccessfulAnswer": false,
+          "operatorObservation": "A model-generated shell attempt was interrupted through the formal UI; do not treat this attempt as a successful answer."
+        },
+        "finalSameSessionContinuation": {
+          "inputId": "input_82bff839-6ae5-4bc5-85ab-5c9a9a4dc710",
+          "inputStatus": "completed",
+          "executionId": "execution_98e74c6a-ae78-49e0-b2d4-96e3690400d2",
+          "executionStatus": "completed",
+          "uiObservedReplyMarker": "AFTER_STOP_OK_925",
+          "providerId": "opencode-go-messages",
+          "modelId": "deepseek-v4.1-flash",
+          "nativeInputCrosscheck": {
+            "nativeInputId": "queue_input_82bff839-6ae5-4bc5-85ab-5c9a9a4dc710",
+            "nativeStatus": "promoted",
+            "admittedSequence": 3,
+            "promotedSequence": 3,
+            "promotedMessageId": "msg_muh3pfg1_beab9503-d522-45c5-823a-31c698cc6481",
+            "nativeMessageSelection": {
+              "role": "user",
+              "providerId": "opencode-go-messages",
+              "modelId": "deepseek-v4.1-flash",
+              "reasoningLevel": "max"
+            },
+            "productAndNativeModelSelectionMatch": true,
+            "nativeAttachmentNames": [],
+            "nativeAttachmentReferenceNames": [],
+            "nativeFileParts": []
+          },
+          "sameTaskAndProductSession": true
+        }
+      },
+      "visualEvidence": {
+        "file": "docs/evidence/m1-reverification/final-f8f0d9c/after-stop-same-session.jpg",
+        "exists": true,
+        "coverage": "Formal UI resume after Stop; same Task/Session follow-up result."
+      }
+    }
+  },
+  "m0FlagOffSmoke": {
+    "scope": "Current final candidate flag-off smoke on the original M0 path; this does not redefine the historical M0 Verified Baseline.",
+    "candidateProductCommit": "f8f0d9cd0dcff67caefe6835d79467d03dcce91e",
+    "isolatedProjectAlias": "m2-question-project",
+    "nativeSessionId": "sess_56848715-96e4-43ab-a914-56915d9c5342",
+    "nativeInput": {
+      "id": "queue_01a0d8f7-32c5-7c79-a693-7ba32549c9c4",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 0,
+      "promotedSequence": 0,
+      "promotedMessageId": "msg_muh22cqb_7aa89fa1-8b7f-4655-b554-46b9f6292ba9",
+      "testMarkerPresent": true,
+      "nativeMessageSelection": {
+        "role": "user",
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "reasoningLevel": "xhigh"
+      }
+    },
+    "nativeTerminal": {
+      "id": "native-turn-terminal:086b15d7-4cc1-4bb7-8d33-1383f5ef0c30",
+      "type": "runtime/native_turn_terminal",
+      "createdAtMs": 1790346478690,
+      "inputId": "01a0d8f7-32c5-7c79-a693-7ba32549c9c4",
+      "turnId": "turn_aa43314f-e68e-4662-bbf5-6a5732fe2586",
+      "resultType": "success",
+      "eventType": "turn_complete",
+      "sequenceNumber": 27
+    },
+    "uiObservedReplyMarker": "M0_FINAL_OK_925",
+    "productRuntimeCrosscheck": "Not required for this flag-off legacy path; native input and terminal were crosschecked."
+  },
+  "queueEditsAndRemoval": {
+    "identity": {
+      "taskId": "task_89e47557-86f2-43dc-9672-5937653d3271",
+      "participantId": "participant_cfea0075-d4d3-4f04-a4c9-6465170a9f7f",
+      "sessionId": "session_64938937-1a62-4ded-9ead-e6ed2d598a0e",
+      "nativeSessionId": "sess_301793ad-0ebd-4925-b225-4e24baacfff2",
+      "taskStatus": "active",
+      "participantStatus": "active",
+      "sessionRecordStatus": "active",
+      "engineId": "zcode",
+      "engineLabel": null,
+      "productSessionRecordCount": 1
+    },
+    "editQueuedB": {
+      "uiObservedEdit": "The queued original B was edited to revised B in the formal Composer.",
+      "originalInput": {
+        "scenario": "queueEditBOriginal",
+        "inputId": "input_f2cea1fc-5998-4c33-810c-fa538972d951",
+        "createdAtMs": 1790349750222,
+        "productStatus": "cancelled",
+        "requestedDelivery": "queue",
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "reasoningLevel": "xhigh"
+        },
+        "revisionOf": null,
+        "attachments": [],
+        "execution": null,
+        "executionRecordCount": 0,
+        "nativeSessionInputFound": false
+      },
+      "revisedInput": {
+        "scenario": "queueEditBRevised",
+        "inputId": "input_f6eac106-b59b-4aa3-966c-3b771992c57e",
+        "createdAtMs": 1790349771274,
+        "productStatus": "completed",
+        "requestedDelivery": "queue",
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "reasoningLevel": "xhigh"
+        },
+        "revisionOf": null,
+        "attachments": [],
+        "execution": {
+          "executionId": "execution_e337c00c-f605-4714-884f-73fa3bebbdfb",
+          "status": "completed",
+          "nativeKey": "input_f6eac106-b59b-4aa3-966c-3b771992c57e",
+          "startedAtMs": 1790349791691,
+          "terminalAtMs": 1790349794836
+        },
+        "executionRecordCount": 1,
+        "nativeInput": {
+          "id": "queue_input_f6eac106-b59b-4aa3-966c-3b771992c57e",
+          "kind": "sendText",
+          "status": "promoted",
+          "admittedSequence": 1,
+          "promotedSequence": 1,
+          "sourceCommandId": "input_f6eac106-b59b-4aa3-966c-3b771992c57e",
+          "nativeMessageSelection": {
+            "role": "user",
+            "providerId": "opencode-go-messages",
+            "modelId": "qwen3.8-flash",
+            "reasoningLevel": "xhigh"
+          }
+        },
+        "nativeTerminals": [
+          {
+            "id": "native-turn-terminal:73c8684a-bac5-4692-9de2-a87104d94652",
+            "createdAtMs": 1790349794832,
+            "inputId": "input_f6eac106-b59b-4aa3-966c-3b771992c57e",
+            "turnId": "turn_229cba70-46f4-49ac-b628-d06803bbb2fd",
+            "resultType": "success",
+            "eventType": "turn_complete",
+            "sequenceNumber": 949
+          }
+        ]
+      },
+      "queueA": {
+        "scenario": "queueEditA",
+        "inputId": "input_3bebdc85-18f2-4f6e-bf44-fe0568bf741c",
+        "createdAtMs": 1790349734817,
+        "productStatus": "completed",
+        "requestedDelivery": "startNow",
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "reasoningLevel": "xhigh"
+        },
+        "revisionOf": null,
+        "attachments": [],
+        "execution": {
+          "executionId": "execution_327a137f-3ab9-4dec-bd83-7f3cdbbe779e",
+          "status": "completed",
+          "nativeKey": "input_3bebdc85-18f2-4f6e-bf44-fe0568bf741c",
+          "startedAtMs": 1790349734883,
+          "terminalAtMs": 1790349791610
+        },
+        "nativeInput": {
+          "id": "queue_input_3bebdc85-18f2-4f6e-bf44-fe0568bf741c",
+          "kind": "sendText",
+          "status": "promoted",
+          "promotedSequence": 0
+        },
+        "nativeTerminals": [
+          {
+            "id": "native-turn-terminal:01eb2c62-4526-4ddc-98d8-5f5d8b80e469",
+            "createdAtMs": 1790349791607,
+            "inputId": "input_3bebdc85-18f2-4f6e-bf44-fe0568bf741c",
+            "turnId": "turn_4986f23b-e659-43bc-9291-24ce038d01c2",
+            "resultType": "success",
+            "eventType": "turn_complete",
+            "sequenceNumber": 923
+          }
+        ]
+      },
+      "revisedBExecutionStartsAfterACompletes": true,
+      "nativePromotionSequenceAThenRevisedB": true,
+      "explicitProductRevisionLinkRecorded": false,
+      "relationshipEvidenceLimit": "The edit relationship is the operator's formal UI observation; Product DB records the original as cancelled and the revised content as a distinct completed Input, without a revisionOf link."
+    },
+    "removeC3DuringSource3Streaming": {
+      "uiObservedRemovalDuringStreaming": true,
+      "removedInput": {
+        "scenario": "queueC3RemovedDuringStreaming",
+        "inputId": "input_57dc7940-373f-4588-8856-cb7719b39434",
+        "createdAtMs": 1790349898806,
+        "productStatus": "cancelled",
+        "requestedDelivery": "queue",
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "reasoningLevel": "xhigh"
+        },
+        "revisionOf": null,
+        "attachments": [],
+        "execution": null,
+        "executionRecordCount": 0,
+        "nativeSessionInputFound": false
+      },
+      "source3Input": {
+        "scenario": "queueSource3",
+        "inputId": "input_0df17974-a39d-4a1c-86fa-d5073e144762",
+        "createdAtMs": 1790349884111,
+        "productStatus": "completed",
+        "requestedDelivery": "startNow",
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "reasoningLevel": "xhigh"
+        },
+        "revisionOf": null,
+        "attachments": [],
+        "execution": {
+          "executionId": "execution_23444650-84fc-43f7-839a-4a7a050bce58",
+          "status": "completed",
+          "nativeKey": "input_0df17974-a39d-4a1c-86fa-d5073e144762",
+          "startedAtMs": 1790349884127,
+          "terminalAtMs": 1790349976998
+        },
+        "nativeInput": {
+          "id": "queue_input_0df17974-a39d-4a1c-86fa-d5073e144762",
+          "kind": "sendText",
+          "status": "promoted",
+          "promotedSequence": 5
+        },
+        "nativeTerminals": [
+          {
+            "id": "native-turn-terminal:6074ea7a-23d9-4b63-8204-26097b6c1a91",
+            "createdAtMs": 1790349976997,
+            "inputId": "input_0df17974-a39d-4a1c-86fa-d5073e144762",
+            "turnId": "turn_0f44cf0b-4f60-488a-8194-69201a51dcab",
+            "resultType": "success",
+            "eventType": "turn_complete",
+            "sequenceNumber": 2733
+          }
+        ]
+      },
+      "streamingEvents": {
+        "messageDeltaCount": 249,
+        "firstDeltaAtMs": 1790349894984,
+        "lastDeltaAtMs": 1790349976867,
+        "queueC3InputCreatedAtMs": 1790349898806,
+        "queueC3InputTerminalAtMs": 1790349900578,
+        "deltasBeforeC3Removal": 18,
+        "deltasAfterC3Removal": 231
+      },
+      "c3ZeroDispatch": true,
+      "evidenceLimit": "Zero dispatch is based on no Product Execution and no matching native session_input; the surrounding Source3 run is a genuine fixed-version CLI stream."
+    }
+  },
+  "fakeEngine": {
+    "taskAIdentity": {
+      "taskId": "task_ac08cb72-77b5-43b7-8335-ddbfa7931ffa",
+      "participantId": "participant_54c68edf-dffd-4f7c-b37c-d20d2f1d449f",
+      "sessionId": "session_5ce418cf-dc4e-44e6-ad71-e7a786126790",
+      "nativeSessionId": "fake-session-1",
+      "taskStatus": "active",
+      "participantStatus": "active",
+      "sessionRecordStatus": "unknown",
+      "engineId": "fake",
+      "engineLabel": null,
+      "productSessionRecordCount": 1
+    },
+    "taskAInputs": [
+      {
+        "inputId": "input_f9dcab30-d0c8-4310-8da7-c366cf1d3c24",
+        "marker": "M2_FINAL_FAKE_A1_925",
+        "markerPresent": true,
+        "createdAtMs": 1790347975732,
+        "status": "completed",
+        "executionId": "execution_36ce5781-c038-4d49-9adc-26f1efa33efe",
+        "executionStatus": "completed",
+        "nativeExecutionKey": "fake-execution-1"
+      },
+      {
+        "inputId": "input_b4a8ed4d-3f78-4d2f-b238-e1a0f1e74e6e",
+        "marker": "M2_FINAL_FAKE_A2_925",
+        "markerPresent": true,
+        "createdAtMs": 1790347988739,
+        "status": "completed",
+        "executionId": "execution_ac121b88-1dfb-4b07-8910-5110e2af1e3a",
+        "executionStatus": "completed",
+        "nativeExecutionKey": "fake-execution-2"
+      },
+      {
+        "inputId": "input_af4a23ae-1878-4ebe-8f7f-3b043b4b754c",
+        "marker": "M2_FINAL_FAKE_A3_AFTER_B_925",
+        "markerPresent": true,
+        "createdAtMs": 1790348151770,
+        "status": "completed",
+        "executionId": "execution_9689f587-658a-402e-9d25-72084702ba50",
+        "executionStatus": "completed",
+        "nativeExecutionKey": "fake-execution-4"
+      }
+    ],
+    "taskBIdentity": {
+      "taskId": "task_21e01c51-e19e-4552-8829-d3225cc4e771",
+      "participantId": "participant_c32b8378-3334-49f3-949a-7037f7a2d96d",
+      "sessionId": "session_d47abbb3-287d-458b-898e-eedf6b466f47",
+      "nativeSessionId": "fake-session-2",
+      "taskStatus": "active",
+      "participantStatus": "active",
+      "sessionRecordStatus": "unknown",
+      "engineId": "fake",
+      "engineLabel": null,
+      "productSessionRecordCount": 1
+    },
+    "taskBInputs": [
+      {
+        "inputId": "input_e7744282-c03d-45aa-a1c3-c963820e51b0",
+        "marker": "M2_FINAL_FAKE_B1_925",
+        "markerPresent": true,
+        "createdAtMs": 1790348138405,
+        "status": "completed",
+        "executionId": "execution_11218ed5-5093-47e4-8cf4-9d4de5a10767",
+        "executionStatus": "completed",
+        "nativeExecutionKey": "fake-execution-3"
+      }
+    ],
+    "aToBToA": {
+      "aRound1InputId": "input_f9dcab30-d0c8-4310-8da7-c366cf1d3c24",
+      "aRound2InputId": "input_b4a8ed4d-3f78-4d2f-b238-e1a0f1e74e6e",
+      "bRound1InputId": "input_e7744282-c03d-45aa-a1c3-c963820e51b0",
+      "aAfterBInputId": "input_af4a23ae-1878-4ebe-8f7f-3b043b4b754c",
+      "aAfterBInputCreatedAfterB": true,
+      "taskIdsDistinct": true,
+      "participantIdsDistinct": true,
+      "productSessionIdsDistinct": true,
+      "nativeSessionIdsDistinct": true,
+      "aAfterBMarker": "M2_FINAL_FAKE_A3_AFTER_B_925",
+      "aAfterBMarkerMatch": true,
+      "evidenceLimit": "Fake Engine product-path isolation and Task/session sequencing only; synthetic replies do not prove ZCode or filesystem effects."
+    }
+  },
+  "limitations": [
+    "This file is a structured crosscheck, not a visual evidence substitute.",
+    "App restart/restore button actions and visible streaming were observed in the desktop UI; the databases corroborate identity and event ordering but do not encode screenshot content or the restart boundary.",
+    "Model answer text is intentionally omitted and was not used as file-state evidence."
+  ]
+}

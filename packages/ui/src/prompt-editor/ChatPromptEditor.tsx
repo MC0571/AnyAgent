@@ -10,6 +10,7 @@ import type {
 import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TID_CHAT_SEND_BUTTON } from "@zcode/shared";
+import type { ZCodeSlashCommand } from "@zcode/shared";
 import { ArrowUpIcon, Hand, XIcon } from "lucide-react";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { Button } from "@/components/ui/button.js";
@@ -49,7 +50,9 @@ export function ChatPromptEditor({
   taskId,
   skillCatalogSessionId,
   taskSkillCatalogRequest,
+  slashCommandsOverride,
   initialValue,
+  initialEditorStateJson,
   syncInitialValueOnMount = true,
   placeholder,
   disabled = false,
@@ -106,7 +109,9 @@ export function ChatPromptEditor({
   /** 仅供 Composer Skill catalog；可为草稿的 prewarm Session。 */
   skillCatalogSessionId?: string | null;
   taskSkillCatalogRequest?: TaskSkillReferenceCatalogRequest;
+  slashCommandsOverride?: readonly ZCodeSlashCommand[];
   initialValue?: string;
+  initialEditorStateJson?: string;
   syncInitialValueOnMount?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -201,7 +206,7 @@ export function ChatPromptEditor({
     if (!syncInitialValueOnMount) {
       return;
     }
-    if (initialValue === undefined) {
+    if (initialValue === undefined && initialEditorStateJson === undefined) {
       return;
     }
     if (hasSyncedInitialValueRef.current) {
@@ -209,16 +214,29 @@ export function ChatPromptEditor({
     }
     hasSyncedInitialValueRef.current = true;
 
-    latestTextRef.current = initialValue;
+    latestTextRef.current = initialValue ?? "";
     runAfterFrame(() => {
-      // task 草稿恢复时外层 input state 已经更新，但 Lexical 内部文本不会自动跟随 props。
-      // 同时普通打字也会更新 input prop，必须先比较当前编辑器文本，避免每个字符都程序化重写编辑器。
-      if (resolvedInputApiRef.current?.getMarkdown() === initialValue) {
+      if (latestTextRef.current !== (initialValue ?? "")) {
         return;
       }
-      resolvedInputApiRef.current?.setText(initialValue);
+      const input = resolvedInputApiRef.current;
+      if (initialEditorStateJson && input) {
+        try {
+          input.setEditorStateJson(initialEditorStateJson);
+          return;
+        } catch {
+          // Fall back to the plain text draft if the saved editor state is incompatible.
+        }
+      }
+      const value = initialValue ?? "";
+      // task 草稿恢复时外层 input state 已经更新，但 Lexical 内部文本不会自动跟随 props。
+      // 同时普通打字也会更新 input prop，必须先比较当前编辑器文本，避免每个字符都程序化重写编辑器。
+      if (resolvedInputApiRef.current?.getMarkdown() === value) {
+        return;
+      }
+      resolvedInputApiRef.current?.setText(value);
     });
-  }, [initialValue, resolvedInputApiRef, syncInitialValueOnMount]);
+  }, [initialEditorStateJson, initialValue, resolvedInputApiRef, syncInitialValueOnMount]);
 
   const handleTextChange = useCallback(
     (value: string) => {
@@ -396,6 +414,7 @@ export function ChatPromptEditor({
           taskId={taskId}
           skillCatalogSessionId={skillCatalogSessionId}
           taskSkillCatalogRequest={taskSkillCatalogRequest}
+          slashCommandsOverride={slashCommandsOverride}
           inputTestId={inputTestId}
           editorApiRef={resolvedInputApiRef}
           promptHistory={promptHistory}

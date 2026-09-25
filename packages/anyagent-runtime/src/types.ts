@@ -20,6 +20,18 @@ import type {
   RuntimeCurrentAuthorizationProjection,
   RuntimeCurrentEngineProjection,
 } from "./runtime-current-projection-types.js";
+import type {
+  RuntimeExecutionStatus,
+  RuntimeInputStatus,
+  RuntimeSessionStatus,
+  RuntimeTaskStatus,
+} from "./runtime-task-status-types.js";
+export type {
+  RuntimeExecutionStatus,
+  RuntimeInputStatus,
+  RuntimeSessionStatus,
+  RuntimeTaskStatus,
+} from "./runtime-task-status-types.js";
 export type {
   RuntimeCurrentAuthorizationProjection,
   RuntimeCurrentEngineProjection,
@@ -39,6 +51,7 @@ export type {
   ReconcileExecution,
   ReconcileInput,
   TaskLifecycleRequest,
+  TaskSidebarIdentity,
   SubmitInput,
 } from "./runtime-operation-types.js";
 
@@ -90,32 +103,6 @@ export type RuntimeIdKind =
   | "user-input"
   | "stop"
   | "issue";
-export type RuntimeTaskStatus =
-  | "active"
-  | "frozen"
-  | "completed"
-  | "failed"
-  | "stopped"
-  | "abandoned";
-export type RuntimeSessionStatus = "creating" | "active" | "unknown" | "failed" | "closed";
-export type RuntimeInputStatus =
-  | "queued"
-  | "received"
-  | "native-accepted"
-  | "started"
-  | "completed"
-  | "failed"
-  | "stopped"
-  | "unknown"
-  | "rejected"
-  | "cancelled";
-export type RuntimeExecutionStatus =
-  | "accepted"
-  | "started"
-  | "completed"
-  | "failed"
-  | "stopped"
-  | "unknown";
 export type RuntimeAuthorizationScope =
   | "session.create"
   | "session.fork"
@@ -204,6 +191,13 @@ export interface RuntimeTask {
   readonly currentAuthorization: RuntimeCurrentAuthorizationProjection;
   readonly environment: RuntimeEnvironment;
   readonly credentialSource: RuntimeCredentialSource;
+  readonly sidebarMetadata: Readonly<{
+    title: string | null;
+    pinned: boolean;
+    pinOrder: number | null;
+    archivedAt: number | null;
+    unreadAt: number | null;
+  }>;
   readonly participant: RuntimeParticipant;
   readonly session: RuntimeSession;
 }

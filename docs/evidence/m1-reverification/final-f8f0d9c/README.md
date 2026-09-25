@@ -1,0 +1,35 @@
+# Milestone #2 集成候选桌面复验（2026-09-25）
+
+被测产品完整提交：`f8f0d9cd0dcff67caefe6835d79467d03dcce91e`（当时 `origin/main`，PR #35 squash merge）。本目录记录此提交的新桌面场景；PR #34、#35 之前的真实 CLI 场景仍保留其原产品提交，不由本文件改写。证据提交晚于产品提交，未修改产品行为、依赖或装配。无适用远端 CI；以下为本机可复现检查。
+
+环境：macOS Darwin arm64、Electron `41.0.3`、Node `24.14.0`、pnpm `10.33.2`、固定 `zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521`，仓库内 ZCode Adapter `m1.2`。以隔离 `HOME=/tmp/anyagent-opencode-go.aBEA0z/home`、隔离 Electron profile，以及项目 `/tmp/anyagent-opencode-go.aBEA0z/m2-final-project` 与 `/tmp/anyagent-opencode-go.aBEA0z/m2-question-project` 启动正式 App 的 `pnpm dev:desktop:prod`。M1 运行使用 `ANYAGENT_M0=1`、`ANYAGENT_M1_WORKBENCH=1`；M0 对照独立运行使用 `ANYAGENT_M1_WORKBENCH=0`。隔离 App 中已有 OpenCode Go 配置，未读取、复制或提交凭据。`m2-final-project/README.md` 的真实内容为 `Workspace marker: M2_FINAL_RC_925`。模型以每轮实际记录为准；主要场景是 OpenCode Go (Anthropic)／`qwen3.8-flash`，推理 `xhigh`，权限模式 `build`（界面“变更前确认”）。
+
+## 正式 UI 与真实 CLI
+
+- M0 flag-off：在隔离 `m2-question-project`、独立 profile 的原 Root／Task／Composer 新建原生任务，发送 `M2_FINAL_M0_SMOKE_925`，收到 `M0_FINAL_OK_925`，原生 Session `sess_56848715-96e4-43ab-a914-56915d9c5342`、Input `queue_01a0d8f7-32c5-7c79-a693-7ba32549c9c4`。返回设置与侧栏后仍可打开该 Task。这是本候选旧路径的 smoke；M0 历史 Verified Baseline 仍以 Milestone #1 当时证据为准。
+- M1 真实 Task A：原侧栏与 Composer 新建 `task_be2ae963-20c2-4f07-9c0b-b16dee2bccb5`，产品 Session `session_1cd1d6fc-675c-44f6-bd1a-4b9adf275ed3` 对应原生 `sess_9d853192-d8fb-418f-af3b-fa6cb6dc0916`。第一轮触发原生 Read，原消息中呈现工具与 Markdown／代码块。模型的首轮自然语言误写 marker，不能以答复文字证明文件内容；原生 Read 与后续上下文轮另行核对。第二轮同 Provider 选 `mimo-v2.6-flash-free`，请求实际进入该模型但模型服务回 `Model is unavailable`，产品记失败。第三轮同 Provider 选 `deepseek-v4.1-flash`，同产品／原生 Session 成功完成；失败的第二轮记录保留。切换到另一个 Provider 时界面明确拒绝 Session 内热迁移。
+- 在 Task A 至少两轮之后退出 App、重新启动、从原侧栏打开原 Task：先只显示历史与“恢复原会话”，不自动取得继续资格或重发输入。点击恢复后，原产品 Task／Participant／Session 与原生 Session 均未变，后续新轮 `M2_FINAL_RC_R4_AFTER_RESTART_925` 收到 `RECOVERED_SAME_SESSION_OK_925`。再次重启也先呈现同一显式恢复状态，再恢复同一 Session。截图：[恢复前](cold-restore-before.jpg)、[恢复后](cold-restore-after.jpg)。
+- 恢复后新长轮 `M2_FINAL_RC_STREAM_AFTER_RESTORE_925` 在完成前已经显示编号正文；[完成前窗口](stream-before-completion.jpg)与[完成后窗口](stream-after-completion.jpg)来自同一轮、同一 App。需结合 `final-rc-crosscheck.json` 中 `message.delta` 与 terminal 时间验证流式时序；完成后 UI 只保留一条结果，不重复渲染。完成前图的可见列表到第 51 项，完成后到第 100 项。
+- 真实 Task C `task_ca5aeca7-3407-49a6-9ef5-ec9930924941` 以 `qwen3.8-flash` 先用原生 Write 申请允许，正式 UI 选“允许一次”，实际隔离文件 `m2-final-allow-925.txt` 内容为 `ALLOW_FINAL_925`；下一轮原生 Write 申请被 UI 拒绝，`m2-final-deny-925.txt` 不存在。[允许／拒绝和文件摘要窗口](final-f8f0d9c-approval-results.jpg)可见两轮结果；产品 Approval 与原生 permission 及磁盘在结构化交叉核对中一一对应。模型对拒绝轮拟写内容与提示词不完全相同，因此这里只断言拒绝的原生请求未执行，不把提示词当作原生操作事实。
+- 同 Task C 从原 Composer 的 `+` 加入 `README.md` mention 与本地附件 `m2-final-allow-925.txt`。原 Input、原生 `attachmentRefs` 与模型真正读取的文件对应；其后历史编辑保留该附件，再次编辑移除旧附件并新增本地 `README.md`，每次生成新 Input 且 `revisionOf` 指向直接来源，旧记录保留。[编辑来源与附件窗口](final-f8f0d9c-attachment-edit.jpg)显示原消息及“此前版本”。第二次编辑草稿中的标记插入位置有 UI 键入偏差，模型后续答复偏离请求；这里只以产品 Input／附件、原生引用和来源关系作为该项证据，不宣称模型语义回答正确。
+- Task C 运行长轮 `M2_FINAL_RC_QUEUE_A_925` 时，正式 UI 在完成前显示逐步增长的回答并加入队列轮 `M2_FINAL_RC_QUEUE_B_925`。A terminal 之后 B 才 promoted／执行，收到 `QUEUE_B_OK_925`。同一 Composer 选择可用 `/compact`，原生 `command_fact` ACK accepted 且 terminal success；没有补造产品 Input／Execution。compact 后同 Task／Session 的 `M2_FINAL_RC_AFTER_COMPACT_C_925` 收到 `AFTER_COMPACT_OK_925`。[队列与 compact 后续窗口](final-f8f0d9c-queue-complete.jpg)。
+- 同一正式 Composer 直接提交 `/goal Reply exactly M2_FINAL_GOAL_OK_925 once, then stop. Do not call tools.`；界面转换为 Goal 命令，固定真实 CLI 在同一 Task／Session 完成并回复 `M2_FINAL_GOAL_OK_925`，[窗口](goal-command.jpg)可见。只输入 `/goal` 时 slash picker 显示“没有匹配的命令”；因此这里证明直接调用可用命令，不声称 picker 完整呈现该命令。
+- 同候选 M0 flag-off 的原生历史 Session 输入 `/goal` 时，[原 Composer 命令候选](m0-slash-existing-session.jpg)明确列出 `/goal`；未提交该草稿。这把 M1 候选菜单的缺失界定为可复现的产品对等问题，而不是固定 CLI 不支持。修复需在新产品候选另行验收；本目录仍只代表 `f8f0d9c`。
+- 另建真实 Task 验证运行中队列编辑：长轮 `M2_FINAL_RC_QUEUE_EDIT_A_925` 尚在 streaming 时，队列 B 原文 `M2_FINAL_RC_QUEUE_EDIT_B_ORIGINAL_925` 被 UI 编辑移回草稿，再以 `M2_FINAL_RC_QUEUE_EDIT_B_REVISED_925` 加入队列；[提升前窗口](queue-edited-before-promotion.jpg)显示修订内容。原 B 产品 Input 为 cancelled、无 Execution／原生 session_input；只有修订 B 在 A terminal 后进入原生 Session 并完成。随后测试移除：前两次因长轮已结束，待移除 C/C2 先于点击被提升和执行，不作为移除成功证据；第三次在 `M2_FINAL_RC_QUEUE_REMOVE_SOURCE3_925` streaming 期间点击移除 C3，C3 产品 Input 为 cancelled、无 Execution、原生 session_input 为零。具体 ID 与状态见 `final-rc-crosscheck.json`；移除后 UI 队列条目消失，未另存有效的最终窗口截图，故零派发结论以双库为准。
+- Fake Engine 仍经相同原 Root／侧栏／Composer：Task A 两轮，快捷键 ⌘N 新建独立 Task B 一轮，返回 A 第三轮；[A→B→A 窗口](final-f8f0d9c-fake-a-b-a.jpg)显示 A 的三轮未混入 B。Fake 的工具／文件文字是模拟事件，不能证明真实文件改变；模式与推理在 Fake 下显示“接入未映射”。
+
+M0 flag-off 的[原对话回复窗口](m0-flag-off-smoke.jpg)、[自动化导航窗口](m0-automation-navigation.jpg)和[隔离模型设置窗口](m0-model-settings.jpg)来自同一 `f8f0d9c` App 启动配置。由自动化页和设置返回原侧栏后，原 Task 的同一回复仍显示。M1 真实 Task C 第二次重启恢复后新增 `M2_FINAL_RC_PENDING_DENY_925`：原生 Write 在正式 UI 呈现[待审批请求](approval-pending.jpg)，从该请求选“拒绝”后显示[拒绝结果](approval-rejected.jpg)；隔离目标文件不存在。该轮与上面的允许／拒绝及 compact 轮属于同一个产品 Task／原生 Session。
+
+### 运行中失联、Stop 与对账
+
+在同一隔离 App 的项目 `/tmp/anyagent-opencode-go.aBEA0z/m2-question-project` 新建真实 ZCode Task `task_f9b8cf36-ac2b-4cc2-9c94-830bb619c0a5`；首轮 `M2_FINAL_RC_STOP_SETUP_925` 完成。第二轮 Input `input_809e584e-ea51-42e1-aec7-397c641b5c1c` 由正式 UI 发起 Write `m2-final-stop-925.txt` 和长回答，正式权限框“允许一次”。事前只对该隔离 workDirectory、原生 Session `sess_5fa1f43f-9605-4083-aa51-f295516c7409` 和 Input 写入一次性开发态 Adapter 观测中断 failpoint；原生工具结果后被精确消费，隔离文件实际为 `STOP_FILE_925`。此时产品 Input／Execution 为 unknown，原生尚无本轮 terminal；[UI unknown、对账与 Stop 入口](unknown-running-stop-entry.jpg)可见。
+
+点击正式 UI“请求中断”后，[送达提示](stop-delivered-not-confirmed.jpg)明确说 ACK 不等于已停止，仍等待原生终态；实际原生同一 Input 随后持久化 `turn_complete/cancelled`。再点击“对账原执行”，[UI 已停止且保留遗漏事件警示](stop-reconciled.jpg)，不补造漏掉的工具／文件事件。文件内容与产品／原生记录以 `final-rc-crosscheck.json` 为准；本场景只断该 Adapter Execution 的事件观察，Host–CLI stdio 全程在线，不证明物理 stdio 断线。停止后同一 Task／Session 的首个新轮 `M2_FINAL_RC_AFTER_STOP_925` 被模型自行改为文件搜索，正式 UI 再次中断；没有把它记成成功或让模型清理测试文件。切换同 Provider 的 `deepseek-v4.1-flash` 后，第二个新轮 `M2_FINAL_RC_AFTER_STOP_FINAL_925` 在同一 Session 完成并回复 `AFTER_STOP_OK_925`，[窗口](after-stop-same-session.jpg)可见。两轮原记录都保留，隔离标记文件仍在。
+
+## 自动化、层级与限制
+
+在此完整提交上运行 Engine Contract 9/9、Runtime 76/76、ZCode Adapter 78/78、Host／Adapter／附件相关 89/89、原生映射 3/3、隔离 stdio failpoint 4/4、实际挂载 UI／DOM 34/34；`pnpm typecheck`、`pnpm lint`（65 条既有 warning，0 error）、`pnpm architecture:check -- --changed`（0 violation）、`pnpm build:bootstrap`、`bash docs/decisions/generate-index.sh --check`、`git diff --check` 均通过。本机命令以仓库 `package.json` 和相应包脚本为准；启动与测试时以 Node 24／pnpm 10 的绝对路径置于 PATH 前，避开未受信任的工作树 mise 配置。全仓格式检查的既有差异未在此无关范围重排。
+
+本目录截图由 CUA 直接操作正式 App 并以同一 CUA 截图字节保存，均来自 `f8f0d9c`；数据库交叉核对只读隔离产品 SQLite、原生 SQLite 和实际隔离文件，不包含凭据。自动化证明状态机与归属负例；截图证明导航、恢复、历史呈现、长回答和可见结果；真实 CLI／Provider 证明固定版本原生请求与执行。`mimo-v2.6-flash-free` 的 unavailable 是此次配置／模型返回，不推导成该模型永久不支持。
+
+本候选仍未覆盖原始 Host–CLI stdio 在执行运行中物理断开的场景；#10／#21 没有将这一更窄传输形态设为独立 closure gate，不能把本次 Adapter 观测中断冒充它。完整视觉／导航矩阵的每个入口尚未都留证，相关自动化与此前分项证据仍需按层级核对。结构化提问真实空答复属于 PR #35 产品提交 `a314e82` 的增量，见 `../final-a314e82/README.md`，本目录没有重拍它。因此本文件不是 Milestone #2 最终 closure 声明。
