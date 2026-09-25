@@ -49,6 +49,40 @@ export function readZCodeStdioTapDevState(): ZCodeStdioTapDevState {
   };
 }
 
+/**
+ * Isolated M0 development runs may arm one terminal-frame disconnect for a single command.
+ * The workspace, native Session and command identifiers live in the isolated data profile;
+ * the default profile and production runtime cannot enable this test-only behavior.
+ */
+export function isZCodeStdioTerminalDropFailpointEnabled(workspaceKey: string): boolean {
+  if (
+    !isZCodeStdioTapDevVisible() ||
+    process.env.ANYAGENT_M0 !== "1" ||
+    !process.env.ZCODE_DATA_BASE_DIR?.trim()
+  ) {
+    return false;
+  }
+
+  const path = join(getZCodeStdioTapDevDir(), "zcode-stdio-terminal-drop.json");
+  const state = readStateFile(path) as ZCodeStdioTapStateFile & {
+    schemaVersion?: unknown;
+    workspaceKey?: unknown;
+    sessionId?: unknown;
+    commandId?: unknown;
+    consumedAt?: unknown;
+  };
+  return (
+    state.schemaVersion === 1 &&
+    state.enabled === true &&
+    state.workspaceKey === workspaceKey &&
+    typeof state.sessionId === "string" &&
+    state.sessionId.trim().length > 0 &&
+    typeof state.commandId === "string" &&
+    state.commandId.trim().length > 0 &&
+    state.consumedAt === undefined
+  );
+}
+
 export function setZCodeStdioTapDevEnabled(enabled: boolean): ZCodeStdioTapDevState {
   const visible = isZCodeStdioTapDevVisible();
   const statePath = getZCodeStdioTapDevStatePath();

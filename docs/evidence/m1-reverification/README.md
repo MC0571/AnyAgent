@@ -2,6 +2,12 @@
 
 本次分层整理所据产品候选：`f47e6b7679f199d82d2f78fc8534aa417b110367`，当时基于 `origin/main` 的 `644120db21f654edbf40b4008df92294772a08cc`；整理前 PR 证据 head 为 `f66b629646446b504e452f9e31fccdf5b9906d33`。本候选已有[增量原生桌面与检查记录](final-f47e6b7/README.md)，但尚未完成全量必测回归。上一次较完整的桌面证据对应 `432eb7075024639b1e5e9f0692c20666f85d7fa7`，见[该候选原生桌面与检查证据](final-432eb70/README.md)；后续 `dda479f031212729dfcb289a983161e32686e872` 的[冷恢复增量复验](final-dda479f/README.md)保留原提交归属。较早 `44cfb92096238882c24c87315b271a2d8428aa4a` 的[网页拾取证据](final-44cfb92/README.md)、`07bced37c5e82e1a9413b305dc2f0fa0c2358d85` 的[分享、队列与恢复证据](final-07bced3/README.md)、`b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34` 的[集成证据](final-b0fc0e9/README.md)、`db192db555f1ef950052f528595ad3d055562ef9` 的[桌面证据](final-db192db/README.md)以及更早提交的截图保留原归属。PR #25 已在独立集成审阅后合并为 `d813b84318aa554c65c162e533c079ba9ed16bdc`；Milestone #2 保持 open，本记录不表示最终 RC 已通过。
 
+## 真实 CLI 断线对账候选增量（`ea8e5cdd31a549a87934e5b7759eea9c428d82be`）
+
+本候选在隔离 macOS App、原 Root／侧栏／Composer 和真实 `zcode-cli/0.16.9`／OpenCode Go 模型服务上，从旧 Task 显式恢复原 Session，完成带 Write 审批的轮次。精确工作区／Session／Input ID 的开发态 failpoint 在原生持久终态产生后丢失 `turn.completed` 帧；产品保留 unknown 与对账入口，不自动重发。点击正式 UI“对账原执行”后，同一产品 Execution 按原生持久证据成为 completed，仍提示遗漏事件未重建；随后同一 Task／Session 的新轮次正常完成。[同场景步骤、双 SQLite、文件哈希与本机检查](final-ea8e5cd/README.md)及[脱敏交叉核对](final-ea8e5cd/disconnect-crosscheck.json)证明原轮次只有一次原生 `sendText` 和一次 Write。UI 未再把 unknown 显示为“处理失败”，实际挂载 DOM 34/34 包含该回归断言。
+
+该注入点在**原生终态已持久化后**，不能证明原生执行仍运行时断线并继续运行；本次亦未保存桌面截图／录屏。两项仍属最终 RC 的具体证据缺口。以下较早候选证据仍按其各自提交阅读，不因本增量自动升级为最终验收。
+
 ## 安全重试候选增量（`7074b10f350bb6ceccf4b876496299deb768e7ab`）
 
 本增量基于已合并 PR #30 的 `origin/main` `ee54d6d84a8b3ac139607776740190ac94e34635`。通用 Runtime 现把失败事件的 `sideEffects: possible` 或缺失副作用事实作为安全重试阻断：即使产品事件流没有工具事件，也须取得 Adapter 对原生来源无工具／文件副作用的稳定快照证明，并把证明绑定新尝试 Input；实际派发前仍由 Adapter 再核对原生来源。`known` 和已观察到的工具／文件变更直接拒绝。核验期间 Host 授权撤销时不创建重试 Input，也不派发原生命令。原失败记录与尝试来源保持独立。此处是安全资格修复，不代表真实 CLI 失败轮桌面重试已验收。

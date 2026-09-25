@@ -5,11 +5,20 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { spawn } from "node:child_process";
+import {
+  consumeTerminalDropFailpoint,
+  getTerminalDropFailpointPath,
+  isIsolatedDevelopmentFailpointAllowed,
+  matchesTerminalFrame,
+  readTerminalDropFailpoint,
+} from "./zcode-stdio-terminal-drop-failpoint.mjs";
+
+const TERMINAL_DROP_CHILD_FORCE_MS = 500;
 
 function printUsageAndExit() {
   process.stderr.write(
     [
-      "Usage: zcode-stdio-tap.mjs --workspace-key <key> [--log-dir <dir>] -- <command> [...args]",
+      "Usage: zcode-stdio-tap.mjs --workspace-key <key> [--log-dir <dir>] [--terminal-drop-failpoint] -- <command> [...args]",
       "",
     ].join("\n"),
   );
@@ -30,6 +39,7 @@ function parseArgs(argv) {
 
   let workspaceKey = "";
   let logDir = process.env.ZCODE_STDIO_TAP_LOG_DIR?.trim() || "";
+  let terminalDropFailpoint = false;
 
   for (let index = 0; index < options.length; index += 1) {
     const option = options[index];
@@ -43,6 +53,10 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (option === "--terminal-drop-failpoint") {
+      terminalDropFailpoint = true;
+      continue;
+    }
     printUsageAndExit();
   }
 
@@ -53,7 +67,10 @@ function parseArgs(argv) {
   return {
     command: commandAndArgs[0],
     args: commandAndArgs.slice(1),
-    logDir: logDir || join(homedir(), ".zcode", "v2", "dev", "stdio-traffic"),
+    logDir: terminalDropFailpoint
+      ? null
+      : logDir || join(homedir(), ".zcode", "v2", "dev", "stdio-traffic"),
+    terminalDropFailpoint,
     workspaceKey,
   };
 }
@@ -157,9 +174,88 @@ function createLineTap(direction, recordLine) {
   };
 }
 
+function createStdoutForwarder({ recordLine, terminalDrop }) {
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  let dropped = false;
+
+  const forwardLine = (line, hasNewline) => {
+    const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
+    const match = matchesTerminalFrame(normalized, terminalDrop);
+    if (
+      match &&
+      consumeTerminalDropFailpoint(
+        terminalDrop.path,
+        {
+          schemaVersion: 1,
+          enabled: true,
+          workspaceKey: terminalDrop.workspaceKey,
+          sessionId: terminalDrop.sessionId,
+          commandId: match.commandId,
+        },
+        match.eventType,
+      )
+    ) {
+      dropped = true;
+      return true;
+    }
+    process.stdout.write(line + (hasNewline ? "\n" : ""));
+    recordLine("agent-to-app", normalized, Buffer.byteLength(normalized));
+    return false;
+  };
+
+  return {
+    push(chunk) {
+      if (dropped) {
+        return true;
+      }
+      pending += decoder.write(chunk);
+      let newlineIndex = pending.indexOf("\n");
+      while (newlineIndex >= 0) {
+        const line = pending.slice(0, newlineIndex);
+        pending = pending.slice(newlineIndex + 1);
+        if (forwardLine(line, true)) {
+          // The Host receives the disconnect immediately after this exact terminal frame.
+          pending = "";
+          return true;
+        }
+        newlineIndex = pending.indexOf("\n");
+      }
+      return false;
+    },
+    flush() {
+      if (dropped) {
+        return;
+      }
+      const tail = pending + decoder.end();
+      pending = "";
+      if (tail.length > 0) {
+        forwardLine(tail, false);
+      }
+    },
+  };
+}
+
 const config = parseArgs(process.argv.slice(2));
-const dir = join(config.logDir, workspaceHash(config.workspaceKey));
-mkdirSync(dir, { recursive: true });
+const failpointPath = getTerminalDropFailpointPath();
+const terminalDrop =
+  config.terminalDropFailpoint && isIsolatedDevelopmentFailpointAllowed()
+    ? {
+        config: readTerminalDropFailpoint(failpointPath, config.workspaceKey),
+        path: failpointPath,
+      }
+    : null;
+const activeTerminalDrop = terminalDrop?.config
+  ? {
+      path: terminalDrop.path,
+      workspaceKey: terminalDrop.config.workspaceKey,
+      sessionId: terminalDrop.config.sessionId,
+    }
+  : null;
+const dir = config.logDir ? join(config.logDir, workspaceHash(config.workspaceKey)) : null;
+if (dir) {
+  mkdirSync(dir, { recursive: true });
+}
 
 const child = spawn(config.command, config.args, {
   cwd: process.cwd(),
@@ -168,22 +264,33 @@ const child = spawn(config.command, config.args, {
   windowsHide: true,
 });
 
-const logFilePath = join(
-  dir,
-  `${new Date().toISOString().replace(/[:.]/g, "-")}-proxy-${process.pid}-agent-${child.pid ?? "unknown"}.ndjson`,
-);
-writeFileSync(join(dir, "latest.txt"), `${logFilePath}\n`);
+const logFilePath = dir
+  ? join(
+      dir,
+      `${new Date().toISOString().replace(/[:.]/g, "-")}-proxy-${process.pid}-agent-${child.pid ?? "unknown"}.ndjson`,
+    )
+  : null;
+if (dir && logFilePath) {
+  writeFileSync(join(dir, "latest.txt"), `${logFilePath}\n`);
+}
 
-const stream = createWriteStream(logFilePath, { flags: "a" });
-const recordLine = createRecorder({
-  childPid: child.pid ?? null,
-  stream,
-  workspaceKey: config.workspaceKey,
-});
+const stream = logFilePath ? createWriteStream(logFilePath, { flags: "a" }) : null;
+const recordLine = stream
+  ? createRecorder({
+      childPid: child.pid ?? null,
+      stream,
+      workspaceKey: config.workspaceKey,
+    })
+  : () => {};
 
 const stdinTap = createLineTap("app-to-agent", recordLine);
 const stdoutTap = createLineTap("agent-to-app", recordLine);
 const stderrTap = createLineTap("agent-stderr", recordLine);
+const stdoutForwarder = createStdoutForwarder({
+  recordLine,
+  terminalDrop: activeTerminalDrop,
+});
+let terminalDropForceTimer;
 
 child.on("error", (error) => {
   recordLine(
@@ -195,8 +302,22 @@ child.on("error", (error) => {
 });
 
 child.stdout.on("data", (chunk) => {
-  process.stdout.write(chunk);
-  stdoutTap.push(chunk);
+  if (!activeTerminalDrop) {
+    process.stdout.write(chunk);
+    stdoutTap.push(chunk);
+    return;
+  }
+  if (!stdoutForwarder.push(chunk)) {
+    return;
+  }
+  process.stdin.pause();
+  // The terminal frame is persisted by the CLI before it reaches this boundary.
+  // Closing the owned CLI gives the Host a real transport close for reconciliation.
+  terminalDropForceTimer = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }, TERMINAL_DROP_CHILD_FORCE_MS);
+  terminalDropForceTimer.unref();
+  if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
 });
 
 child.stderr.on("data", (chunk) => {
@@ -230,10 +351,15 @@ process.on("SIGINT", () => forwardSignal("SIGINT"));
 process.on("SIGTERM", () => forwardSignal("SIGTERM"));
 
 child.on("close", (code, signal) => {
+  if (terminalDropForceTimer) clearTimeout(terminalDropForceTimer);
   stdinTap.flush();
-  stdoutTap.flush();
+  if (activeTerminalDrop) stdoutForwarder.flush();
+  else stdoutTap.flush();
   stderrTap.flush();
-  stream.end(() => {
-    process.exit(code ?? (signal ? 1 : 0));
-  });
+  const exitCode = code ?? (signal ? 1 : 0);
+  if (stream) {
+    stream.end(() => process.exit(exitCode));
+  } else {
+    process.exit(exitCode);
+  }
 });

@@ -1432,7 +1432,7 @@ export function EngineConversationTimeline({
                 !execution.error ? (
                   <p className="ml-4 text-xs text-destructive">执行失败；没有回答正文。</p>
                 ) : null}
-                {execution.error ? (
+                {execution.status === "failed" && execution.error ? (
                   <p className="ml-4 text-sm text-destructive">处理失败，请刷新状态后重试。</p>
                 ) : null}
                 {executionTurn.approvals

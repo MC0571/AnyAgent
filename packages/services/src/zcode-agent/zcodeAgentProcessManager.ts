@@ -30,7 +30,10 @@ import { isEffectiveDevelopmentNodeEnv } from "#src/runtime-tools/nodeEnv.js";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { ZCodeProtocolClient } from "./zcodeProtocolClient.js";
 import { ZCodeStdioTransport } from "./zcodeStdioTransport.js";
-import { readZCodeStdioTapDevState } from "./zcodeStdioTapDevConfig.js";
+import {
+  isZCodeStdioTerminalDropFailpointEnabled,
+  readZCodeStdioTapDevState,
+} from "./zcodeStdioTapDevConfig.js";
 import type { ZCodeAgentPresentationSurface } from "./zcodeAgentPresentationSurface.js";
 import { shouldSpawnInDetachedProcessGroup } from "../process/processTreeTerminator.js";
 import type { RuntimeProcessLifecycleReporter } from "../process/runtimeProcessLifecycle.js";
@@ -502,7 +505,8 @@ function wrapZCodeAgentCommandWithStdioTapDevProxy(
   workspaceKey: string,
 ): ZCodeAgentCommand {
   const tapState = readZCodeStdioTapDevState();
-  if (!tapState.enabled) {
+  const terminalDropFailpointEnabled = isZCodeStdioTerminalDropFailpointEnabled(workspaceKey);
+  if (!tapState.enabled && !terminalDropFailpointEnabled) {
     return command;
   }
 
@@ -521,8 +525,10 @@ function wrapZCodeAgentCommandWithStdioTapDevProxy(
       tapScript,
       "--workspace-key",
       workspaceKey,
-      "--log-dir",
-      tapState.logDir,
+      // Terminal-drop runs must not write raw protocol frames, even if the separate
+      // development tap switch is also enabled for this isolated profile.
+      ...(!terminalDropFailpointEnabled && tapState.enabled ? ["--log-dir", tapState.logDir] : []),
+      ...(terminalDropFailpointEnabled ? ["--terminal-drop-failpoint"] : []),
       "--",
       command.command,
       ...(command.args ?? []),
