@@ -4601,8 +4601,8 @@ export class TaskRuntime {
         }
       } else if (!TERMINAL_EXECUTION_STATUSES.has(current.data.status)) {
         terminalApplied = this.#applyEvent(target, current, event, eventId);
-      } else if (isNativeAcceptedEmptyUserInputResponse(event)) {
-        this.#applyLateAcceptedEmptyUserInputResponse(target, current, event);
+      } else if (isEngineConfirmedUserInputResponse(event)) {
+        this.#applyLateEngineConfirmedUserInputResponse(target, current, event);
       }
     }
 
@@ -4884,7 +4884,7 @@ export class TaskRuntime {
     }
   }
 
-  #applyLateAcceptedEmptyUserInputResponse(
+  #applyLateEngineConfirmedUserInputResponse(
     target: RunTarget,
     execution: StoredRecord<ExecutionData>,
     event: Extract<EngineEvent, { type: "user-input.response" }>,
@@ -6566,26 +6566,17 @@ function isTerminalEvent(type: EngineEvent["type"]): boolean {
   );
 }
 
-function isNativeAcceptedEmptyUserInputResponse(
+function isEngineConfirmedUserInputResponse(
   event: EngineEvent,
 ): event is Extract<EngineEvent, { type: "user-input.response" }> {
-  if (
-    event.type !== "user-input.response" ||
-    event.source !== "adapter" ||
-    event.status !== "forwarded" ||
-    event.evidence?.source !== "engine" ||
-    event.evidence.evidenceId.length === 0
-  )
-    return false;
-  const content = event.response?.content;
-  if (!content || typeof content !== "object" || Array.isArray(content)) return false;
-  const answers = (content as EngineJsonObject).answers;
   return (
-    event.response?.action === "accept" &&
-    answers !== null &&
-    typeof answers === "object" &&
-    !Array.isArray(answers) &&
-    Object.keys(answers).length === 0
+    event.type === "user-input.response" &&
+    event.source === "adapter" &&
+    event.status === "forwarded" &&
+    event.evidence?.source === "engine" &&
+    event.evidence.evidenceId.length > 0 &&
+    event.response !== undefined &&
+    event.response !== null
   );
 }
 

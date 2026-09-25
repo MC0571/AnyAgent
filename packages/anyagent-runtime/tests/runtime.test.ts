@@ -5077,7 +5077,7 @@ test("native user-input response evidence survives a conflicting command receipt
   }
 });
 
-test("native accepted-empty user input reconciles after terminal without crossing executions", async () => {
+test("engine-confirmed user input reconciles after terminal without crossing executions", async () => {
   const engine = new ManualEngine();
   const runtime = createTaskRuntime({
     databasePath: ":memory:",
@@ -5091,18 +5091,28 @@ test("native accepted-empty user input reconciles after terminal without crossin
       sessionId: task.session.id,
       authorizationId: task.authorizationId,
     };
-    const acceptedEmpty = (runIndex: number, requestId: string, eventId: string) => {
+    const nativeResponse = (
+      runIndex: number,
+      requestId: string,
+      eventId: string,
+      response: Record<string, unknown> = { action: "accept", content: { answers: {} } },
+      withEvidence = true,
+    ) => {
       const run = engine.runs[runIndex]!;
       const event = {
         type: "user-input.response",
         requestId: requestId as never,
         status: "forwarded",
-        response: { action: "accept", content: { answers: {} } },
-        evidence: {
-          source: "engine",
-          evidenceId: `native-${eventId}`,
-          detail: "Native AskUserQuestion completed with no answers.",
-        },
+        response,
+        ...(withEvidence
+          ? {
+              evidence: {
+                source: "engine",
+                evidenceId: `native-${eventId}`,
+                detail: "Native user input completed.",
+              },
+            }
+          : {}),
         eventId,
         streamId: `adapter-${runIndex}`,
         sourceSequence: null,
@@ -5153,7 +5163,7 @@ test("native accepted-empty user input reconciles after terminal without crossin
     });
     await until(() => runtime.getHistory(task.id)!.userInputs.length === 2);
 
-    acceptedEmpty(0, "request-second", "cross-execution-answer");
+    nativeResponse(0, "request-second", "cross-execution-answer");
     await until(() =>
       runtime
         .getHistory(task.id)!
@@ -5162,7 +5172,15 @@ test("native accepted-empty user input reconciles after terminal without crossin
     assert.equal(runtime.getHistory(task.id)!.userInputs[0]!.status, "rejected");
     assert.equal(runtime.getHistory(task.id)!.userInputs[1]!.status, "pending");
 
-    const lateAnswer = acceptedEmpty(0, "request-first", "late-empty-answer");
+    nativeResponse(0, "request-first", "late-without-evidence", undefined, false);
+    await until(() =>
+      runtime
+        .getHistory(task.id)!
+        .events.some((event) => event.nativeEventId === "late-without-evidence"),
+    );
+    assert.equal(runtime.getHistory(task.id)!.userInputs[0]!.status, "rejected");
+
+    const lateAnswer = nativeResponse(0, "request-first", "late-empty-answer");
     await until(() => runtime.getHistory(task.id)!.userInputs[0]!.status === "forwarded");
     engine.runs[0]!.events.push({
       ...lateAnswer,
@@ -5192,8 +5210,9 @@ test("native accepted-empty user input reconciles after terminal without crossin
     assert.equal(runtime.getHistory(task.id)!.executions[0]!.status, "completed");
     assert.equal(runtime.getHistory(task.id)!.userInputs[1]!.status, "pending");
 
-    acceptedEmpty(1, "request-second", "second-empty-answer");
+    nativeResponse(1, "request-second", "second-native-answer", { selected: "Gamma" });
     await until(() => runtime.getHistory(task.id)!.userInputs[1]!.status === "forwarded");
+    assert.deepEqual(runtime.getHistory(task.id)!.userInputs[1]!.response, { selected: "Gamma" });
     engine.emit(1, {
       type: "execution.completed",
       result: "second execution finished",
