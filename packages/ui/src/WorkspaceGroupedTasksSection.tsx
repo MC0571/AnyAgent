@@ -24,6 +24,8 @@ import { createPortal } from "react-dom";
 import { cn } from "@/components/lib/utils.js";
 import {
   EngineGroupedTaskRow,
+  engineTaskSidebarMetadata,
+  engineTaskTitle,
   useEngineTaskSidebarData,
   type EngineTask,
 } from "@/EngineTaskSidebar.js";
@@ -565,6 +567,7 @@ export function WorkspaceGroupedTasksSection({
   onOpenAutomations,
   hiddenNativeTaskIds,
   engineService,
+  engineTaskData,
   engineSelectedTaskId,
   onSelectEngineTask,
   onRefreshEngineState,
@@ -592,31 +595,41 @@ export function WorkspaceGroupedTasksSection({
   onOpenAutomations?: () => void;
   hiddenNativeTaskIds?: ReadonlySet<string>;
   engineService?: IAnyAgentService | null;
+  engineTaskData?: ReturnType<typeof useEngineTaskSidebarData>;
   engineSelectedTaskId?: string | null;
   onSelectEngineTask?: (taskId: string) => void;
   onRefreshEngineState?: () => void;
   onNativeSessionIdsChange?: (ids: ReadonlySet<string>) => void;
 }) {
   const { intl } = useZCodeIntl();
+  const fetchedEngineTaskData = useEngineTaskSidebarData({
+    service: engineTaskData ? null : engineService && onSelectEngineTask ? engineService : null,
+    onRefresh: engineTaskData ? undefined : onRefreshEngineState,
+    onNativeSessionIdsChange: engineTaskData ? undefined : onNativeSessionIdsChange,
+  });
   const {
-    tasks: engineTasks,
+    tasks: allEngineTasks,
     titles: engineTitles,
     error: engineError,
-  } = useEngineTaskSidebarData({
-    service: engineService && onSelectEngineTask ? engineService : null,
-    onRefresh: onRefreshEngineState,
-    onNativeSessionIdsChange,
-  });
+  } = engineTaskData ?? fetchedEngineTaskData;
+  const engineTasks = useMemo(
+    () =>
+      allEngineTasks.filter((task) => {
+        const metadata = engineTaskSidebarMetadata(task);
+        return metadata.archivedAt === null && !metadata.pinned;
+      }),
+    [allEngineTasks],
+  );
   const engineNativeSessionIds = useMemo(
     () =>
       new Set(
-        engineTasks.flatMap((task) =>
+        allEngineTasks.flatMap((task) =>
           task.engine.engineId === "zcode" && task.session.nativeSessionId
             ? [task.session.nativeSessionId]
             : [],
         ),
       ),
-    [engineTasks],
+    [allEngineTasks],
   );
   const baseServices = useBaseWorkspaceServices();
   const sessionsById = useRemoteWorkspaceSessionStore((state) => state.sessionsById);
@@ -1597,8 +1610,9 @@ export function WorkspaceGroupedTasksSection({
         <EngineGroupedTaskRow
           key={`engine:${node.task.id}`}
           task={node.task}
-          title={engineTitles[node.task.id] ?? shortId(node.task.id)}
+          title={engineTaskTitle(node.task, engineTitles[node.task.id]) || shortId(node.task.id)}
           active={node.task.id === engineSelectedTaskId}
+          service={engineService}
           onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
         />
       ) : node.type === "group" ? (
@@ -1671,6 +1685,7 @@ export function WorkspaceGroupedTasksSection({
       activeTaskId,
       engineSelectedTaskId,
       engineTitles,
+      engineService,
       onSelectEngineTask,
       activeWorkspaceIdentity,
       activeWorkspacePath,

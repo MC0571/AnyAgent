@@ -20,20 +20,32 @@ import { TaskListRemoteSyncHint } from "@/TaskListRemoteSyncHint.js";
 import { TaskListLoadingHint } from "@/TaskListLoadingHint.js";
 import { buildWorkspaceServiceLookup } from "@/lib/workspaceServiceResolver.js";
 import { DeleteAllArchivedTasksButton } from "@/DeleteAllArchivedTasksButton.js";
+import {
+  EngineTaskRow,
+  engineTaskSidebarMetadata,
+  engineTaskTitle,
+  type EngineTask,
+} from "@/EngineTaskSidebar.js";
+import { shortId } from "@/EngineUiParts.js";
 
 export function WorkspaceArchivedTasksFlatSection({
   workspaceTabs,
   activeWorkspacePath,
   activeWorkspaceIdentity,
   activeTaskId,
+  engineSelectedTaskId,
   sortBy,
   actionsContainer,
   onSelectTask,
+  engineTasks = [],
+  engineTitles = {},
+  onSelectEngineTask,
 }: {
   workspaceTabs: WorkspaceTabState[];
   activeWorkspacePath: string;
   activeWorkspaceIdentity?: string;
   activeTaskId: string | null;
+  engineSelectedTaskId?: string | null;
   sortBy: "created" | "updated";
   actionsContainer?: HTMLElement | null;
   onSelectTask: (
@@ -41,6 +53,9 @@ export function WorkspaceArchivedTasksFlatSection({
     taskId: string,
     targetWorkspaceIdentity?: string,
   ) => void;
+  engineTasks?: readonly EngineTask[];
+  engineTitles?: Readonly<Record<string, string>>;
+  onSelectEngineTask?: (taskId: string) => void;
 }) {
   const { intl } = useZCodeIntl();
   const confirmDialog = useConfirmDialog();
@@ -90,7 +105,21 @@ export function WorkspaceArchivedTasksFlatSection({
     expanded: showAllTasks,
     collapsedLimit,
   });
-  const canToggleExpanded = total > collapsedLimit;
+  const archivedEngineTasks = useMemo(
+    () =>
+      engineTasks
+        .filter((task) => engineTaskSidebarMetadata(task).archivedAt !== null)
+        .sort((left, right) =>
+          sortBy === "created"
+            ? right.createdAt - left.createdAt
+            : right.updatedAt - left.updatedAt,
+        ),
+    [engineTasks, sortBy],
+  );
+  const visibleArchivedEngineTasks = showAllTasks
+    ? archivedEngineTasks
+    : archivedEngineTasks.slice(0, Math.max(0, collapsedLimit - items.length));
+  const canToggleExpanded = total + archivedEngineTasks.length > collapsedLimit;
 
   return (
     <div>
@@ -109,7 +138,7 @@ export function WorkspaceArchivedTasksFlatSection({
         onDeleted={removeTaskFromTaskCaches}
         onRefresh={refresh}
       />
-      {items.length === 0 ? (
+      {items.length === 0 && archivedEngineTasks.length === 0 ? (
         loading ? (
           <TaskListLoadingHint />
         ) : (
@@ -332,6 +361,16 @@ export function WorkspaceArchivedTasksFlatSection({
             </li>
           );
         })}
+        {visibleArchivedEngineTasks.map((task) => (
+          <EngineTaskRow
+            key={`engine:${task.id}`}
+            task={task}
+            title={engineTaskTitle(task, engineTitles[task.id]) || shortId(task.id)}
+            active={task.id === engineSelectedTaskId}
+            service={baseServices.anyAgentService}
+            onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
+          />
+        ))}
       </ul>
       {syncingRemoteWorkspaces ? <TaskListRemoteSyncHint /> : null}
       {canToggleExpanded ? (

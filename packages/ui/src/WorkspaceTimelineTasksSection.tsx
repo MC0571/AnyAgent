@@ -8,6 +8,8 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu.js
 import {
   EngineTaskContextMenuContent,
   EngineTaskRow,
+  engineTaskSidebarMetadata,
+  engineTaskTitle,
   useEngineTaskSidebarData,
   type EngineTask,
 } from "@/EngineTaskSidebar.js";
@@ -122,6 +124,14 @@ export function WorkspaceTimelineTasksSection({
     runningByTask,
     error: engineError,
   } = engineTaskData ?? fetchedEngineTaskData;
+  const visibleEngineTasks = useMemo(
+    () =>
+      engineTasks.filter((task) => {
+        const metadata = engineTaskSidebarMetadata(task);
+        return metadata.archivedAt === null && !metadata.pinned;
+      }),
+    [engineTasks],
+  );
   const baseServices = useBaseWorkspaceServices();
   const scopedWorkspaceTabs = useLocalWorkspaceScopes({
     workspaceTabs,
@@ -153,6 +163,11 @@ export function WorkspaceTimelineTasksSection({
   const [renamingItemKey, setRenamingItemKey] = useState<string | null>(null);
   const [contextMenuItemKey, setContextMenuItemKey] = useState<string | null>(null);
   const [contextMenuEngineTaskId, setContextMenuEngineTaskId] = useState<string | null>(null);
+  const contextMenuEngineTask =
+    engineTasks.find((task) => task.id === contextMenuEngineTaskId) ?? null;
+  useEffect(() => {
+    if (contextMenuEngineTaskId && !contextMenuEngineTask) setContextMenuEngineTaskId(null);
+  }, [contextMenuEngineTask, contextMenuEngineTaskId]);
   const [renameDraft, setRenameDraft] = useState("");
   // timeline 不应沿用 10 条首屏限制，和其它 sidebar 列表的 20 条基准保持一致。
   // 这里把首屏和每次“显示更多”的阶梯统一成 20，避免用户误以为列表只加载到 10/20 就结束。
@@ -262,7 +277,7 @@ export function WorkspaceTimelineTasksSection({
             running: isTaskListRowActive(task),
           }),
         ),
-        ...engineTasks.map(
+        ...visibleEngineTasks.map(
           (task): TimelineDisplayItem => ({
             kind: "engine",
             task,
@@ -277,7 +292,7 @@ export function WorkspaceTimelineTasksSection({
           compareTaskListItemsWithRunningFirst(left, right, taskSortBy, (item) => item.running),
         )
         .slice(0, visibleTaskLimit),
-    [engineTasks, runningByTask, sortedItems, taskSortBy, visibleTaskLimit],
+    [runningByTask, sortedItems, taskSortBy, visibleEngineTasks, visibleTaskLimit],
   );
   const itemByKey = useMemo(() => {
     const nextItemByKey = new Map<string, ZCodeTaskMeta>();
@@ -332,7 +347,7 @@ export function WorkspaceTimelineTasksSection({
   const nativeDuplicateCount = [...localItems, ...remoteItems].filter(
     (item) => hiddenTaskIds?.has(item.taskId) || engineNativeSessionIds.has(item.taskId),
   ).length;
-  const total = localTotal + remoteTotal - nativeDuplicateCount + engineTasks.length;
+  const total = localTotal + remoteTotal - nativeDuplicateCount + visibleEngineTasks.length;
   const remoteHasMore = remoteWorkspaceKeys.some(
     (workspaceKey) => remoteTimelineHasMoreByWorkspaceKey[workspaceKey],
   );
@@ -348,7 +363,7 @@ export function WorkspaceTimelineTasksSection({
   });
   const loading = localLoading || syncingRemoteWorkspaces;
   const hasKnownMore = localHasMore || remoteHasMore || total > displayItems.length;
-  const currentLimitFilled = sortedItems.length + engineTasks.length >= visibleTaskLimit;
+  const currentLimitFilled = sortedItems.length + visibleEngineTasks.length >= visibleTaskLimit;
   // 远端/本地 hasMore 偶尔会在下一轮请求完成前保持旧值。
   // 如果当前已加载数量没有填满 limit，说明这轮已经到底了，不能继续显示 show more。
   const canLoadMore = loading ? hasKnownMore : currentLimitFilled && hasKnownMore;
@@ -789,7 +804,6 @@ export function WorkspaceTimelineTasksSection({
         onOpenChange={(open) => {
           if (!open) {
             setContextMenuItemKey(null);
-            setContextMenuEngineTaskId(null);
           }
         }}
       >
@@ -811,8 +825,12 @@ export function WorkspaceTimelineTasksSection({
                           <EngineTaskRow
                             key={`engine:${entry.task.id}`}
                             task={entry.task}
-                            title={engineTitles[entry.task.id] ?? shortId(entry.task.id)}
+                            title={
+                              engineTaskTitle(entry.task, engineTitles[entry.task.id]) ||
+                              shortId(entry.task.id)
+                            }
                             active={entry.task.id === engineSelectedTaskId}
+                            service={engineService}
                             onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
                             onOpenContextMenu={(taskId) => {
                               setContextMenuItemKey(null);
@@ -869,8 +887,15 @@ export function WorkspaceTimelineTasksSection({
             })}
           </ul>
         </ContextMenuTrigger>
-        {contextMenuEngineTaskId ? (
-          <EngineTaskContextMenuContent taskId={contextMenuEngineTaskId} />
+        {contextMenuEngineTask ? (
+          <EngineTaskContextMenuContent
+            task={contextMenuEngineTask}
+            title={
+              engineTaskTitle(contextMenuEngineTask, engineTitles[contextMenuEngineTask.id]) ||
+              shortId(contextMenuEngineTask.id)
+            }
+            service={engineService}
+          />
         ) : contextMenuItem && contextMenuWorkspaceServices && contextMenuItemKey ? (
           <TaskListItemContextMenuContent
             workspacePath={contextMenuItem.workspacePath}

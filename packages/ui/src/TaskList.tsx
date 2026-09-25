@@ -20,9 +20,12 @@ import {
 import { isTaskListRowActive } from "@/v4/taskListRowActivity.js";
 import { logger } from "@/logger.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
+import type { IAnyAgentService } from "@zcode/services";
 import {
   EngineTaskContextMenuContent,
   EngineTaskRow,
+  engineTaskSidebarMetadata,
+  engineTaskTitle,
   type EngineTask,
 } from "@/EngineTaskSidebar.js";
 import { shortId } from "@/EngineUiParts.js";
@@ -51,6 +54,7 @@ export const TaskList = memo(function TaskList({
   workspaceIdentity,
   tasks,
   engineTasks = EMPTY_ENGINE_TASKS,
+  engineService = null,
   engineTitles = EMPTY_ENGINE_TITLES,
   engineRunningByTask = EMPTY_ENGINE_RUNNING_BY_TASK,
   engineSelectedTaskId,
@@ -77,6 +81,7 @@ export const TaskList = memo(function TaskList({
   workspaceIdentity?: string;
   tasks: ZCodeTaskMeta[];
   engineTasks?: readonly EngineTask[];
+  engineService?: IAnyAgentService | null;
   engineTitles?: Readonly<Record<string, string>>;
   engineRunningByTask?: Readonly<Record<string, boolean>>;
   engineSelectedTaskId?: string | null;
@@ -355,14 +360,19 @@ export const TaskList = memo(function TaskList({
       updatedAt: task.updatedAt,
       running: isTaskListRowActive(task),
     }));
-    const engineItems: TaskListDisplayItem[] = engineTasks.map((task) => ({
-      kind: "engine",
-      task,
-      taskId: task.id,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-      running: engineRunningByTask[task.id] ?? false,
-    }));
+    const engineItems: TaskListDisplayItem[] = engineTasks
+      .filter((task) => {
+        const metadata = engineTaskSidebarMetadata(task);
+        return metadata.archivedAt === null && !metadata.pinned;
+      })
+      .map((task) => ({
+        kind: "engine",
+        task,
+        taskId: task.id,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        running: engineRunningByTask[task.id] ?? false,
+      }));
     if (sortBy === "manual") {
       return [
         ...nativeItems,
@@ -417,6 +427,9 @@ export const TaskList = memo(function TaskList({
         : null,
     [contextMenuTaskId, taskLookup],
   );
+  const engineContextMenuTask = engineContextMenuTaskId
+    ? (engineTasks.find((task) => task.id === engineContextMenuTaskId) ?? null)
+    : null;
 
   function renderTaskItem(task: (typeof visibleSourceTasks)[number]) {
     const isPinned = pinnedTaskIdSet.has(task.taskId);
@@ -509,7 +522,6 @@ export const TaskList = memo(function TaskList({
               onOpenChange={(open) => {
                 if (!open) {
                   setContextMenuTaskId(null);
-                  setEngineContextMenuTaskId(null);
                 }
               }}
             >
@@ -522,8 +534,12 @@ export const TaskList = memo(function TaskList({
                       <EngineTaskRow
                         key={`engine:${item.taskId}`}
                         task={item.task}
-                        title={engineTitles[item.taskId] ?? shortId(item.taskId)}
+                        title={
+                          engineTaskTitle(item.task, engineTitles[item.taskId]) ||
+                          shortId(item.taskId)
+                        }
                         active={item.taskId === engineSelectedTaskId}
+                        service={engineService}
                         onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
                         onOpenContextMenu={handleOpenEngineContextMenu}
                       />
@@ -545,8 +561,17 @@ export const TaskList = memo(function TaskList({
                   disableTaskActions={Boolean(readOnlyReason)}
                   disabledReason={readOnlyReason}
                 />
-              ) : engineContextMenuTaskId ? (
-                <EngineTaskContextMenuContent taskId={engineContextMenuTaskId} />
+              ) : engineContextMenuTask ? (
+                <EngineTaskContextMenuContent
+                  task={engineContextMenuTask}
+                  title={
+                    engineTaskTitle(
+                      engineContextMenuTask,
+                      engineTitles[engineContextMenuTask.id],
+                    ) || shortId(engineContextMenuTask.id)
+                  }
+                  service={engineService}
+                />
               ) : null}
             </ContextMenu>
           )}

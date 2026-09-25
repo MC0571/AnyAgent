@@ -17,6 +17,7 @@ function installDom() {
     HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
     Element: dom.window.Element,
     Node: dom.window.Node,
+    NodeFilter: dom.window.NodeFilter,
     Event: dom.window.Event,
     CustomEvent: dom.window.CustomEvent,
     MouseEvent: dom.window.MouseEvent,
@@ -28,12 +29,72 @@ function installDom() {
   })) {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   }
+  Object.defineProperties(dom.window.HTMLElement.prototype, {
+    attachEvent: {
+      configurable: true,
+      value(this: HTMLElement, eventName: string, listener: EventListener) {
+        this.addEventListener(eventName.replace(/^on/, ""), listener);
+      },
+    },
+    detachEvent: {
+      configurable: true,
+      value(this: HTMLElement, eventName: string, listener: EventListener) {
+        this.removeEventListener(eventName.replace(/^on/, ""), listener);
+      },
+    },
+  });
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
     configurable: true,
     writable: true,
     value: true,
   });
   return dom;
+}
+
+function runtimeTask(
+  id: string,
+  sidebarMetadata = {
+    title: null as string | null,
+    pinned: false,
+    pinOrder: null as number | null,
+    archivedAt: null as number | null,
+    unreadAt: null as number | null,
+  },
+  createdAt = 1,
+  updatedAt = createdAt,
+) {
+  return {
+    id,
+    authorizationId: "engine-grant",
+    status: "completed",
+    createdAt,
+    updatedAt,
+    closedAt: null,
+    closeReason: null,
+    engine: { engineId: "fake" },
+    sidebarMetadata,
+    participant: { id: `${id}-participant` },
+    session: { id: `${id}-session`, nativeSessionId: null },
+  };
+}
+
+async function openEngineTaskMenu(dom: JSDOM, taskId: string) {
+  await act(async () => {
+    const button = document.querySelector<HTMLElement>(
+      `[data-testid='engine-task-options-${taskId}']`,
+    );
+    assert.ok(button);
+    const event = new dom.window.MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+    Object.defineProperty(event, "pointerType", { value: "mouse" });
+    button.dispatchEvent(event);
+  });
+  const menu = document.querySelector<HTMLElement>("[data-slot='dropdown-menu-content']");
+  assert.ok(menu, "Engine row opens its action menu");
+  return [...menu.querySelectorAll<HTMLElement>("[data-slot='dropdown-menu-item']")];
 }
 
 test("timeline interleaves native and Engine sessions in one ordered list", async () => {
@@ -82,9 +143,43 @@ test("timeline interleaves native and Engine sessions in one ordered list", asyn
       engine: { engineId: "zcode" },
       session: { nativeSessionId: "native-duplicate" },
     },
+    {
+      id: "engine-pinned",
+      status: "completed",
+      createdAt: now - 30,
+      updatedAt: now - 30,
+      engine: { engineId: "fake" },
+      session: { nativeSessionId: null },
+      sidebarMetadata: {
+        title: null,
+        pinned: true,
+        pinOrder: 1,
+        archivedAt: null,
+        unreadAt: null,
+      },
+    },
+    {
+      id: "engine-archived",
+      status: "completed",
+      createdAt: now - 40,
+      updatedAt: now - 40,
+      engine: { engineId: "fake" },
+      session: { nativeSessionId: null },
+      sidebarMetadata: {
+        title: null,
+        pinned: false,
+        pinOrder: null,
+        archivedAt: 5,
+        unreadAt: null,
+      },
+    },
   ];
   const engineService = {
     listTasks: async () => engineTasks,
+    setTaskPinned: async () => engineTasks[0],
+    renameTask: async () => engineTasks[0],
+    setTaskArchived: async () => engineTasks[0],
+    setTaskUnread: async () => engineTasks[0],
     getHistory: async (id: string) => ({
       inputs: [{ text: id, receivedAt: 1 }],
       executions: [],
@@ -144,6 +239,10 @@ test("timeline interleaves native and Engine sessions in one ordered list", asyn
         "/tmp/m1-sidebar:native-old",
       ],
     );
+    assert.equal(
+      rows.some((row) => /engine-pinned|engine-archived/.test(row.dataset.taskItemKey ?? "")),
+      false,
+    );
     assert.deepEqual([...hiddenNativeIds], ["native-duplicate"]);
     await act(async () => rows[1]?.click());
     await act(async () => rows[0]?.click());
@@ -180,12 +279,127 @@ test("timeline interleaves native and Engine sessions in one ordered list", asyn
     });
     const dropdown = document.querySelector("[data-slot='dropdown-menu-content']");
     assert.ok(dropdown, "Engine row exposes the native action menu");
-    assert.equal(dropdown.querySelectorAll("[data-disabled]").length, 4);
+    assert.equal(dropdown.querySelectorAll("[data-disabled]").length, 0);
     await act(async () => {
       dropdown.querySelector<HTMLElement>("[data-slot='dropdown-menu-item']:last-child")?.click();
     });
     assert.deepEqual(copied, ["engine-middle", "engine-duplicate"]);
     assert.deepEqual(engineSelected, ["engine-middle"], "menu actions keep the current task");
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
+test("Engine Task menu actions use the persisted product Task identity and clear only the unread version opened", async () => {
+  const dom = installDom();
+  const [{ EngineTaskRow }, { ZCodeIntlProvider }] = await Promise.all([
+    import("../src/EngineTaskSidebar.js"),
+    import("../src/i18n/IntlProvider.js"),
+  ]);
+  const task = runtimeTask("fake-task", {
+    title: null,
+    pinned: false,
+    pinOrder: null,
+    archivedAt: null,
+    unreadAt: 41,
+  });
+  const requests: Array<{ operation: string; input: Record<string, unknown> }> = [];
+  const service = {
+    setTaskPinned: async (input: Record<string, unknown>) => {
+      requests.push({ operation: "pin", input });
+      return task;
+    },
+    renameTask: async (input: Record<string, unknown>) => {
+      requests.push({ operation: "rename", input });
+      return task;
+    },
+    setTaskArchived: async (input: Record<string, unknown>) => {
+      requests.push({ operation: "archive", input });
+      return task;
+    },
+    setTaskUnread: async (input: Record<string, unknown>) => {
+      requests.push({ operation: "unread", input });
+      return task;
+    },
+  };
+  const selected: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(EngineTaskRow, {
+            task: task as never,
+            title: "History title",
+            active: false,
+            service: service as never,
+            onSelectTask: (id: string) => selected.push(id),
+          }),
+        ),
+      );
+    });
+
+    const pinItems = await openEngineTaskMenu(dom, task.id);
+    assert.equal(pinItems.length, 5);
+    assert.equal(
+      pinItems.slice(0, 4).filter((item) => item.hasAttribute("data-disabled")).length,
+      0,
+    );
+    await act(async () => pinItems[0]?.click());
+
+    const renameItems = await openEngineTaskMenu(dom, task.id);
+    await act(async () => renameItems[1]?.click());
+    const input = document.querySelector<HTMLInputElement>("[role='dialog'] input");
+    assert.ok(input);
+    assert.equal(input.value, "History title");
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        dom.window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      valueSetter?.call(input, "Renamed Fake Task");
+      const valueChange = new dom.window.Event("propertychange", { bubbles: true });
+      Object.defineProperty(valueChange, "propertyName", { value: "value" });
+      input.dispatchEvent(valueChange);
+    });
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>("[role='dialog'] button")]
+        .find((button) => button.textContent?.includes("确认"))
+        ?.click();
+    });
+
+    const archiveItems = await openEngineTaskMenu(dom, task.id);
+    await act(async () => archiveItems[2]?.click());
+    const unreadItems = await openEngineTaskMenu(dom, task.id);
+    await act(async () => unreadItems[3]?.click());
+    await act(async () => {
+      container.querySelector<HTMLElement>("[data-task-item-key='fake-task']")?.click();
+    });
+
+    assert.deepEqual(
+      requests.map(({ operation }) => operation),
+      ["pin", "rename", "archive", "unread", "unread"],
+    );
+    const identity = {
+      taskId: "fake-task",
+      participantId: "fake-task-participant",
+      sessionId: "fake-task-session",
+    };
+    assert.deepEqual(requests[0]?.input, { ...identity, pinned: true });
+    assert.deepEqual(requests[1]?.input, { ...identity, title: "Renamed Fake Task" });
+    assert.deepEqual(requests[2]?.input, { ...identity, archived: true });
+    assert.deepEqual(requests[3]?.input, { ...identity, unread: true });
+    assert.deepEqual(requests[4]?.input, {
+      ...identity,
+      unread: false,
+      expectedUnreadAt: 41,
+    });
+    assert.deepEqual(selected, ["fake-task"]);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();
@@ -264,6 +478,175 @@ test("project TaskList renders native and Harness sessions in the same list", as
     assert.equal(rows[2]?.getAttribute("aria-current"), "page");
     await act(async () => rows[2]?.click());
     assert.deepEqual(selected, ["harness-project"]);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
+test("project TaskList sorts active Engine Tasks and keeps pinned or archived Tasks in their own views", async () => {
+  const dom = installDom();
+  const [{ TaskList }, { ZCodeIntlProvider }, { TabStoreProvider }] = await Promise.all([
+    import("../src/TaskList.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/store/TabStoreProvider.js"),
+  ]);
+  const engineTasks = [
+    runtimeTask(
+      "engine-updated-first",
+      { title: "Persisted title", pinned: false, pinOrder: null, archivedAt: null, unreadAt: null },
+      10,
+      30,
+    ),
+    runtimeTask(
+      "engine-created-first",
+      { title: null, pinned: false, pinOrder: null, archivedAt: null, unreadAt: null },
+      20,
+      20,
+    ),
+    runtimeTask(
+      "engine-pinned",
+      { title: null, pinned: true, pinOrder: 1, archivedAt: null, unreadAt: null },
+      30,
+      100,
+    ),
+    runtimeTask(
+      "engine-archived",
+      { title: null, pinned: false, pinOrder: null, archivedAt: 5, unreadAt: null },
+      40,
+      120,
+    ),
+  ];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (sortBy: "created" | "updated") =>
+    createElement(
+      ZCodeIntlProvider,
+      { initialLocale: "zh-CN" },
+      createElement(
+        TabStoreProvider,
+        null,
+        createElement(TaskList, {
+          workspacePath: "/tmp/m1-sidebar",
+          tasks: [],
+          engineTasks: engineTasks as never,
+          activeTaskId: null,
+          sortBy,
+          onSelectTask: () => {},
+          onRenameTask: async () => null,
+          onSetTaskPinned: async () => null,
+          onArchiveTask: async () => null,
+          onSetTaskUnread: async () => null,
+          showCreateButton: false,
+          showFooter: false,
+        }),
+      ),
+    );
+  const rowIds = () =>
+    [...container.querySelectorAll<HTMLElement>("ul [data-task-item-key]")].map((row) =>
+      row.getAttribute("data-task-item-key"),
+    );
+  try {
+    await act(async () => root.render(render("updated")));
+    assert.deepEqual(rowIds(), ["engine-updated-first", "engine-created-first"]);
+    assert.match(container.textContent ?? "", /Persisted title/);
+    assert.doesNotMatch(container.textContent ?? "", /engine-pinned|engine-archived/);
+
+    await act(async () => root.render(render("created")));
+    assert.deepEqual(rowIds(), ["engine-created-first", "engine-updated-first"]);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
+test("archived view renders archived Engine Tasks and exposes the matching restore action", async () => {
+  const dom = installDom();
+  const [
+    { WorkspaceArchivedTasksFlatSection },
+    { ServiceProvider },
+    { ZCodeIntlProvider },
+    { TooltipProvider },
+  ] = await Promise.all([
+    import("../src/WorkspaceArchivedTasksFlatSection.js"),
+    import("../src/hooks/useServices.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/components/ui/tooltip.js"),
+  ]);
+  const task = runtimeTask(
+    "fake-archived",
+    { title: "Archived Fake Task", pinned: false, pinOrder: null, archivedAt: 5, unreadAt: null },
+    1,
+    10,
+  );
+  const archiveChanges: Array<Record<string, unknown>> = [];
+  const service = {
+    setTaskArchived: async (input: Record<string, unknown>) => {
+      archiveChanges.push(input);
+      return task;
+    },
+  };
+  const controller = {
+    onDynamicControllerFrame: () => () => ({ dispose() {} }),
+    subscribeControllerV4: async () => ({ ack: { subscriptionId: "archived-test" } }),
+    unsubscribeControllerV4: async () => {},
+    listTaskList: async () => ({ items: [], total: 0, hasMore: false }),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          ServiceProvider,
+          { services: { windowControllerService: controller, anyAgentService: service } as never },
+          createElement(
+            ZCodeIntlProvider,
+            { initialLocale: "zh-CN" },
+            createElement(
+              TooltipProvider,
+              null,
+              createElement(WorkspaceArchivedTasksFlatSection, {
+                workspaceTabs: [
+                  {
+                    kind: "workspace",
+                    id: "workspace-1",
+                    label: "M1",
+                    workspacePath: "/tmp/m1-archive",
+                  } as never,
+                ],
+                activeWorkspacePath: "/tmp/m1-archive",
+                activeTaskId: null,
+                engineSelectedTaskId: task.id,
+                sortBy: "updated",
+                onSelectTask: () => {},
+                engineTasks: [task as never],
+                engineTitles: {},
+                onSelectEngineTask: () => {},
+              }),
+            ),
+          ),
+        ),
+      );
+      await Promise.resolve();
+    });
+    assert.ok(container.querySelector("[data-task-item-key='fake-archived']"));
+    assert.match(container.textContent ?? "", /Archived Fake Task/);
+
+    const items = await openEngineTaskMenu(dom, task.id);
+    assert.match(items[2]?.textContent ?? "", /取消归档/);
+    await act(async () => items[2]?.click());
+    await act(async () => Promise.resolve());
+    assert.deepEqual(archiveChanges, [
+      {
+        taskId: task.id,
+        participantId: `${task.id}-participant`,
+        sessionId: `${task.id}-session`,
+        archived: false,
+      },
+    ]);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();
@@ -430,6 +813,18 @@ test("grouped view mounts Engine rows among ungrouped native rows", async () => 
       engine: { engineId: "zcode" },
       session: { nativeSessionId: "native-duplicate" },
     },
+    runtimeTask(
+      "grouped-pinned",
+      { title: null, pinned: true, pinOrder: 1, archivedAt: null, unreadAt: null },
+      now - 30,
+      now - 30,
+    ),
+    runtimeTask(
+      "grouped-archived",
+      { title: null, pinned: false, pinOrder: null, archivedAt: 5, unreadAt: null },
+      now - 40,
+      now - 40,
+    ),
   ];
   const engineService = {
     listTasks: async () => engineTasks,

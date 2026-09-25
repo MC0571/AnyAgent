@@ -1135,6 +1135,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
             tasks={taskItems}
             sortBy={taskSortBy}
             engineTasks={engineTasks}
+            engineService={baseServices.anyAgentService}
             engineRunningByTask={engineRunningByTask}
             engineTitles={engineTitles}
             engineSelectedTaskId={engineSelectedTaskId}
