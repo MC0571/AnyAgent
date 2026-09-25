@@ -103,6 +103,7 @@ class ManualEngine implements EngineAdapter {
   createSessionCalls = 0;
   beforeCreateSessionDispatch: (() => Promise<void>) | null = null;
   readonly resumeCalls: Parameters<NonNullable<EngineAdapter["resumeSession"]>>[0][] = [];
+  beforeResumeSessionDispatch: (() => Promise<void>) | null = null;
   resumeResult: EngineSessionRef | null = null;
   resumeHandler: (() => Promise<void>) | null = null;
   readonly reconcileCalls: Parameters<NonNullable<EngineAdapter["reconcileExecution"]>>[0][] = [];
@@ -178,6 +179,7 @@ class ManualEngine implements EngineAdapter {
   async resumeSession(
     input: Parameters<NonNullable<EngineAdapter["resumeSession"]>>[0],
   ): Promise<EngineSessionRef> {
+    await this.beforeResumeSessionDispatch?.();
     input.beforeDispatch?.();
     this.resumeCalls.push(input);
     if (!this.sessions.includes(input.session))
@@ -2000,6 +2002,51 @@ test("Runtime adopts a Host-authorized native Session once under a new product T
     await assert.rejects(runtime.adoptImportedSession(imported), /already belongs to a Task/);
     assert.equal(runtime.listTasks().length, 1);
     assert.equal(engine.resumeCalls.length, 1);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("revocation during imported Session recovery blocks native resume and adoption", async () => {
+  const engine = new ManualEngine();
+  const nativeSessionId = "share-import-revoked-session" as EngineSessionRef;
+  engine.sessions.push(nativeSessionId);
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const grant = { ...authorization, id: "grant-revoked-import" };
+    let entered!: () => void;
+    let release!: () => void;
+    const dispatchEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const heldDispatch = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    engine.beforeResumeSessionDispatch = async () => {
+      entered();
+      await heldDispatch;
+    };
+    const adoption = runtime.adoptImportedSession({
+      engineId: "manual",
+      environment,
+      authorization: grant,
+      nativeSessionId,
+      sharedContext: {
+        contextId: "shared-context-revoked",
+        title: "Revoked import",
+        shareUrl: "https://example.test/share/revoked",
+      },
+    });
+    await dispatchEntered;
+    runtime.revokeHostAuthorization(grant.id, "revoked during imported Session recovery");
+    release();
+    await assert.rejects(adoption, /revoked during imported Session recovery/i);
+    assert.equal(engine.resumeCalls.length, 0);
+    assert.equal(runtime.listTasks()[0]?.session.status, "failed");
+    assert.equal(runtime.listTasks()[0]?.currentAuthorization.status, "revoked");
   } finally {
     runtime.close();
   }

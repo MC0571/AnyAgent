@@ -1134,9 +1134,17 @@ export class TaskRuntime {
               "This Engine cannot attach the imported Session.",
               "unsupported",
             );
+          const checkAuthorization = () =>
+            this.#validateEnvironmentAndAuthorization(
+              input.environment,
+              input.authorization,
+              "session.create",
+            );
           const nativeSession = await engine.resumeSession({
             session: input.nativeSessionId as EngineSessionRef,
+            beforeDispatch: checkAuthorization,
           });
+          checkAuthorization();
           if (nativeSession !== input.nativeSessionId)
             throw new RuntimeEligibilityError(
               "Import recovery changed the native Session identity.",
