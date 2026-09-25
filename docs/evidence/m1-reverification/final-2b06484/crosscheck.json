@@ -141,9 +141,7 @@
       "inputId": "input_6721e41d-4ed6-4210-80eb-ea34c40e1f6f",
       "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
       "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
-      "attachmentNames": [
-        "README.md"
-      ],
+      "attachmentNames": ["README.md"],
       "submittedText": "[README.md](./README.md)  M2_FINAL_2B0_CONTEXT_926: Read the attached file and the referenced README.md. Report the exact Workspace marker and say whether both refer to this isolated project. Do not modify files.",
       "revisionOf": null,
       "submissionConfig": {
@@ -366,9 +364,7 @@
       "inputId": "input_98429136-ecd0-46a5-bfcb-053d44e33972",
       "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
       "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
-      "attachmentNames": [
-        "m2-final-allow-925.txt"
-      ],
+      "attachmentNames": ["m2-final-allow-925.txt"],
       "submittedText": "M2_2B0_EDIT_SOURCE_926: Confirm the attached marker. Do not modify files.",
       "revisionOf": null,
       "submissionConfig": {
@@ -407,9 +403,7 @@
       "inputId": "input_17610ad0-a310-4296-8ef9-46a70fd17247",
       "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
       "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
-      "attachmentNames": [
-        "m2-final-allow-925.txt"
-      ],
+      "attachmentNames": ["m2-final-allow-925.txt"],
       "submittedText": "M2_2B0_EDIT_KEEP_926: Keep the attached file and report its exact marker. Do not modify files.",
       "revisionOf": {
         "kind": "edit",
@@ -452,9 +446,7 @@
       "inputId": "input_223d8698-341a-4135-96c9-4917ee2ffd89",
       "productTaskId": "task_ca5aeca7-3407-49a6-9ef5-ec9930924941",
       "productSessionId": "session_f600855b-ee3e-471b-86e4-46fb12e873af",
-      "attachmentNames": [
-        "README.md"
-      ],
+      "attachmentNames": ["README.md"],
       "submittedText": "M2_2B0_EDIT_REPLACE_926: The old attachment was removed and README.md was added. Report the exact Workspace marker only. Do not modify files.",
       "revisionOf": {
         "kind": "edit",
@@ -619,6 +611,38 @@
         "promoted_sequence": 2,
         "attachments": []
       }
+    },
+    {
+      "marker": "M2_FINAL_2B0_PLAN_MODE_926",
+      "inputId": "input_7e65b4c4-a468-4370-843a-8f155e325f0e",
+      "productTaskId": "task_31653add-af35-4377-897e-0bfc228ce437",
+      "productSessionId": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+      "attachmentNames": [],
+      "submittedText": "M2_FINAL_2B0_PLAN_MODE_926: In this round, reply exactly PLAN_MODE_OK_926. Do not use tools or modify files.",
+      "revisionOf": null,
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": true,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "deepseek-v4.1-flash",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "inputStatus": "completed",
+      "executionId": "execution_5395e790-59e3-4e76-8cbd-130634b5e741",
+      "executionStatus": "completed",
+      "nativeSessionInput": {
+        "id": "queue_input_7e65b4c4-a468-4370-843a-8f155e325f0e",
+        "session_id": "sess_37e4b711-bef4-4ed3-beb0-9527cee45f30",
+        "status": "promoted",
+        "delivery": "startNow",
+        "admitted_sequence": 3,
+        "promoted_sequence": 3,
+        "attachments": []
+      }
     }
   ],
   "fakeInputs": [
@@ -659,6 +683,22 @@
       "delivery": "startNow"
     }
   ],
+  "nativeInitInput": [
+    {
+      "id": "queue_input_162f609a-3ade-4ef1-840c-a3764ded8453",
+      "session_id": "sess_37e4b711-bef4-4ed3-beb0-9527cee45f30",
+      "status": "promoted",
+      "delivery": "startNow"
+    }
+  ],
+  "productInitInput": [
+    {
+      "id": "input_162f609a-3ade-4ef1-840c-a3764ded8453",
+      "task_id": "task_31653add-af35-4377-897e-0bfc228ce437",
+      "session_id": "session_ae9721a3-8558-4fb5-a6f1-d827995ab0b3",
+      "status": "completed"
+    }
+  ],
   "approvals": [
     {
       "id": "approval_bf2ecd6e-9653-4f36-a775-aea9df7b478d",
@@ -692,6 +732,20 @@
       "id": "approval_56289b7f-f370-458d-b4a8-1fad4b0f6506",
       "executionId": "execution_fa1ecdc9-a493-4fa6-921f-1585cff957a9",
       "nativeApprovalId": "perm_c190bcc2-9abc-47c6-8283-d224fc45bbc3",
+      "status": "forwarded",
+      "operation": "Write"
+    },
+    {
+      "id": "approval_014b214e-9f1d-4f61-9f4c-da2ec6bfa3b7",
+      "executionId": "execution_a0d054c3-43a5-4a62-9f31-e83c85dfc06d",
+      "nativeApprovalId": "perm_a050cf2e-99a2-4ced-abd7-32b5c5b2c97f",
+      "status": "forwarded",
+      "operation": "Bash"
+    },
+    {
+      "id": "approval_edfa1269-e92a-4a99-883a-39d2107ebfcb",
+      "executionId": "execution_a0d054c3-43a5-4a62-9f31-e83c85dfc06d",
+      "nativeApprovalId": "perm_f83002d3-040a-4344-a141-95b9c92f50e9",
       "status": "forwarded",
       "operation": "Write"
     }
@@ -833,6 +887,11 @@
       "exists": true,
       "sha256": "71c7c30f9d06a39ae8f6da566ee7a06e7e2ac1ba025ecac8597c00c97ec98302",
       "bytes": 25
+    },
+    "AGENTS.md": {
+      "exists": true,
+      "sha256": "46f83f0ae53079bd158582687437dc5c7752c04b1b2a8ebc81defdbcc7dc40b6",
+      "bytes": 2001
     }
   },
   "limits": [

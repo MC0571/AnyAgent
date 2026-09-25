@@ -14,6 +14,8 @@
 8. Task C 的 `M2_FINAL_2B0_QUESTION_926` 在真实 CLI 中触发原生 `AskUserQuestion`，正式原组件显示[结构化 A/B 选项](question-choice-pending.jpg)。从 UI 选择 B 后，产品 `user-input_a806717c…` 状态 `forwarded`、原请求 `perm_8fb3bdad…`、答案 `B` 及原 Execution `execution_afed8f3d…` 绑定一致；原生 `part` 的 `AskUserQuestion` 工具结果写明答复 B，同一 Input／Execution completed，[完成窗口](question-choice-completed.jpg)可见。模型最终没有按提示输出精确 `QUESTION_B_2B0_926`，因此本次证明原生提问、选择、转发和继续执行，**不以最终文字证明精确指令遵循**。产品／原生记录见 `crosscheck.json` 的 `question`。
 9. 原 `⌘N` 快捷键打开新任务 Composer，未选择 Harness 时按原路径创建 M0 原生 Task；在新任务的原模型选择器显式选择 `Harness · zcode` 后，键盘提交 `M2_FINAL_2B0_SHORTCUT_HARNESS_926` 创建新的产品 Task `task_31653add…`／Session `session_ae9721a3…`，原生 `sess_37e4b711…`，得到[正式回复](shortcut-new-harness-task.jpg) `SHORTCUT_HARNESS_OK_926`；Input／原生 queue_input 见 `crosscheck.json`。这证明快捷键入口在两种显式模式下可用，不代表侧栏菜单的其它动作均已恢复。当前 M1 Task 侧栏[“更多”菜单](sidebar-menu-current.jpg)的置顶、重命名、归档、未读明确禁用并写“暂不支持”，其是否属于 #26 Required parity 仍需范围判定，不能记为已通过。
 10. 上述新 ZCode Harness Task 第二轮 `M2_FINAL_2B0_SHORTCUT_HARNESS_R2_926` 仍在同一产品／原生 Session 完成。原模型选择器的 `Harness · zcode` 子菜单允许选择同 OpenCode Go (Anthropic) Provider 的 `deepseek-v4.1-flash`，第三轮 `M2_FINAL_2B0_MODEL_DEEPSEEK_926` 得到[真实回复](same-provider-model-deepseek.jpg) `MODEL_DEEPSEEK_OK_926`。产品 Input `input_2df75661…` 提交配置与原生 `message.modelSelection` 均为 `opencode-go-messages/deepseek-v4.1-flash`、reasoning `max`，原生 Session 未迁移。根层[旧 Provider 菜单](legacy-provider-group-locked.jpg)在已有 Harness Session 内锁定并提示不能切换，**同 Provider 换模入口是 Harness 子菜单**；该早期截图只证明锁定的根层，不是同 Provider 功能缺陷。其它 Provider 的 Harness 模型项灰显，未产生新 Input 或原生派发。
+11. 同一 Task 下一轮从原模式选择器选“计划模式”，正式窗口[显示模式和真实回复](plan-mode-real-cli.jpg) `PLAN_MODE_OK_926`。产品 Input `input_7e65b4c4…` 的提交配置为 `mode=build, planEnabled=true`、deepseek／`max`，原生 user message 的 `metadata.inputIntent` 同样记录 `mode=build, planEnabled=true`；这是固定 CLI 的计划模式映射，不能误读为没有切换。本轮无工具或文件副作用。
+12. 回到“变更前确认”，原 Composer 的 slash picker 选择 `/init` 并提交。固定真实 CLI 在隔离项目中读 README／目录，经过原权限组件一次允许只读命令、一次允许 Write，原生 Input `queue_input_162f609a…` 与产品 Input `input_162f609a…` 属同一 Task／Session 并完成。[正式文件摘要](init-command-file-summary.jpg)显示 `AGENTS.md +42`，实际隔离文件 2001 字节、SHA-256 见 `crosscheck.json`。这同时证明目录候选可选、命令派发、工具审批及文件摘要；只涉及隔离测试项目，不推断其它项目结构。`/init` 是一条真实 Input／Execution，与 `/goal`、`/compact` 的原生操作记录形态不同，不人为统一。
 
 ## M1 Fake 原产品路径
 
@@ -31,7 +33,7 @@
 
 ## 能力边界与沿用证据
 
-本候选的真实 UI 已覆盖当前 Task 的 slash 目录、`/goal` 回执和 `/compact`、真实结构化 question 显式答复、build／`qwen3.8-flash`／`xhigh` 及同 Provider 换到 deepseek／`max` 的真实配置；`crosscheck.json` 逐 Input 记录实际提交值。更早候选的固定 CLI 问题空答见 [final-a314e82](../final-a314e82/README.md)，只证明其原场景。question 过期／迟到／重复和资格失效由本候选自动化覆盖，真实桌面场景只证明上述显式答复。
+本候选的真实 UI 已覆盖当前 Task 的 slash 目录、`/goal`、`/compact` 和 `/init`、真实结构化 question 显式答复、build／`qwen3.8-flash`／`xhigh`、同 Provider 换到 deepseek／`max` 及计划模式的真实提交配置；`crosscheck.json` 逐 Input 记录实际提交值。更早候选的固定 CLI 问题空答见 [final-a314e82](../final-a314e82/README.md)，只证明其原场景。question 过期／迟到／重复和资格失效由本候选自动化覆盖，真实桌面场景只证明上述显式答复。
 
 ## 检查与证据边界
 
