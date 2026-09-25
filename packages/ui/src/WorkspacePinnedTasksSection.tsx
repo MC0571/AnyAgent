@@ -495,7 +495,7 @@ export function WorkspacePinnedTasksSection({
     ? resolveTaskServices(contextMenuItem.workspaceIdentity)
     : null;
 
-  if (items.length === 0) {
+  if (items.length === 0 && visibleEnginePinnedTasks.length === 0) {
     // 切换/加入工作区时 pinned 查询会先进入 loading，但此时没有可展示的数据。
     // 不能仍渲染“已置顶 + 正在获取任务”，否则侧栏每次切换都出现一次无实际帮助的 loading。
     // 有缓存数据时继续走下面的正常渲染路径，保持 stale-while-revalidate 的展示体验。

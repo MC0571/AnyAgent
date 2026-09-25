@@ -561,6 +561,89 @@ test("project TaskList sorts active Engine Tasks and keeps pinned or archived Ta
   }
 });
 
+test("pinned section renders and lets an Engine Task be unpinned when native pinned Tasks are empty", async () => {
+  const dom = installDom();
+  const [
+    { WorkspacePinnedTasksSection },
+    { ServiceProvider },
+    { ZCodeIntlProvider },
+    { TooltipProvider },
+  ] = await Promise.all([
+    import("../src/WorkspacePinnedTasksSection.js"),
+    import("../src/hooks/useServices.js"),
+    import("../src/i18n/IntlProvider.js"),
+    import("../src/components/ui/tooltip.js"),
+  ]);
+  const task = runtimeTask("fake-pinned", {
+    title: "Pinned Fake Task",
+    pinned: true,
+    pinOrder: 1,
+    archivedAt: null,
+    unreadAt: null,
+  });
+  const pinChanges: Array<Record<string, unknown>> = [];
+  const service = {
+    setTaskPinned: async (input: Record<string, unknown>) => {
+      pinChanges.push(input);
+      return task;
+    },
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(
+        createElement(
+          ServiceProvider,
+          { services: { anyAgentService: service } as never },
+          createElement(
+            ZCodeIntlProvider,
+            { initialLocale: "zh-CN" },
+            createElement(
+              TooltipProvider,
+              null,
+              createElement(WorkspacePinnedTasksSection, {
+                workspaceTabs: [],
+                activeWorkspacePath: "/tmp/m1-pinned",
+                activeTaskId: null,
+                taskSortBy: "updated",
+                engineTasks: [task as never],
+                engineSelectedTaskId: task.id,
+                onSelectEngineTask: () => {},
+                onSelectTask: () => {},
+              }),
+            ),
+          ),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    const row = container.querySelector<HTMLElement>("[data-task-item-key='fake-pinned']");
+    assert.ok(row, "Engine pin keeps the pinned section visible without native pinned rows");
+    assert.match(container.textContent ?? "", /Pinned Fake Task/);
+
+    const menuItems = await openEngineTaskMenu(dom, task.id);
+    assert.match(menuItems[0]?.textContent ?? "", /取消置顶/);
+    await act(async () => {
+      menuItems[0]?.click();
+      await Promise.resolve();
+    });
+    assert.deepEqual(pinChanges, [
+      {
+        taskId: task.id,
+        participantId: `${task.id}-participant`,
+        sessionId: `${task.id}-session`,
+        pinned: false,
+      },
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
 test("archived view renders archived Engine Tasks and exposes the matching restore action", async () => {
   const dom = installDom();
   const [
