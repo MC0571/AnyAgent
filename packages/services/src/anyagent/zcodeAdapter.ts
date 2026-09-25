@@ -1102,7 +1102,6 @@ export function createZCodeAdapter(options: {
           );
         if (data.kind === "result" && toolCallId) {
           const result = payloadRecord(data.result);
-          const answers = payloadRecord(result.answers);
           const resultToolName = text(data.toolName) ?? details?.name;
           const matchingRequests = [...run.userInputs.entries()].filter(
             ([, request]) =>
@@ -1114,19 +1113,9 @@ export function createZCodeAdapter(options: {
             matchingRequests.length === 1 &&
             !run.settledAskUserQuestionToolCalls.has(toolCallId) &&
             (!resultToolName || resultToolName === "AskUserQuestion") &&
-            Array.isArray(result.questions) &&
-            result.questions.length > 0 &&
-            result.questions.every((question) => {
-              const parsedQuestion = payloadRecord(question);
-              return (
-                typeof parsedQuestion.question === "string" &&
-                parsedQuestion.question.trim().length > 0
-              );
-            }) &&
-            result.answers !== null &&
-            typeof result.answers === "object" &&
-            !Array.isArray(result.answers) &&
-            Object.keys(answers).length === 0
+            result.success === true &&
+            result.content ===
+              "The user did not provide answers to these questions. Continue using your best judgment; do not treat this as a rejection or invent a user preference."
           ) {
             const [requestId] = matchingRequests[0]!;
             run.settledAskUserQuestionToolCalls.add(toolCallId);

@@ -5723,6 +5723,9 @@ test("native user-input response preserves its answer and rejection action", asy
 });
 
 test("native AskUserQuestion empty result resolves its exact request once before terminal", async () => {
+  const noAnswerContent =
+    "The user did not provide answers to these questions. Continue using your best judgment; do not treat this as a rejection or invent a user preference.";
+  const noAnswerResult = { success: true, content: noAnswerContent };
   const fixture = harness();
   const session = await fixture.adapter.createSession();
   const run = await fixture.adapter.run({ session, input: "ask a question" });
@@ -5770,7 +5773,7 @@ test("native AskUserQuestion empty result resolves its exact request once before
       kind: "result",
       toolCallId: "empty-question-tool-call",
       toolName: "AskUserQuestion",
-      result: { questions: [{ question: "Which option?" }], answers: {} },
+      result: noAnswerResult,
     },
     "another-session",
   );
@@ -5778,37 +5781,37 @@ test("native AskUserQuestion empty result resolves its exact request once before
     kind: "result",
     toolCallId: "empty-question-tool-call",
     toolName: "AskUserQuestion",
-    result: { questions: [{ question: "Which option?" }], answers: {} },
+    result: noAnswerResult,
   });
   emit("empty-result-wrong-call", 4, "empty-question-turn", "tool.updated", {
     kind: "result",
     toolCallId: "another-tool-call",
     toolName: "AskUserQuestion",
-    result: { questions: [{ question: "Which option?" }], answers: {} },
+    result: noAnswerResult,
   });
   emit("empty-result-wrong-tool", 5, "empty-question-turn", "tool.updated", {
     kind: "result",
     toolCallId: "empty-question-tool-call",
     toolName: "Read",
-    result: { questions: [{ question: "Which option?" }], answers: {} },
+    result: noAnswerResult,
   });
-  emit("empty-result-malformed-question", 6, "empty-question-turn", "tool.updated", {
+  emit("empty-result-tool-error", 6, "empty-question-turn", "tool.updated", {
     kind: "result",
     toolCallId: "empty-question-tool-call",
     toolName: "AskUserQuestion",
-    result: { questions: [{}], answers: {} },
+    result: { success: false, content: noAnswerContent },
   });
   emit("empty-question-native-result", 7, "empty-question-turn", "tool.updated", {
     kind: "result",
     toolCallId: "empty-question-tool-call",
     toolName: "AskUserQuestion",
-    result: { questions: [{ question: "Which option?" }], answers: {} },
+    result: noAnswerResult,
   });
   emit("empty-question-duplicate-result", 8, "empty-question-turn", "tool.updated", {
     kind: "result",
     toolCallId: "empty-question-tool-call",
     toolName: "AskUserQuestion",
-    result: { questions: [{ question: "Which option?" }], answers: {} },
+    result: noAnswerResult,
   });
   emit("empty-question-turn-complete", 9, "empty-question-turn", "turn.completed", {
     inputId: "native-input",
