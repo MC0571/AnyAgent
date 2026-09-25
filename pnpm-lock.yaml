@@ -1048,6 +1048,9 @@ importers:
       '@aiden0z/pptx-renderer':
         specifier: 1.2.4
         version: 1.2.4(pdfjs-dist@5.4.296)
+      '@anyagent/engine-contract':
+        specifier: workspace:*
+        version: link:../anyagent-engine
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
