@@ -22,7 +22,7 @@ export * from "../background-bash-output.js";
 import { executionOutputPreviewSchema } from "../execution-output-preview.js";
 import { z } from "zod";
 export * from "../process-diagnostic.js";
-import { errorAttributionSchema } from "../zcode-protocol-v4/snapshot.js";
+import { errorAttributionSchema, goalStateSchema } from "../zcode-protocol-v4/snapshot.js";
 import { modelSelectionSchema } from "../model-selection.js";
 import { completeModelPropertiesDataSchema } from "../model-config.js";
 import { accountProviderUnavailableReasonSchema } from "../account-provider-state.js";
@@ -1155,6 +1155,7 @@ export const zcodeSessionResumedEventPayloadSchema = z
     recoveredCompactTimelineCount: z.number().int().nonnegative().optional(),
     recoveredSteerInputCount: z.number().int().nonnegative().optional(),
     resumedTodoCount: z.number().int().nonnegative().optional(),
+    resumedTarget: goalStateSchema.shape.status.optional(),
   })
   .strict();
 export const zcodeSessionTitleUpdatedEventPayloadSchema = z
