@@ -222,6 +222,8 @@ export interface RuntimeInput {
     readonly inputId: string;
     readonly executionId: string;
   };
+  /** Native/Adapter proof that a failed source with uncertain effects is safe to retry. */
+  readonly retrySafetyEvidence?: EngineEvidence;
   readonly submissionConfig?: RuntimeSubmissionConfig;
   readonly attachments?: readonly RuntimeAttachmentReference[];
   readonly status: RuntimeInputStatus;
