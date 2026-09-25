@@ -5722,6 +5722,202 @@ test("native user-input response preserves its answer and rejection action", asy
   await reading;
 });
 
+test("native AskUserQuestion empty result resolves its exact request once before terminal", async () => {
+  const fixture = harness();
+  const session = await fixture.adapter.createSession();
+  const run = await fixture.adapter.run({ session, input: "ask a question" });
+  const events = [];
+  const reading = (async () => {
+    for await (const event of run.events) events.push(event);
+  })();
+  const emit = (
+    eventId: string,
+    seq: number,
+    turnId: string,
+    type: string,
+    payload: unknown,
+    sessionId = "native-session",
+  ) =>
+    fixture.emit({
+      type: "session.event",
+      event: { eventId, seq, sessionId, turnId, timestamp: seq, type, payload },
+    });
+
+  emit("empty-question-turn-start", 1, "empty-question-turn", "turn.started", {
+    inputId: "native-input",
+    foregroundExecutionId: "native-work-empty-question",
+  });
+  fixture.emit({
+    type: "userInput.request",
+    request: {
+      requestId: "empty-question-request",
+      sessionId: "native-session",
+      turnId: "empty-question-turn",
+      toolCallId: "empty-question-tool-call",
+      toolName: "AskUserQuestion",
+      prompt: "Which option?",
+      questions: [{ question: "Which option?", options: [] }],
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  emit(
+    "empty-result-wrong-session",
+    2,
+    "empty-question-turn",
+    "tool.updated",
+    {
+      kind: "result",
+      toolCallId: "empty-question-tool-call",
+      toolName: "AskUserQuestion",
+      result: { questions: [], answers: {} },
+    },
+    "another-session",
+  );
+  emit("empty-result-wrong-turn", 3, "other-turn", "tool.updated", {
+    kind: "result",
+    toolCallId: "empty-question-tool-call",
+    toolName: "AskUserQuestion",
+    result: { questions: [], answers: {} },
+  });
+  emit("empty-result-wrong-call", 4, "empty-question-turn", "tool.updated", {
+    kind: "result",
+    toolCallId: "another-tool-call",
+    toolName: "AskUserQuestion",
+    result: { questions: [], answers: {} },
+  });
+  emit("empty-result-wrong-tool", 5, "empty-question-turn", "tool.updated", {
+    kind: "result",
+    toolCallId: "empty-question-tool-call",
+    toolName: "Read",
+    result: { questions: [], answers: {} },
+  });
+  emit("empty-result-malformed-question", 6, "empty-question-turn", "tool.updated", {
+    kind: "result",
+    toolCallId: "empty-question-tool-call",
+    toolName: "AskUserQuestion",
+    result: { questions: [{}], answers: {} },
+  });
+  emit("empty-question-native-result", 7, "empty-question-turn", "tool.updated", {
+    kind: "result",
+    toolCallId: "empty-question-tool-call",
+    toolName: "AskUserQuestion",
+    result: { questions: [{ question: "Which option?" }], answers: {} },
+  });
+  emit("empty-question-duplicate-result", 8, "empty-question-turn", "tool.updated", {
+    kind: "result",
+    toolCallId: "empty-question-tool-call",
+    toolName: "AskUserQuestion",
+    result: { questions: [{ question: "Which option?" }], answers: {} },
+  });
+  emit("empty-question-turn-complete", 9, "empty-question-turn", "turn.completed", {
+    inputId: "native-input",
+    resultType: "success",
+    response: "continued without an answer",
+  });
+
+  fixture.adapter.dispose();
+  await reading;
+
+  const responses = events.filter((event) => event.type === "user-input.response");
+  assert.equal(responses.length, 1, JSON.stringify(events.map((event) => event.type)));
+  const response = responses[0]!;
+  assert.equal(response.type, "user-input.response");
+  if (response.type !== "user-input.response") return;
+  assert.equal(response.requestId, "empty-question-request");
+  assert.equal(response.status, "forwarded");
+  assert.deepEqual(response.response, { action: "accept", content: { answers: {} } });
+  assert.deepEqual(response.evidence, {
+    source: "engine",
+    evidenceId: "empty-question-native-result",
+    detail: "Native AskUserQuestion completed with no answers.",
+  });
+  assert.equal(response.session, session);
+  assert.equal(response.executionId, run.executionId);
+  assert.ok(
+    events.findIndex((event) => event === response) <
+      events.findIndex((event) => event.type === "execution.completed"),
+  );
+});
+
+test("AskUserQuestion tool error does not become an accepted empty answer", async () => {
+  const fixture = harness();
+  const session = await fixture.adapter.createSession();
+  const run = await fixture.adapter.run({ session, input: "ask a question" });
+  const events = [];
+  const reading = (async () => {
+    for await (const event of run.events) events.push(event);
+  })();
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "failed-question-turn-start",
+      seq: 1,
+      sessionId: "native-session",
+      turnId: "failed-question-turn",
+      timestamp: 1,
+      type: "turn.started",
+      payload: { inputId: "native-input", foregroundExecutionId: "native-question-work" },
+    },
+  });
+  fixture.emit({
+    type: "userInput.request",
+    request: {
+      requestId: "failed-question-request",
+      sessionId: "native-session",
+      turnId: "failed-question-turn",
+      toolCallId: "failed-question-tool-call",
+      toolName: "AskUserQuestion",
+      prompt: "Which option?",
+      questions: [{ question: "Which option?", options: [] }],
+    },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "failed-question-native-error",
+      seq: 2,
+      sessionId: "native-session",
+      turnId: "failed-question-turn",
+      timestamp: 2,
+      type: "tool.updated",
+      payload: {
+        kind: "error",
+        toolCallId: "failed-question-tool-call",
+        toolName: "AskUserQuestion",
+        error: { message: "question was rejected" },
+      },
+    },
+  });
+  fixture.emit({
+    type: "session.event",
+    event: {
+      eventId: "failed-question-turn-terminal",
+      seq: 3,
+      sessionId: "native-session",
+      turnId: "failed-question-turn",
+      timestamp: 3,
+      type: "turn.failed",
+      payload: { inputId: "native-input", error: { message: "question was rejected" } },
+    },
+  });
+
+  fixture.adapter.dispose();
+  await reading;
+
+  assert.equal(
+    events.some((event) => event.type === "user-input.response"),
+    false,
+  );
+  assert.equal(
+    events.some(
+      (event) => event.type === "tool.failed" && event.toolCallId === "failed-question-tool-call",
+    ),
+    true,
+  );
+});
+
 test("user-input reply is unknown when the native ACK does not prove delivery", async () => {
   const fixture = harness({ interactionAck: "accepted-no-result" });
   const session = await fixture.adapter.createSession();

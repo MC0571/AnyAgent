@@ -5077,6 +5077,136 @@ test("native user-input response evidence survives a conflicting command receipt
   }
 });
 
+test("native accepted-empty user input reconciles after terminal without crossing executions", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const scope = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    const acceptedEmpty = (runIndex: number, requestId: string, eventId: string) => {
+      const run = engine.runs[runIndex]!;
+      const event = {
+        type: "user-input.response",
+        requestId: requestId as never,
+        status: "forwarded",
+        response: { action: "accept", content: { answers: {} } },
+        evidence: {
+          source: "engine",
+          evidenceId: `native-${eventId}`,
+          detail: "Native AskUserQuestion completed with no answers.",
+        },
+        eventId,
+        streamId: `adapter-${runIndex}`,
+        sourceSequence: null,
+        deliverySequence: run.deliverySequence + 1,
+        observedAt: Date.now(),
+        source: "adapter",
+        session: run.session,
+        executionId: run.executionId,
+      } as unknown as EngineEvent;
+      run.deliverySequence += 1;
+      run.events.push(event);
+      return event;
+    };
+
+    await runtime.submitInput({ ...scope, text: "first execution" });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "first-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+    engine.emit(0, {
+      type: "user-input.requested",
+      requestId: "request-first" as never,
+      prompt: "Question one",
+      inputKind: "form",
+      expiresAt: null,
+    });
+    await until(() => runtime.getHistory(task.id)!.userInputs.length === 1);
+    engine.emit(0, {
+      type: "execution.completed",
+      result: "first execution finished",
+      evidence: { source: "engine", evidenceId: "first-terminal" },
+    });
+    await until(() => runtime.getHistory(task.id)!.userInputs[0]!.status === "rejected");
+
+    await runtime.submitInput({ ...scope, text: "second execution" });
+    engine.emit(1, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "second-accepted" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions.length === 2);
+    engine.emit(1, {
+      type: "user-input.requested",
+      requestId: "request-second" as never,
+      prompt: "Question two",
+      inputKind: "form",
+      expiresAt: null,
+    });
+    await until(() => runtime.getHistory(task.id)!.userInputs.length === 2);
+
+    acceptedEmpty(0, "request-second", "cross-execution-answer");
+    await until(() =>
+      runtime
+        .getHistory(task.id)!
+        .events.some((event) => event.nativeEventId === "cross-execution-answer"),
+    );
+    assert.equal(runtime.getHistory(task.id)!.userInputs[0]!.status, "rejected");
+    assert.equal(runtime.getHistory(task.id)!.userInputs[1]!.status, "pending");
+
+    const lateAnswer = acceptedEmpty(0, "request-first", "late-empty-answer");
+    await until(() => runtime.getHistory(task.id)!.userInputs[0]!.status === "forwarded");
+    engine.runs[0]!.events.push({
+      ...lateAnswer,
+      deliverySequence: lateAnswer.deliverySequence + 1,
+    });
+    await until(
+      () =>
+        runtime
+          .getHistory(task.id)!
+          .events.filter((event) => event.nativeEventId === "late-empty-answer").length === 2,
+    );
+    const duplicates = runtime
+      .getHistory(task.id)!
+      .events.filter((event) => event.nativeEventId === "late-empty-answer");
+    assert.equal(duplicates[0]!.duplicateOf, null);
+    assert.equal(duplicates[1]!.duplicateOf, duplicates[0]!.id);
+    assert.ok(
+      runtime
+        .getHistory(task.id)!
+        .integrityIssues.some((issue) => issue.type === "duplicate-event"),
+    );
+    assert.equal(runtime.getHistory(task.id)!.userInputs[0]!.status, "forwarded");
+    assert.deepEqual(runtime.getHistory(task.id)!.userInputs[0]!.response, {
+      action: "accept",
+      content: { answers: {} },
+    });
+    assert.equal(runtime.getHistory(task.id)!.executions[0]!.status, "completed");
+    assert.equal(runtime.getHistory(task.id)!.userInputs[1]!.status, "pending");
+
+    acceptedEmpty(1, "request-second", "second-empty-answer");
+    await until(() => runtime.getHistory(task.id)!.userInputs[1]!.status === "forwarded");
+    engine.emit(1, {
+      type: "execution.completed",
+      result: "second execution finished",
+      evidence: { source: "engine", evidenceId: "second-terminal" },
+    });
+    await until(() => runtime.getHistory(task.id)!.executions[1]!.status === "completed");
+    assert.equal(runtime.getHistory(task.id)!.userInputs[1]!.status, "forwarded");
+    assert.equal(engine.userInputReplies, 0);
+  } finally {
+    runtime.close();
+  }
+});
+
 test("expired or finished-Execution interactions never reach the Engine", async () => {
   let now = 5;
   const engine = new ManualEngine();

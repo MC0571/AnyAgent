@@ -4601,6 +4601,8 @@ export class TaskRuntime {
         }
       } else if (!TERMINAL_EXECUTION_STATUSES.has(current.data.status)) {
         terminalApplied = this.#applyEvent(target, current, event, eventId);
+      } else if (isNativeAcceptedEmptyUserInputResponse(event)) {
+        this.#applyLateAcceptedEmptyUserInputResponse(target, current, event);
       }
     }
 
@@ -4880,6 +4882,44 @@ export class TaskRuntime {
         this.#publish(taskId, kind, record.id);
       }
     }
+  }
+
+  #applyLateAcceptedEmptyUserInputResponse(
+    target: RunTarget,
+    execution: StoredRecord<ExecutionData>,
+    event: Extract<EngineEvent, { type: "user-input.response" }>,
+  ): void {
+    const request = this.#store.findByNativeKey<UserInputData>(
+      "user-input",
+      target.sessionId,
+      controlKey(execution.data.nativeExecutionId, event.requestId),
+    );
+    if (
+      !request ||
+      request.data.taskId !== target.taskId ||
+      request.data.participantId !== target.participantId ||
+      request.data.sessionId !== target.sessionId ||
+      request.data.executionId !== execution.id ||
+      request.data.nativeRequestId !== event.requestId ||
+      request.data.response !== null
+    )
+      return;
+
+    request.data.status = "forwarded";
+    request.data.response = this.#clone(event.response!);
+    this.#save(
+      "user-input",
+      request.id,
+      target.taskId,
+      target.sessionId,
+      execution.id,
+      request.data,
+      request.data.status,
+      request.createdAt,
+      event.observedAt,
+      request.nativeKey,
+    );
+    this.#publish(target.taskId, "user-input", request.id);
   }
 
   #invalidTerminal(target: RunTarget, event: EngineEvent, detail: string): false {
@@ -6523,6 +6563,29 @@ function mapReplyStatus(status: string): RuntimeApproval["status"] {
 function isTerminalEvent(type: EngineEvent["type"]): boolean {
   return (
     type === "execution.completed" || type === "execution.failed" || type === "execution.stopped"
+  );
+}
+
+function isNativeAcceptedEmptyUserInputResponse(
+  event: EngineEvent,
+): event is Extract<EngineEvent, { type: "user-input.response" }> {
+  if (
+    event.type !== "user-input.response" ||
+    event.source !== "adapter" ||
+    event.status !== "forwarded" ||
+    event.evidence?.source !== "engine" ||
+    event.evidence.evidenceId.length === 0
+  )
+    return false;
+  const content = event.response?.content;
+  if (!content || typeof content !== "object" || Array.isArray(content)) return false;
+  const answers = (content as EngineJsonObject).answers;
+  return (
+    event.response?.action === "accept" &&
+    answers !== null &&
+    typeof answers === "object" &&
+    !Array.isArray(answers) &&
+    Object.keys(answers).length === 0
   );
 }
 
