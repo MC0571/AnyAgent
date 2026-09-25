@@ -1595,6 +1595,7 @@ test("EngineConversation sends through the product composer and renders ordered 
             selectedTaskId,
             onSelectTask: () => {},
             composerDraft: drafts.drafts[selectedTaskId],
+            queueDraftStatus: drafts.queueDraftStatus,
             taskComposerDraft: drafts.taskComposerDrafts[selectedTaskId],
             onRecoveredDraftChange: drafts.onRecoveredDraftChange,
             onTaskComposerDraftChange: drafts.onTaskComposerDraftChange,
@@ -1692,6 +1693,76 @@ test("EngineConversation sends through the product composer and renders ordered 
       readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`)?.text,
       "Recovered after navigation",
     );
+
+    const coldRemountTaskScope = `anyagent-task-composer:${taskId}`;
+    const coldRemountQueueScope = `anyagent-queue-edit:${taskId}`;
+    const coldRemountTaskDraft = "Ordinary Task draft D";
+    const coldRemountQueueDraft = `${coldRemountTaskDraft}\n\nQueue draft Q`;
+    const coldRemountTicket = {
+      id: "cold-remount-queue-ticket",
+      fileName: "cold-remount-kept.txt",
+      mimeType: "text/plain",
+      sizeBytes: 6,
+    };
+    assert.equal(clearV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope), true);
+    assert.equal(clearV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope), true);
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope, {
+        text: coldRemountTaskDraft,
+      }),
+      true,
+    );
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope, {
+        text: coldRemountQueueDraft,
+        queueEditAttachmentTickets: [coldRemountTicket],
+        queueEditRecoveredInputIds: ["cold-remount-queue-item"],
+      }),
+      true,
+    );
+
+    // A fresh shell owner reloads both scopes. The queue recovery must remain authoritative
+    // after ChatPromptEditor's initial-value animation frame has run.
+    await act(async () => root.render(appFor(taskBId)));
+    queueControls = null;
+    await act(async () =>
+      root.render(queueAppFor(taskId, "engine", "queue-draft-precedence-cold-remount")),
+    );
+    const coldRemountedEditor = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & { __zcodeLexicalInputE2E?: { getText: () => string } };
+    await waitFor(
+      () => assert.equal(coldRemountedEditor.getAttribute("data-e2e-lexical-bridge"), "ready"),
+      "the cold-remounted composer should mount before checking queue recovery",
+    );
+    await act(async () => {
+      await new Promise<void>((resolve) => dom.window.requestAnimationFrame(() => resolve()));
+    });
+    assert.equal(coldRemountedEditor.__zcodeLexicalInputE2E?.getText(), coldRemountQueueDraft);
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope)?.text,
+      coldRemountQueueDraft,
+      "the composer mount must not erase recovered Q from the queue scope",
+    );
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope)?.text,
+      coldRemountTaskDraft,
+      "queue recovery must preserve the ordinary Task-scoped draft",
+    );
+    assert.match(
+      container.querySelector('[data-testid="engine-composer-attachments"]')?.textContent ?? "",
+      /cold-remount-kept\.txt/,
+      "the recovered queue attachment ticket should remain mounted",
+    );
+    assert.equal(
+      persistV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountQueueScope, {
+        text: "Recovered after navigation",
+        queueEditRecoveredInputIds: ["input-queued-late"],
+      }),
+      true,
+    );
+    assert.equal(clearV4ComposerDraft("/tmp/anyagent-ui", undefined, coldRemountTaskScope), true);
+
     assert.equal(
       queueControls!.onQueueEditPrepare(taskBId, "queued-before-restart", {
         text: "Only after cancellation",

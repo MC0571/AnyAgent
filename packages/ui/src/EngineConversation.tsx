@@ -114,6 +114,7 @@ export interface EngineTaskComposerDraft {
   }[];
   readonly recoveryVersion: number;
 }
+export type EngineQueueDraftStatus = "none" | "recoverable" | "review-required" | "unavailable";
 const contentWidthClassName = getConversationContentWidthClassName({
   centeredEmptyLayout: false,
   statusPanelLayout: "none",
@@ -454,6 +455,7 @@ export function EngineConversation({
   conversationFindNavigationRequestId = 0,
   onConversationFindMatchStateChange,
   composerDraft,
+  queueDraftStatus = "none",
   taskComposerDraft,
   onRecoveredDraftChange,
   onTaskComposerDraftChange,
@@ -482,6 +484,7 @@ export function EngineConversation({
   conversationFindNavigationRequestId?: number;
   onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
   composerDraft?: EngineTaskComposerDraft;
+  queueDraftStatus?: EngineQueueDraftStatus;
   taskComposerDraft?: Pick<EngineTaskComposerDraft, "text" | "editorStateJson"> | null;
   onRecoveredDraftChange?: (
     taskId: string,
@@ -745,6 +748,17 @@ export function EngineConversation({
   const taskComposerDraftInitial = taskComposerDraftInitialRef.current.ready
     ? taskComposerDraftInitialRef.current.draft
     : undefined;
+  const appliedQueueRecoveryVersionForVisibleTask =
+    appliedQueueRecoveryTaskId.current === visibleTask?.id
+      ? appliedQueueRecoveryVersion.current
+      : 0;
+  const hasPendingQueueRecoveryParts = composerDraft?.recoveryParts?.some(
+    (part) => part.version > appliedQueueRecoveryVersionForVisibleTask,
+  );
+  const composerDraftInitial =
+    queueDraftStatus === "recoverable" && !hasPendingQueueRecoveryParts
+      ? composerDraft
+      : taskComposerDraftInitial;
   useLayoutEffect(() => {
     setTaskSlashCommandCatalog(null);
     setTaskSlashCommandCatalogUnavailable(null);
@@ -3218,8 +3232,8 @@ export function EngineConversation({
                   className="p-0"
                   workspacePath={composerWorkspacePath}
                   taskId={activeNativeSessionId}
-                  initialValue={taskComposerDraftInitial?.text}
-                  initialEditorStateJson={taskComposerDraftInitial?.editorStateJson}
+                  initialValue={composerDraftInitial?.text}
+                  initialEditorStateJson={composerDraftInitial?.editorStateJson}
                   taskSkillCatalogRequest={
                     isZCodeHarness
                       ? {

@@ -216,6 +216,9 @@ export function ChatPromptEditor({
 
     latestTextRef.current = initialValue ?? "";
     runAfterFrame(() => {
+      if (latestTextRef.current !== (initialValue ?? "")) {
+        return;
+      }
       const input = resolvedInputApiRef.current;
       if (initialEditorStateJson && input) {
         try {

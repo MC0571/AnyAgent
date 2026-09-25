@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { EngineTaskComposerDraft } from "@/EngineConversation.js";
+import type { EngineQueueDraftStatus, EngineTaskComposerDraft } from "@/EngineConversation.js";
 import {
   clearV4ComposerDraft,
   persistV4ComposerDraft,
@@ -54,6 +54,16 @@ export function useEngineComposerDrafts(
       ),
     [workspacePath, workspaceIdentity],
   );
+  const queueDraftStatus: EngineQueueDraftStatus = (() => {
+    if (!selectedTaskId) return "none";
+    const result = readResult(selectedTaskId);
+    if (!result.ok) return "unavailable";
+    const stored = result.draft;
+    if (stored?.queueEditRequiresReview) return "review-required";
+    return stored && (stored.text.length > 0 || !!stored.queueEditAttachmentTickets?.length)
+      ? "recoverable"
+      : "none";
+  })();
   const taskComposerDrafts = useEngineTaskComposerDrafts(
     workspacePath,
     workspaceIdentity,
@@ -334,6 +344,7 @@ export function useEngineComposerDrafts(
   );
   return {
     drafts,
+    queueDraftStatus,
     taskComposerDrafts: taskComposerDrafts.drafts,
     issues,
     onQueueEditPrepare,

@@ -1924,6 +1924,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                                   ? engineComposerDrafts.drafts[engineSelectedTaskId]
                                   : undefined
                               }
+                              queueDraftStatus={engineComposerDrafts.queueDraftStatus}
                               taskComposerDraft={
                                 engineSelectedTaskId
                                   ? engineComposerDrafts.taskComposerDrafts[engineSelectedTaskId]
