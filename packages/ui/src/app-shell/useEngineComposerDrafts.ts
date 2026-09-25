@@ -4,16 +4,20 @@ import type { EngineTaskComposerDraft } from "@/EngineConversation.js";
 import {
   clearV4ComposerDraft,
   persistV4ComposerDraft,
-  readV4ComposerDraft,
   readV4ComposerDraftResult,
   type V4ComposerDraft,
 } from "@/v4/composer/composerDraftStore.js";
-import { submissionModeSchema } from "@zcode/shared/zcode-protocol-v4";
 import {
+  clearRecoveredQueueDraftText,
+  finalizeSubmittedQueueDraft,
   markQueueDraftForSubmission,
+  persistRecoveredQueueDraftText,
+  persistRecoveredQueueDraftConfig,
   prepareQueueEditDraft,
+  recoverPreparedQueueEditDraft,
   reconcilePreparedQueueEdits,
   restoreReviewedQueueDraft,
+  updateRecoveredQueueAttachmentTickets,
   updateQueueDraftIssue,
   type QueueEditInputState,
 } from "@/app-shell/engineQueueDraftStorage.js";
@@ -23,7 +27,7 @@ const scopeForPreparedInput = (taskId: string, inputId: string) =>
   `${scopeForTask(taskId)}:${inputId}`;
 
 export type EngineQueueDraftIssue = "storage-failed" | "review-required";
-type QueueRecoveryDraft = Pick<EngineTaskComposerDraft, "text" | "config">;
+type QueueRecoveryDraft = Pick<EngineTaskComposerDraft, "text" | "config" | "attachmentTickets">;
 
 export function useEngineComposerDrafts(
   workspacePath: string,
@@ -59,7 +63,7 @@ export function useEngineComposerDrafts(
       setIssue(selectedTaskId, "review-required");
       return;
     }
-    if (!stored.text) return;
+    if (!stored.text && !stored.queueEditAttachmentTickets?.length) return;
     setDrafts((current) => {
       if (current[selectedTaskId]) return current;
       return {
@@ -71,6 +75,7 @@ export function useEngineComposerDrafts(
             mode: stored.queueEditOriginalMode ?? stored.mode,
             modelSelection: stored.modelSelection,
           },
+          attachmentTickets: stored.queueEditAttachmentTickets,
           recoveryVersion: 1,
         },
       };
@@ -92,58 +97,31 @@ export function useEngineComposerDrafts(
   );
   const onQueueRecovered = useCallback(
     (taskId: string, inputId: string) => {
-      const prepared = readV4ComposerDraft(
+      const recovered = recoverPreparedQueueEditDraft(
         workspacePath,
         workspaceIdentity,
-        scopeForPreparedInput(taskId, inputId),
+        taskId,
+        inputId,
       );
-      if (!prepared) return false;
-      const previousResult = readResult(taskId);
-      if (!previousResult.ok) return false;
-      const previous = previousResult.draft;
-      if (previous?.queueEditRequiresReview) return false;
-      if (previous?.queueEditRecoveredInputIds?.includes(inputId)) {
-        clearV4ComposerDraft(
-          workspacePath,
-          workspaceIdentity,
-          scopeForPreparedInput(taskId, inputId),
-        );
-        return true;
-      }
-      const text = [previous?.text, prepared.text].filter(Boolean).join("\n\n");
-      const config = {
-        mode: prepared.queueEditOriginalMode ?? previous?.queueEditOriginalMode ?? previous?.mode,
-        modelSelection: prepared.modelSelection ?? previous?.modelSelection,
-      };
-      const mode = submissionModeSchema.safeParse(config.mode);
-      const persisted = persist(taskId, {
-        text,
-        ...(mode.success ? { mode: mode.data, queueEditOriginalMode: mode.data } : {}),
-        ...(config.modelSelection ? { modelSelection: config.modelSelection } : {}),
-        queueEditRecoveredInputIds: [...(previous?.queueEditRecoveredInputIds ?? []), inputId],
-      });
-      if (!persisted) return false;
-      clearV4ComposerDraft(
-        workspacePath,
-        workspaceIdentity,
-        scopeForPreparedInput(taskId, inputId),
-      );
+      if (!recovered) return false;
+      if (recovered.alreadyRecovered) return true;
       setDrafts((current) => ({
         ...current,
         [taskId]: {
-          text,
-          config,
+          text: recovered.text,
+          config: recovered.config,
+          attachmentTickets: recovered.attachmentTickets,
           recoveryVersion: (current[taskId]?.recoveryVersion ?? 0) + 1,
           recoveryParts: [
             ...(current[taskId]?.recoveryParts ?? []),
-            { version: (current[taskId]?.recoveryVersion ?? 0) + 1, text: prepared.text },
+            { version: (current[taskId]?.recoveryVersion ?? 0) + 1, text: recovered.preparedText },
           ],
         },
       }));
       setIssue(taskId, null);
       return true;
     },
-    [persist, readResult, setIssue, workspaceIdentity, workspacePath],
+    [setIssue, workspaceIdentity, workspacePath],
   );
   const onQueueRecoveryReconcile = useCallback(
     (taskId: string, inputs: readonly QueueEditInputState[]) =>
@@ -166,29 +144,28 @@ export function useEngineComposerDrafts(
         return;
       }
       const previous = result.draft;
-      if (!previous?.text) return;
+      if (!previous || (!previous.text && !previous.queueEditAttachmentTickets?.length)) return;
       if (previous.queueEditRequiresReview) return;
       if (!text.trim()) {
-        const unclearedIds = previous.queueEditRecoveredInputIds?.filter((inputId) =>
-          readV4ComposerDraft(
-            workspacePath,
-            workspaceIdentity,
-            scopeForPreparedInput(taskId, inputId),
-          ),
+        if (previous.queueEditAttachmentTickets?.length) {
+          const { updatedAt: _updatedAt, editorStateJson: _editorStateJson, ...draft } = previous;
+          const written = persist(taskId, { ...draft, text: "" });
+          setIssue(taskId, written ? null : "storage-failed");
+          if (written)
+            setDrafts((current) => {
+              const draft = current[taskId];
+              return draft ? { ...current, [taskId]: { ...draft, text: "" } } : current;
+            });
+          return;
+        }
+        const { cleared, marked } = clearRecoveredQueueDraftText(
+          workspacePath,
+          workspaceIdentity,
+          taskId,
+          previous,
         );
-        const cleared = unclearedIds?.length
-          ? persist(taskId, { text: "", queueEditRecoveredInputIds: unclearedIds })
-          : clearV4ComposerDraft(workspacePath, workspaceIdentity, scopeForTask(taskId));
-        if (!cleared) {
-          // A marker is preferable to resurrecting old text after a restart.
-          const marked = persist(taskId, {
-            text: "",
-            queueEditRequiresReview: true,
-            ...(unclearedIds?.length ? { queueEditRecoveredInputIds: unclearedIds } : {}),
-          });
-          setIssue(taskId, marked ? "review-required" : "storage-failed");
-          if (!marked) return previous.text;
-        } else setIssue(taskId, null);
+        setIssue(taskId, cleared ? null : marked ? "review-required" : "storage-failed");
+        if (!cleared && !marked) return previous.text;
         setDrafts((current) => {
           if (!current[taskId]) return current;
           if (!cleared)
@@ -199,18 +176,14 @@ export function useEngineComposerDrafts(
         });
         return;
       }
-      const written = persist(taskId, {
+      const written = persistRecoveredQueueDraftText(
+        workspacePath,
+        workspaceIdentity,
+        taskId,
+        previous,
         text,
-        ...(editorStateJson ? { editorStateJson } : {}),
-        ...(previous.mode ? { mode: previous.mode } : {}),
-        ...(previous.queueEditOriginalMode
-          ? { queueEditOriginalMode: previous.queueEditOriginalMode }
-          : {}),
-        ...(previous.modelSelection ? { modelSelection: previous.modelSelection } : {}),
-        ...(previous.queueEditRecoveredInputIds
-          ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
-          : {}),
-      });
+        editorStateJson,
+      );
       setIssue(taskId, written ? null : "storage-failed");
       setDrafts((current) => {
         const draft = current[taskId];
@@ -232,30 +205,59 @@ export function useEngineComposerDrafts(
         return;
       }
       const previous = result.draft;
-      if (!previous?.text) return;
+      if (!previous || (!previous.text && !previous.queueEditAttachmentTickets?.length)) return;
       if (previous.queueEditRequiresReview) return;
-      const mode = submissionModeSchema.safeParse(config.mode);
-      const written = persist(taskId, {
-        text: previous.text,
-        ...(previous.editorStateJson ? { editorStateJson: previous.editorStateJson } : {}),
-        ...(mode.success ? { mode: mode.data } : previous.mode ? { mode: previous.mode } : {}),
-        ...(mode.success
-          ? { queueEditOriginalMode: mode.data }
-          : previous.queueEditOriginalMode
-            ? { queueEditOriginalMode: previous.queueEditOriginalMode }
-            : {}),
-        ...(config.modelSelection ? { modelSelection: config.modelSelection } : {}),
-        ...(previous.queueEditRecoveredInputIds
-          ? { queueEditRecoveredInputIds: previous.queueEditRecoveredInputIds }
-          : {}),
-      });
+      const written = persistRecoveredQueueDraftConfig(
+        workspacePath,
+        workspaceIdentity,
+        taskId,
+        previous,
+        config,
+      );
       if (!written) setIssue(taskId, "storage-failed");
       setDrafts((current) => {
         const draft = current[taskId];
         return draft ? { ...current, [taskId]: { ...draft, config } } : current;
       });
     },
-    [persist, readResult, setIssue],
+    [readResult, setIssue, workspaceIdentity, workspacePath],
+  );
+  const onRecoveredAttachmentTicketsChange = useCallback(
+    (taskId: string, tickets: NonNullable<EngineTaskComposerDraft["attachmentTickets"]>) => {
+      const result = readResult(taskId);
+      if (!result.ok) {
+        setIssue(taskId, "storage-failed");
+        return false;
+      }
+      const status = updateRecoveredQueueAttachmentTickets(
+        workspacePath,
+        workspaceIdentity,
+        taskId,
+        result.draft,
+        tickets,
+      );
+      if (status === "storage-failed" || status === "review-required") {
+        setIssue(taskId, status);
+        return false;
+      }
+      if (status === "updated")
+        setDrafts((current) => {
+          const value = current[taskId];
+          return value
+            ? { ...current, [taskId]: { ...value, attachmentTickets: [...tickets] } }
+            : current;
+        });
+      if (status === "cleared")
+        setDrafts((current) => {
+          if (!current[taskId]) return current;
+          const next = { ...current };
+          delete next[taskId];
+          return next;
+        });
+      setIssue(taskId, null);
+      return true;
+    },
+    [readResult, setIssue, workspaceIdentity, workspacePath],
   );
   const onSubmitPrepare = useCallback(
     (
@@ -281,7 +283,7 @@ export function useEngineComposerDrafts(
         setIssue(taskId, "review-required");
         return false;
       }
-      if (!previous?.text) {
+      if (!previous || (!previous.text && !previous.queueEditAttachmentTickets?.length)) {
         if (draftsRef.current[taskId]?.text) {
           setIssue(taskId, "storage-failed");
           return false;
@@ -308,33 +310,22 @@ export function useEngineComposerDrafts(
       }
       const previous = result.draft;
       if (!previous?.text) return true;
-      if (previous.text.trim() !== submittedText) {
-        setIssue(taskId, "review-required");
-        return false;
-      }
-      const unclearedIds = previous.queueEditRecoveredInputIds?.filter((inputId) =>
-        readV4ComposerDraft(
-          workspacePath,
-          workspaceIdentity,
-          scopeForPreparedInput(taskId, inputId),
-        ),
+      const outcome = finalizeSubmittedQueueDraft(
+        workspacePath,
+        workspaceIdentity,
+        taskId,
+        previous,
+        submittedText,
       );
-      const cleared = unclearedIds?.length
-        ? persist(taskId, {
-            text: "",
-            queueEditRequiresReview: true,
-            queueEditRecoveredInputIds: unclearedIds,
-          })
-        : clearV4ComposerDraft(workspacePath, workspaceIdentity, scopeForTask(taskId));
-      if (!cleared) setIssue(taskId, "review-required");
-      else setIssue(taskId, unclearedIds?.length ? "review-required" : null);
+      setIssue(taskId, outcome.reviewRequired ? "review-required" : null);
+      if (!outcome.textMatched) return false;
       setDrafts((current) => {
         if (!current[taskId]) return current;
         return { ...current, [taskId]: { ...current[taskId], text: "", recoveryVersion: 0 } };
       });
-      return cleared;
+      return outcome.cleared;
     },
-    [persist, readResult, setIssue, workspaceIdentity, workspacePath],
+    [readResult, setIssue, workspaceIdentity, workspacePath],
   );
   const onSubmitUncertain = useCallback(
     (taskId: string) => {
@@ -380,6 +371,7 @@ export function useEngineComposerDrafts(
               mode: previous.queueEditOriginalMode ?? previous.mode,
               modelSelection: previous.modelSelection,
             },
+            attachmentTickets: previous.queueEditAttachmentTickets,
             recoveryVersion: (current[taskId]?.recoveryVersion ?? 0) + 1,
           },
         };
@@ -396,6 +388,7 @@ export function useEngineComposerDrafts(
     onQueueRecoveryReconcile,
     onRecoveredDraftChange,
     onRecoveredConfigChange,
+    onRecoveredAttachmentTicketsChange,
     onSubmitPrepare,
     onSubmitted,
     onSubmitUncertain,

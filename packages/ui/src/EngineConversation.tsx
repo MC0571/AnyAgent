@@ -30,6 +30,7 @@ import {
   type EngineLocalAttachment,
 } from "@/EngineConversationTimeline.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
+import type { QueueEditAttachmentTicket } from "@/v4/composer/composerDraftStore.js";
 import {
   projectEngineConversation,
   type EngineConversationProjection,
@@ -86,11 +87,14 @@ type InheritedSource = {
   projection: EngineConversationProjection | null;
   submissionConfig?: NonNullable<EngineHistory["inputs"][number]["submissionConfig"]>;
 };
-type EngineComposerAttachment = EngineLocalAttachment;
+type EngineComposerAttachment = EngineLocalAttachment & {
+  readonly ticket?: QueueEditAttachmentTicket;
+};
 export interface EngineTaskComposerDraft {
   readonly text: string;
   readonly config?: { readonly mode?: string; readonly modelSelection?: ModelSelection };
   readonly editorStateJson?: string;
+  readonly attachmentTickets?: readonly QueueEditAttachmentTicket[];
   readonly recoveryParts?: readonly {
     readonly version: number;
     readonly text: string;
@@ -421,6 +425,7 @@ export function EngineConversation({
   onRecoveredSubmitUncertain,
   onResolveRecoveredReview,
   onQueueEditPrepare,
+  onRecoveredAttachmentTicketsChange,
   onQueueDraftRecovered,
   onQueueRecoveryReconcile,
 }: {
@@ -460,7 +465,11 @@ export function EngineConversation({
   onQueueEditPrepare?: (
     taskId: string,
     inputId: string,
-    recovered: Pick<EngineTaskComposerDraft, "text" | "config">,
+    recovered: Pick<EngineTaskComposerDraft, "text" | "config" | "attachmentTickets">,
+  ) => boolean;
+  onRecoveredAttachmentTicketsChange?: (
+    taskId: string,
+    tickets: readonly QueueEditAttachmentTicket[],
   ) => boolean;
   onQueueDraftRecovered?: (taskId: string, inputId: string) => boolean;
   onQueueRecoveryReconcile?: (
@@ -769,6 +778,27 @@ export function EngineConversation({
         ...current,
         [visibleTask.id]: composerDraft.config!,
       }));
+    if (composerDraft.attachmentTickets?.length)
+      setAttachmentsByTask((current) => {
+        const existing = current[visibleTask.id] ?? [];
+        const missing = composerDraft.attachmentTickets!.filter(
+          (ticket) => !existing.some((attachment) => attachment.ticket?.id === ticket.id),
+        );
+        if (!missing.length) return current;
+        return {
+          ...current,
+          [visibleTask.id]: [
+            ...existing,
+            ...missing.map((ticket) => ({
+              localPath: "",
+              fileName: ticket.fileName,
+              mimeType: ticket.mimeType,
+              sizeBytes: ticket.sizeBytes,
+              ticket,
+            })),
+          ],
+        };
+      });
     editor.focus();
   }, [composerDraft?.recoveryVersion, visibleTask?.id]);
   useEffect(() => {
@@ -1977,13 +2007,18 @@ export function EngineConversation({
         if (submitPreflight) await submitPreflight();
         const attachments = await Promise.all(
           selectedAttachments.map((attachment) =>
-            service.stageAttachment({
-              taskId: visibleTask.id,
-              participantId: visibleTask.participant.id,
-              sessionId: visibleTask.session.id,
-              authorizationId: visibleTask.authorizationId,
-              ...attachment,
-            }),
+            attachment.ticket
+              ? Promise.resolve(attachment.ticket)
+              : service.stageAttachment({
+                  taskId: visibleTask.id,
+                  participantId: visibleTask.participant.id,
+                  sessionId: visibleTask.session.id,
+                  authorizationId: visibleTask.authorizationId,
+                  localPath: attachment.localPath,
+                  fileName: attachment.fileName,
+                  mimeType: attachment.mimeType,
+                  sizeBytes: attachment.sizeBytes,
+                }),
           ),
         );
         return service.submitInput({
@@ -2219,13 +2254,6 @@ export function EngineConversation({
     }
     const input = queuedInputs.find((entry) => entry.id === inputId);
     if (!input) return;
-    if (input.attachments?.length) {
-      setNotice({
-        kind: "error",
-        message: "该队列项含附件，当前无法安全恢复到草稿；原队列项已保留。",
-      });
-      return;
-    }
     const sourceTask = visibleTask;
     const editor = inputApiRef.current;
     if (!editor || editor.getText().trim()) {
@@ -2246,6 +2274,7 @@ export function EngineConversation({
       !onQueueEditPrepare(sourceTask.id, inputId, {
         text: input.text,
         ...(config ? { config } : {}),
+        ...(input.attachments?.length ? { attachmentTickets: input.attachments } : {}),
       })
     ) {
       setNotice({ kind: "error", message: "草稿保存失败，队列项已保留；请检查本地存储后重试。" });
@@ -2256,7 +2285,7 @@ export function EngineConversation({
       const accepted = await runAction(
         `queue-edit:${inputId}`,
         () =>
-          service.cancelQueuedInput({
+          service.withdrawQueuedInputForEdit({
             taskId: sourceTask.id,
             participantId: sourceTask.participant.id,
             sessionId: sourceTask.session.id,
@@ -2272,6 +2301,20 @@ export function EngineConversation({
       } else if (selectedTaskIdRef.current === sourceTask.id && inputApiRef.current === editor) {
         editor.setText([editor.getText(), input.text].filter(Boolean).join("\n\n"));
         editor.focus();
+        if (input.attachments?.length)
+          setAttachmentsByTask((current) => ({
+            ...current,
+            [sourceTask.id]: [
+              ...(current[sourceTask.id] ?? []),
+              ...input.attachments!.map((ticket) => ({
+                localPath: "",
+                fileName: ticket.fileName,
+                mimeType: ticket.mimeType,
+                sizeBytes: ticket.sizeBytes,
+                ticket,
+              })),
+            ],
+          }));
       }
       if (input.submissionConfig && !onQueueDraftRecovered) {
         setConfigByTask((current) => ({
@@ -2469,11 +2512,22 @@ export function EngineConversation({
   );
   const removeAttachment = (index: number) => {
     if (!visibleTask) return;
+    const remaining = (attachmentsByTask[visibleTask.id] ?? []).filter(
+      (_, itemIndex) => itemIndex !== index,
+    );
+    if (
+      onRecoveredAttachmentTicketsChange &&
+      !onRecoveredAttachmentTicketsChange(
+        visibleTask.id,
+        remaining.flatMap((attachment) => (attachment.ticket ? [attachment.ticket] : [])),
+      )
+    ) {
+      setNotice({ kind: "error", message: "附件草稿保存失败；队列编辑状态已保留。" });
+      return;
+    }
     setAttachmentsByTask((current) => ({
       ...current,
-      [visibleTask.id]: (current[visibleTask.id] ?? []).filter(
-        (_, itemIndex) => itemIndex !== index,
-      ),
+      [visibleTask.id]: remaining,
     }));
   };
 

@@ -1936,6 +1936,9 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                               onRecoveredSubmitUncertain={engineComposerDrafts.onSubmitUncertain}
                               onResolveRecoveredReview={engineComposerDrafts.onResolveReview}
                               onQueueEditPrepare={engineComposerDrafts.onQueueEditPrepare}
+                              onRecoveredAttachmentTicketsChange={
+                                engineComposerDrafts.onRecoveredAttachmentTicketsChange
+                              }
                               onQueueDraftRecovered={engineComposerDrafts.onQueueRecovered}
                               onQueueRecoveryReconcile={
                                 engineComposerDrafts.onQueueRecoveryReconcile

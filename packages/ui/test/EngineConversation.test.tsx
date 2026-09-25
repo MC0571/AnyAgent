@@ -366,6 +366,21 @@ test("EngineConversation sends through the product composer and renders ordered 
       };
       emit();
     },
+    withdrawQueuedInputForEdit: async ({ inputId }: { inputId: string }) => {
+      if (queueCancelGate) await queueCancelGate;
+      const source = history.inputs.find(
+        (input) => input.id === inputId && input.status === "queued",
+      );
+      if (source?.attachments?.some((attachment) => attachment.id === "old-attachment"))
+        throw new Error("Host cannot recover an unverified attachment ticket");
+      history = {
+        ...history,
+        inputs: history.inputs.map((input) =>
+          input.id === inputId ? { ...input, status: "cancelled", terminalAt: 1_002 } : input,
+        ),
+      };
+      emit();
+    },
     moveQueuedInput: async () => {},
     resumeQueuedInputs: async ({ taskId: resumedTaskId }: { taskId: string }) => {
       queueResumeRequests.push(resumedTaskId);
@@ -895,6 +910,66 @@ test("EngineConversation sends through the product composer and renders ordered 
     assert.deepEqual(queuedRequests[2]?.attachments, [
       {
         id: "runtime-attachment-3",
+        fileName: "two.ts",
+        mimeType: "application/octet-stream",
+        sizeBytes: 12,
+      },
+    ]);
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="v4-queue-item-edit-input-queued-file"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-edit-input-queued-file"]')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(queueDraft.__zcodeLexicalInputE2E.getText(), "Queued with file"),
+    );
+    assert.ok(container.querySelector('[data-testid="engine-composer-attachment-0"]'));
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(queuedRequests.length, 4));
+    assert.deepEqual(queuedRequests[3]?.attachments, queuedRequests[2]?.attachments);
+    assert.equal(stagedAttachmentRequests.length, 3, "kept ticket must not stage a second file");
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="v4-queue-item-edit-input-queued-file"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-edit-input-queued-file"]')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="engine-composer-attachment-0"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="engine-composer-attachment-0"] button')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(container.querySelector('[data-testid="engine-composer-attachment-0"]'), null),
+    );
+    const replacementTrigger = currentAttachmentTrigger();
+    assert.ok(replacementTrigger);
+    await act(async () => replacementTrigger.click());
+    await waitFor(() =>
+      assert.ok(document.querySelector('[data-testid="engine-composer-attachment-menu-item"]')),
+    );
+    const replacementOption = document
+      .querySelector<HTMLElement>('[data-testid="engine-composer-attachment-menu-item"]')
+      ?.closest<HTMLElement>('[role="option"]');
+    assert.ok(replacementOption);
+    await act(async () =>
+      replacementOption.dispatchEvent(
+        new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }),
+      ),
+    );
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(queuedRequests.length, 5));
+    assert.deepEqual(queuedRequests[4]?.attachments, [
+      {
+        id: "runtime-attachment-4",
         fileName: "two.ts",
         mimeType: "application/octet-stream",
         sizeBytes: 12,
@@ -1493,6 +1568,7 @@ test("EngineConversation sends through the product composer and renders ordered 
             composerDraft: drafts.drafts[selectedTaskId],
             onRecoveredDraftChange: drafts.onRecoveredDraftChange,
             onRecoveredConfigChange: drafts.onRecoveredConfigChange,
+            onRecoveredAttachmentTicketsChange: drafts.onRecoveredAttachmentTicketsChange,
             draftStorageIssue: drafts.issues[selectedTaskId],
             onRecoveredSubmitPrepare: drafts.onSubmitPrepare,
             onComposerDraftSubmitted: drafts.onSubmitted,
@@ -1638,19 +1714,98 @@ test("EngineConversation sends through the product composer and renders ordered 
       '[data-testid="engine-composer-input"]',
     ) as HTMLElement & { __zcodeLexicalInputE2E: { setText: (value: string) => void } };
     await act(async () => recoveredB.__zcodeLexicalInputE2E.setText(""));
+    const recoveredTicket = {
+      id: "runtime-edit-ticket",
+      fileName: "kept.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    };
+    assert.equal(
+      queueControls!.onQueueEditPrepare(taskBId, "queued-file-before-restart", {
+        text: "Recovered file after restart",
+        attachmentTickets: [recoveredTicket],
+      }),
+      true,
+    );
+    historyB = {
+      ...historyB,
+      inputs: [
+        ...historyB.inputs,
+        {
+          id: "queued-file-before-restart",
+          taskId: taskBId,
+          participantId: activeTaskB.participant.id,
+          sessionId: activeTaskB.session.id,
+          text: "Recovered file after restart",
+          status: "queued",
+          receivedAt: 4_000,
+          attachments: [recoveredTicket],
+        },
+      ],
+    };
+    await act(async () => root.render(appFor(taskBId)));
+    queueControls = null;
+    await act(async () => root.render(queueAppFor(taskBId)));
+    assert.equal(
+      container.querySelector('[data-testid="engine-composer-attachments"]'),
+      null,
+      "a queued attachment cannot be recovered before the Host withdrawal is known",
+    );
+    historyB = {
+      ...historyB,
+      inputs: historyB.inputs.map((input) =>
+        input.id === "queued-file-before-restart" ? { ...input, status: "cancelled" } : input,
+      ),
+    };
+    await act(async () => emit(taskBId, historyB));
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector<HTMLElement>('[data-testid="engine-composer-input"]')
+          ?.__zcodeLexicalInputE2E?.getText(),
+        "Recovered file after restart",
+      );
+      assert.match(
+        container.querySelector('[data-testid="engine-composer-attachments"]')?.textContent ?? "",
+        /kept\.txt/,
+      );
+    });
+    assert.deepEqual(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`)
+        ?.queueEditAttachmentTickets,
+      [recoveredTicket],
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="engine-composer-attachment-0"] button')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(container.querySelector('[data-testid="engine-composer-attachments"]'), null),
+    );
+    assert.deepEqual(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`)
+        ?.queueEditAttachmentTickets,
+      [],
+      "removing a recovered ticket must update the saved restart draft",
+    );
+    const recoveredFileEditor = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & { __zcodeLexicalInputE2E: { setText: (value: string) => void } };
+    await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText(""));
     await waitFor(() =>
       assert.equal(
         readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`),
         null,
       ),
     );
-    await act(async () => recoveredB.__zcodeLexicalInputE2E.setText("ordinary draft"));
+    await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText("ordinary draft"));
     assert.equal(
       readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`),
       null,
       "ordinary Composer text must not become a queue recovery draft",
     );
-    await act(async () => recoveredB.__zcodeLexicalInputE2E.setText(""));
+    await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText(""));
     historyB = {
       ...historyB,
       inputs: [

@@ -89,6 +89,14 @@ export interface IAnyAgentService {
     readonly authorizationId: string;
     readonly inputId: string;
   }): Promise<void>;
+  /** Withdraws a queued Input while reserving its staged attachment tickets for one edited submission. */
+  withdrawQueuedInputForEdit(input: {
+    readonly taskId: string;
+    readonly participantId: string;
+    readonly sessionId: string;
+    readonly authorizationId: string;
+    readonly inputId: string;
+  }): Promise<void>;
   moveQueuedInput(input: {
     readonly taskId: string;
     readonly participantId: string;

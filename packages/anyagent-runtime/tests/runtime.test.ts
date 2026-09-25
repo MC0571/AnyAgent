@@ -826,6 +826,247 @@ test("cancelling queued attachment removes its stored dispatch locator", async (
   }
 });
 
+test("queued attachment edit keeps selected tickets, removes others, and adds a new Host-staged file", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const other = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const stage = (fileName: string) =>
+      runtime.stageAttachment({
+        ...identity,
+        localPath: `/private/${fileName}`,
+        fileName,
+        mimeType: "text/plain",
+        sizeBytes: 4,
+      });
+    const keep = await stage("keep.txt");
+    const remove = await stage("remove.txt");
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "original",
+      delivery: "queue",
+      attachments: [keep, remove],
+    });
+    assert.throws(
+      () =>
+        runtime.withdrawQueuedInputForEdit({
+          ...identity,
+          taskId: other.id,
+          participantId: other.participant.id,
+          sessionId: other.session.id,
+          inputId: queued.id,
+        }),
+      /Task|ownership|Session/i,
+    );
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "queued",
+    );
+    const withdrawn = runtime.withdrawQueuedInputForEdit({ ...identity, inputId: queued.id });
+    assert.equal(withdrawn.status, "cancelled");
+    assert.deepEqual(withdrawn.attachments, [keep, remove]);
+    const add = await stage("add.txt");
+    const edited = await runtime.submitInput({
+      ...identity,
+      text: "edited",
+      delivery: "queue",
+      attachments: [keep, add],
+    });
+    assert.equal(edited.status, "queued");
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "stale removed ticket",
+        delivery: "queue",
+        attachments: [keep],
+      }),
+      /expired or does not belong/i,
+    );
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "edit-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "edit-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "edit-A-completed" },
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.commandId, edited.id);
+    assert.deepEqual(
+      engine.runs[1]?.attachments?.map((item) => item.fileName),
+      ["keep.txt", "add.txt"],
+    );
+    assert.equal(
+      engine.runs[1]?.attachments?.some((item) => item.fileName === "remove.txt"),
+      false,
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("withdrawn queued attachment survives restart only within its original Session and TTL", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-queue-edit-restart-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let now = 1;
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const other = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/edited-after-restart.txt",
+      fileName: "edited-after-restart.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "original queue text",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    runtime.withdrawQueuedInputForEdit({ ...identity, inputId: queued.id });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "edit-restart-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "edit-restart-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "edit-restart-A-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)?.executions[0]?.status === "completed");
+    runtime.close();
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", engine]]),
+      now: () => now,
+    });
+    await runtime.restoreTaskSession(identity);
+    await runtime.restoreTaskSession({
+      taskId: other.id,
+      participantId: other.participant.id,
+      sessionId: other.session.id,
+      authorizationId: other.authorizationId,
+    });
+    await assert.rejects(
+      runtime.submitInput({
+        taskId: other.id,
+        participantId: other.participant.id,
+        sessionId: other.session.id,
+        authorizationId: other.authorizationId,
+        text: "foreign ticket",
+        attachments: [attachment],
+      }),
+      /expired or does not belong/i,
+    );
+    assert.equal(engine.runs.length, 1);
+    const edited = await runtime.submitInput({
+      ...identity,
+      text: "edited after restart",
+      attachments: [attachment],
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.commandId, edited.id);
+    assert.equal(engine.runs[1]?.attachments?.[0]?.locator, "/private/edited-after-restart.txt");
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "cancelled",
+    );
+    assert.equal(
+      JSON.stringify(runtime.getHistory(task.id)).includes("/private/edited-after-restart.txt"),
+      false,
+    );
+    assert.equal(engine.runs.length, 2);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+
+  const expiredEngine = new ManualEngine();
+  now = 1;
+  const expiringRuntime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", expiredEngine]]),
+    now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await expiringRuntime.createTask({
+      engineId: "manual",
+      environment,
+      authorization,
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await expiringRuntime.submitInput({ ...identity, text: "A" });
+    const attachment = await expiringRuntime.stageAttachment({
+      ...identity,
+      localPath: "/private/expiring-edit.txt",
+      fileName: "expiring-edit.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await expiringRuntime.submitInput({
+      ...identity,
+      text: "queued",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    expiringRuntime.withdrawQueuedInputForEdit({ ...identity, inputId: queued.id });
+    now = 10 * 60 * 1_000 + 2;
+    await assert.rejects(
+      expiringRuntime.submitInput({
+        ...identity,
+        text: "expired edit",
+        delivery: "queue",
+        attachments: [attachment],
+      }),
+      /expired or does not belong/i,
+    );
+    assert.equal(expiredEngine.runs.length, 1);
+  } finally {
+    expiringRuntime.close();
+  }
+});
+
 test("Execution reconciliation rechecks authorization after a delayed native read", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-reconcile-expiry-"));
   const databasePath = join(directory, "runtime.sqlite");

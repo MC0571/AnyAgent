@@ -152,6 +152,8 @@ interface AttachmentData {
   status: "staged" | "claimed";
   /** Host-staged ref retained only while a queued Input awaits native dispatch. */
   queuedLocator?: string;
+  /** Cancelled queue source whose attachment can be claimed once by an edited draft. */
+  editSourceInputId?: string;
 }
 type ExecutionData = Mutable<RuntimeExecution> & { nativeExecutionId: string };
 type ApprovalData = Mutable<RuntimeApproval> & { nativeApprovalId: string };
@@ -1543,6 +1545,98 @@ export class TaskRuntime {
     );
     this.#publish(task.id, "input", record.id);
     return this.#publicInput(record.data);
+  }
+
+  withdrawQueuedInputForEdit(
+    input: TaskLifecycleRequest & { readonly inputId: string },
+  ): RuntimeInput {
+    this.#assertOpen();
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "execution.run",
+    );
+    this.#requireActiveTask(task);
+    const source = this.#require<InputData>("input", input.inputId);
+    this.#assertRelated(
+      source.data.taskId,
+      source.data.participantId,
+      source.data.sessionId,
+      input,
+    );
+    if (
+      source.taskId !== task.id ||
+      source.sessionId !== session.id ||
+      source.data.status !== "queued"
+    )
+      throw new RuntimeEligibilityError("The source Input is no longer queued in this Session.");
+    const attachments = (source.data.attachments ?? []).map((reference) => {
+      const record = this.#store.get<AttachmentData>("attachment", reference.id);
+      if (
+        !record ||
+        record.status !== "claimed" ||
+        record.taskId !== task.id ||
+        record.sessionId !== session.id ||
+        record.data.status !== "claimed" ||
+        record.data.taskId !== task.id ||
+        record.data.participantId !== task.data.participantId ||
+        record.data.sessionId !== session.id ||
+        record.data.inputId !== source.id ||
+        record.data.authorizationId !== task.data.authorization.id ||
+        record.data.environmentId !== task.data.environment.id ||
+        record.data.engineId !== task.data.engineId ||
+        record.data.nativeSessionId !== session.data.nativeSessionId ||
+        record.data.fileName !== reference.fileName ||
+        record.data.mimeType !== reference.mimeType ||
+        record.data.sizeBytes !== reference.sizeBytes ||
+        record.data.expiresAt <= this.#now() ||
+        !record.data.queuedLocator?.trim()
+      )
+        throw new RuntimeEligibilityError(
+          "Queued attachment cannot be safely recovered for editing; the original queue item was retained.",
+          "ownership",
+        );
+      return record;
+    });
+    const cancelledAt = this.#now();
+    this.#store.transaction(() => {
+      for (const attachment of attachments) {
+        attachment.data.status = "staged";
+        attachment.data.inputId = null;
+        attachment.data.editSourceInputId = source.id;
+        this.#store.update(
+          this.#record(
+            "attachment",
+            attachment.id,
+            task.id,
+            session.id,
+            null,
+            attachment.data,
+            "staged",
+            attachment.createdAt,
+            cancelledAt,
+          ),
+        );
+      }
+      source.data.status = "cancelled";
+      source.data.error = "Withdrawn for editing before native dispatch.";
+      source.data.terminalAt = cancelledAt;
+      this.#save(
+        "input",
+        source.id,
+        task.id,
+        session.id,
+        source.id,
+        source.data,
+        "cancelled",
+        source.createdAt,
+        cancelledAt,
+      );
+    });
+    this.#publish(task.id, "input", source.id);
+    return this.#publicInput(source.data);
   }
 
   moveQueuedInput(
@@ -4451,7 +4545,10 @@ export class TaskRuntime {
     const claims = references.map((reference) => {
       const record = this.#store.get<AttachmentData>("attachment", reference.id);
       const data = record?.data;
-      const locator = this.#attachmentLocators.get(reference.id);
+      const locator = this.#attachmentLocators.get(reference.id) ?? data?.queuedLocator;
+      const editSource = data?.editSourceInputId
+        ? this.#store.get<InputData>("input", data.editSourceInputId)
+        : null;
       if (
         !record ||
         !data ||
@@ -4459,6 +4556,12 @@ export class TaskRuntime {
         data.status !== "staged" ||
         data.expiresAt <= now ||
         data.inputId !== null ||
+        (data.editSourceInputId !== undefined &&
+          (!editSource ||
+            editSource.taskId !== task.id ||
+            editSource.sessionId !== session.id ||
+            editSource.data.status !== "cancelled" ||
+            !editSource.data.attachments?.some((item) => item.id === reference.id))) ||
         record.taskId !== task.id ||
         record.sessionId !== session.id ||
         data.taskId !== task.id ||
@@ -4483,7 +4586,9 @@ export class TaskRuntime {
     for (const claim of claims) {
       claim.data.status = "claimed";
       claim.data.inputId = inputId;
+      delete claim.data.editSourceInputId;
       if (queued) claim.data.queuedLocator = claim.locator;
+      else delete claim.data.queuedLocator;
       this.#store.update(
         this.#record(
           "attachment",

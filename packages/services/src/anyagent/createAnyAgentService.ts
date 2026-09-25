@@ -342,6 +342,9 @@ export function createAnyAgentService(
     async cancelQueuedInput(input) {
       runtime.cancelQueuedInput(input);
     },
+    async withdrawQueuedInputForEdit(input) {
+      runtime.withdrawQueuedInputForEdit(input);
+    },
     async moveQueuedInput(input) {
       runtime.moveQueuedInput(input);
     },
