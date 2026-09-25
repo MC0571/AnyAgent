@@ -2,6 +2,10 @@
 
 本次分层整理所据产品候选：`f47e6b7679f199d82d2f78fc8534aa417b110367`，当时基于 `origin/main` 的 `644120db21f654edbf40b4008df92294772a08cc`；整理前 PR 证据 head 为 `f66b629646446b504e452f9e31fccdf5b9906d33`。本候选已有[增量原生桌面与检查记录](final-f47e6b7/README.md)，但尚未完成全量必测回归。上一次较完整的桌面证据对应 `432eb7075024639b1e5e9f0692c20666f85d7fa7`，见[该候选原生桌面与检查证据](final-432eb70/README.md)；后续 `dda479f031212729dfcb289a983161e32686e872` 的[冷恢复增量复验](final-dda479f/README.md)保留原提交归属。较早 `44cfb92096238882c24c87315b271a2d8428aa4a` 的[网页拾取证据](final-44cfb92/README.md)、`07bced37c5e82e1a9413b305dc2f0fa0c2358d85` 的[分享、队列与恢复证据](final-07bced3/README.md)、`b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34` 的[集成证据](final-b0fc0e9/README.md)、`db192db555f1ef950052f528595ad3d055562ef9` 的[桌面证据](final-db192db/README.md)以及更早提交的截图保留原归属。PR #25 已在独立集成审阅后合并为 `d813b84318aa554c65c162e533c079ba9ed16bdc`；Milestone #2 保持 open，本记录不表示最终 RC 已通过。
 
+## PR #35 原生提问空答复增量（`a314e828e378cdc85bebe480aad2dfea14c7a7cf`）
+
+[真实 CLI 桌面步骤与检查](final-a314e82/README.md)、[同场景产品／原生 SQLite 对账](final-a314e82/question-empty-crosscheck.json)记录固定 CLI 的结构化提问在不作答后原生成功完成；正式产品将**原请求**记为 `forwarded`、空答复并继续同一 Execution，身份和原生结果事件相互对应。此前 `506c0fc` 真实测试暴露协议夹具错误：固定 CLI 给工具结果的是成功加特定文本，并非 `answers` 结构；`a314e82` 已按真实结果修 Adapter 并修测试。该增量通过独立代码复审，证据提交仍待补审。它只证明本场景，不把旧候选的其他矩阵行自动升级为最终 RC；窗口经 CUA 操作但没有保存可交付截图／录屏，最终视觉和组合回归仍缺。
+
 ## PR #34 安全 Stop 候选增量（`b92d523dc6a0233b59acdd28f106eae33b9a674c`）
 
 [本候选真实 CLI 桌面步骤与检查](final-b92d523/README.md)、[同场景产品／原生 SQLite、Stop 与文件核对](final-b92d523/unknown-stop-crosscheck.json)验证：原生仍运行且单次 Adapter 观测中断后，正式 UI 显示 unknown 和 Stop 入口；Stop 命令 ACK 只记为“已送达”，原生 `cancelled` 持久终态后显式对账才将同一 Execution 标为 stopped。原 Input、Write 均只执行一次，同 Task／Session 的后续轮次可继续。冷启动无可信 Stop token、错配 ACK、跨 Task 及授权撤销后的零派发由定向自动化覆盖。本增量仍只断事件观察，未断原始 stdio；窗口由 CUA 实际操作但没有保存可交付截图，最终 RC 视觉证据仍缺。
