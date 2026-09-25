@@ -1,0 +1,155 @@
+{
+  "testedProductCommit": "b92d523dc6a0233b59acdd28f106eae33b9a674c",
+  "baselineMain": "40ccce8fa723361406898b07d2068d225742e9dc",
+  "scenario": "Official UI unknown after exact Adapter observation loss while real CLI keeps running; UI Stop request delivered; native cancelled; explicit reconciliation confirms same Execution; follow-up in same Task/Session",
+  "environment": {
+    "system": "Darwin arm64",
+    "desktop": "Electron 41.0.3",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "cli": "zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521",
+    "adapter": "m1.2",
+    "provider": "OpenCode Go (Anthropic)",
+    "model": "qwen3.8-flash",
+    "mode": "build",
+    "reasoningLevel": "xhigh",
+    "isolatedProfile": "/tmp/anyagent-opencode-go.aBEA0z",
+    "isolatedWorkspace": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project"
+  },
+  "product": {
+    "taskId": "task_13b789e2-fa61-4f7f-80a9-6d7b2a69d442",
+    "participantId": "participant_de2fa9f0-fbdd-4e22-840b-190c956b7366",
+    "sessionId": "session_e5d556e2-8fb0-42ec-b363-485f27b41bcb",
+    "nativeSessionId": "sess_f62228fb-1f77-445d-91ed-99d38bb8da69",
+    "inputId": "input_c2fa58b2-5249-408a-b79f-dfa1cc0306eb",
+    "executionId": "execution_21ee1040-3180-40b1-be33-1cf5b11c2af1",
+    "submittedConfig": {
+      "mode": "build",
+      "planEnabled": false,
+      "modelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      }
+    },
+    "finalInputStatus": "stopped",
+    "finalExecutionStatus": "stopped",
+    "reconciledAt": 1790343640325,
+    "stopRequest": {
+      "id": "stop_7899e403-0caa-45a4-bfb5-3db2d9007407",
+      "requestedAt": 1790343632189,
+      "status": "confirmed",
+      "deliveryStatus": "delivered",
+      "deliveryEvidence": {
+        "source": "engine",
+        "evidenceId": "d50a13b1-eb77-462f-b6b7-bafe5e3fbfc4"
+      },
+      "stopEvidence": {
+        "source": "engine",
+        "evidenceId": "input_c2fa58b2-5249-408a-b79f-dfa1cc0306eb:msg_muh0bzix_f7e6e9d4-2a04-47d4-ad24-f9046195b579:23",
+        "detail": "Native turn projection state is completedInterrupted."
+      },
+      "updatedAt": 1790343640325
+    },
+    "followUpInputId": "input_a559e47a-5340-4017-9f9a-a94a37c776c9",
+    "followUpStatus": "completed",
+    "followUpExecutionId": "execution_097e3f1c-e3cf-4250-97d5-ab2cf3384e0f",
+    "uiObserved": [
+      "unknown with reconcile and Stop controls",
+      "Stop delivered disclaimer before final status",
+      "same Execution stopped only after reconciliation",
+      "same Task/Session follow-up submitted and completed"
+    ]
+  },
+  "native": {
+    "failpointConsumedAt": "2026-09-25T13:40:02.750Z",
+    "sessionInputs": [
+      {
+        "id": "queue_input_4662e72d-542d-41f9-8b5f-06f92bc903f2",
+        "kind": "sendText",
+        "status": "promoted",
+        "admittedSequence": 0,
+        "promotedSequence": 0
+      },
+      {
+        "id": "queue_input_c2fa58b2-5249-408a-b79f-dfa1cc0306eb",
+        "kind": "sendText",
+        "status": "promoted",
+        "admittedSequence": 1,
+        "promotedSequence": 1
+      },
+      {
+        "id": "queue_input_a559e47a-5340-4017-9f9a-a94a37c776c9",
+        "kind": "sendText",
+        "status": "promoted",
+        "admittedSequence": 2,
+        "promotedSequence": 2
+      }
+    ],
+    "turnEntries": [
+      {
+        "id": "native-turn-started:turn_af61c80e-14eb-4de4-a0f7-32936c2a2752",
+        "type": "runtime/native_turn_started",
+        "timeCreated": 1790343513029,
+        "inputId": "input_4662e72d-542d-41f9-8b5f-06f92bc903f2",
+        "turnId": "turn_af61c80e-14eb-4de4-a0f7-32936c2a2752",
+        "resultType": null
+      },
+      {
+        "id": "native-turn-terminal:881f9510-a3db-42ca-bdf1-b705ee2d4a91",
+        "type": "runtime/native_turn_terminal",
+        "timeCreated": 1790343517826,
+        "inputId": "input_4662e72d-542d-41f9-8b5f-06f92bc903f2",
+        "turnId": "turn_af61c80e-14eb-4de4-a0f7-32936c2a2752",
+        "resultType": "success"
+      },
+      {
+        "id": "native-turn-started:turn_76e69c9f-07e6-4089-9830-3634514d5dd9",
+        "type": "runtime/native_turn_started",
+        "timeCreated": 1790343564444,
+        "inputId": "input_c2fa58b2-5249-408a-b79f-dfa1cc0306eb",
+        "turnId": "turn_76e69c9f-07e6-4089-9830-3634514d5dd9",
+        "resultType": null
+      },
+      {
+        "id": "native-turn-terminal:f9d40bf2-8981-4a0c-b5a9-0403f53a0841",
+        "type": "runtime/native_turn_terminal",
+        "timeCreated": 1790343632209,
+        "inputId": "input_c2fa58b2-5249-408a-b79f-dfa1cc0306eb",
+        "turnId": "turn_76e69c9f-07e6-4089-9830-3634514d5dd9",
+        "resultType": "cancelled"
+      },
+      {
+        "id": "native-turn-started:turn_5f714f8f-e213-4f53-a1ca-d089ac26bc68",
+        "type": "runtime/native_turn_started",
+        "timeCreated": 1790343679810,
+        "inputId": "input_a559e47a-5340-4017-9f9a-a94a37c776c9",
+        "turnId": "turn_5f714f8f-e213-4f53-a1ca-d089ac26bc68",
+        "resultType": null
+      },
+      {
+        "id": "native-turn-terminal:57e8ac5a-074f-4c45-a916-bd1c7e50b065",
+        "type": "runtime/native_turn_terminal",
+        "timeCreated": 1790343685045,
+        "inputId": "input_a559e47a-5340-4017-9f9a-a94a37c776c9",
+        "turnId": "turn_5f714f8f-e213-4f53-a1ca-d089ac26bc68",
+        "resultType": "success"
+      }
+    ],
+    "writeToolParts": [
+      {
+        "id": "part_muh0cf6d_b19e43f5-1c2d-457d-aedd-60b356ac1c86",
+        "tool": "Write",
+        "status": "completed"
+      }
+    ]
+  },
+  "file": {
+    "path": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project/m2-pr34-stop.txt",
+    "sizeBytes": 20,
+    "sha256": "0b8494e3833af8b4d00f5e09f8343cde043e71dae577cb3534d28ee3949da497"
+  },
+  "evidenceBoundary": "Failpoint only ends Adapter event observation for the exact run; Host/CLI stdio stays connected. CUA visual observations were made but no deliverable screenshot was saved. Native cancelled and one Write are supported by structured storage and file hash."
+}
