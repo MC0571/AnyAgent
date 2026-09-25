@@ -1,6 +1,12 @@
 # M1 修复集成候选复验（2026-09-24 至 25）
 
-本次分层整理所据产品候选：`f47e6b7679f199d82d2f78fc8534aa417b110367`，当时基于 `origin/main` 的 `644120db21f654edbf40b4008df92294772a08cc`；整理前 PR 证据 head 为 `f66b629646446b504e452f9e31fccdf5b9906d33`。本候选已有[增量原生桌面与检查记录](final-f47e6b7/README.md)，但尚未完成全量必测回归。上一次较完整的桌面证据对应 `432eb7075024639b1e5e9f0692c20666f85d7fa7`，见[该候选原生桌面与检查证据](final-432eb70/README.md)；后续 `dda479f031212729dfcb289a983161e32686e872` 的[冷恢复增量复验](final-dda479f/README.md)保留原提交归属。较早 `44cfb92096238882c24c87315b271a2d8428aa4a` 的[网页拾取证据](final-44cfb92/README.md)、`07bced37c5e82e1a9413b305dc2f0fa0c2358d85` 的[分享、队列与恢复证据](final-07bced3/README.md)、`b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34` 的[集成证据](final-b0fc0e9/README.md)、`db192db555f1ef950052f528595ad3d055562ef9` 的[桌面证据](final-db192db/README.md)以及更早提交的截图保留原归属。Milestone #2 保持 open；本记录供 PR #25 后续验收，不表示 M1 已通过。
+本次分层整理所据产品候选：`f47e6b7679f199d82d2f78fc8534aa417b110367`，当时基于 `origin/main` 的 `644120db21f654edbf40b4008df92294772a08cc`；整理前 PR 证据 head 为 `f66b629646446b504e452f9e31fccdf5b9906d33`。本候选已有[增量原生桌面与检查记录](final-f47e6b7/README.md)，但尚未完成全量必测回归。上一次较完整的桌面证据对应 `432eb7075024639b1e5e9f0692c20666f85d7fa7`，见[该候选原生桌面与检查证据](final-432eb70/README.md)；后续 `dda479f031212729dfcb289a983161e32686e872` 的[冷恢复增量复验](final-dda479f/README.md)保留原提交归属。较早 `44cfb92096238882c24c87315b271a2d8428aa4a` 的[网页拾取证据](final-44cfb92/README.md)、`07bced37c5e82e1a9413b305dc2f0fa0c2358d85` 的[分享、队列与恢复证据](final-07bced3/README.md)、`b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34` 的[集成证据](final-b0fc0e9/README.md)、`db192db555f1ef950052f528595ad3d055562ef9` 的[桌面证据](final-db192db/README.md)以及更早提交的截图保留原归属。PR #25 已在独立集成审阅后合并为 `d813b84318aa554c65c162e533c079ba9ed16bdc`；Milestone #2 保持 open，本记录不表示最终 RC 已通过。
+
+## PR #25 合并后的增量事实
+
+PR #25 最后产品提交为 `6bc55e2eeab63bc495a9c2c954feb15549969e52`，证据 head 为 `2359bfdca8af2da3efcc010d8cd5d40ff7fef076`，合并至 main 为 `d813b84318aa554c65c162e533c079ba9ed16bdc`。该产品候选的[检查及正式桌面记录](final-6bc55e2/README.md)已核对真实结构化提问、审批允许／拒绝、同 Task 冷恢复、文件 mention、同 Provider 逐轮换模型、完成前流式，以及 M0 flag-off 基础烟测。本次合并后继续在同一隔离数据和原产品路径记录了[文本队列与空闲 compact](final-6bc55e2/queue-compact-crosscheck.json)、[真实 Stop](final-6bc55e2/stop-crosscheck.json)；被测产品行为仍为 `6bc55e2`。这些是逐场景证据，不将后续修复自动算作通过。
+
+按三个关闭对象区分当前未收口项：**Product Parity 功能缺口**含固定 CLI 可用的 `/goal` 写入／恢复、自定义 slash 命令、附件排队和运行中 compact 等接入差异；**M1 Contract 技术缺口或待验证项**含独立授权撤销、真实断线恢复与副作用对账、失败后安全重试、终态待答控件；**仅最终 RC 证据缺口**含新代码候选上的完整必测桌面组合路径及可交付的视觉记录。此处不以早期混合 A/B/C/D 数字替代各对象验收。
 
 ## 环境和证据归属
 
