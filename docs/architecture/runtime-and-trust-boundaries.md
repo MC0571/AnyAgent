@@ -56,6 +56,19 @@ Browser 授权到具体身份、标签或操作范围；共享标签不复制整
 
 日志默认记录身份、阶段、错误类别和来源，不记录秘密或完整提示内容；诊断导出需展示内容范围并脱敏。原生 stderr、工具输出、插件日志也视为可能含秘密；产品能控制自己的收集和导出，不能承诺清理 Engine 独立维护的所有日志。日志保留期限、脱敏失败策略和原生数据清理能力应在首次 Engine 接入时验证。
 
+## RT-05：本地 Engine 安装、探测与运行代次
+
+本节约束 Runtime Host 与 Adapter 的实现责任，不重新定义 [Engine 契约](../specs/engine-adapter.md)或领域状态。进程所有权、历史证据和凭据处理继续遵循 [RT-01](#rt-01运行所有权与持久化方案) 与 [RT-04](#rt-04凭据披露与诊断)。
+
+- **固定安装证据。** Detection 与 Launch 使用同一个已解析 Engine installation。executable、endpoint 或配置等关键证据在派发前失效时，Host 必须重新核验该安装或拒绝启动；不得重新搜索后静默切换到另一个安装。
+- **只读辅助探测。** version、auth、model、capability 与 readiness probe 只提供辅助证据，不得启动 Coding task、隐式登录或修改用户配置。认证证据应来自 Engine 正式接口或其他明确验证过的事实；默认不直接读取或复制供应商私有 credential，凭据细节见 RT-04。
+- **探测与业务生命周期隔离。** helper probe 的失败、超时或缓存失效只影响 readiness 与 diagnostic，不拥有业务 Execution 的生命周期；不得因此自动终止或重绑仍承载活动业务的 runtime generation。任何处理活动 runtime 的生命周期动作都必须先证明 Host ownership 及该动作适用的生命周期条件。
+- **代次隔离。** Host 每次实际创建或拥有的 runtime/process 都须有可区分的 generation identity。timer、异步 callback、kill、disconnect cleanup 与 RPC reject 等迟到处理必须在创建时捕获该 identity，且只能影响其所属 generation，不能查询“当前 child”后误处理新一代。
+- **进程证据不等于业务终态。** process exit 或 kill 是 Host 观察到的进程证据，不自动表示 Engine Execution 已 completed、failed 或 stopped，也不证明外部请求或副作用全部停止；按 RT-01 保留实际所有权与结果未知边界。
+- **恢复与接纳分开。** Product history、native resume 与 business admission 是不同操作。resume 仍须按 [LIFE-ADMISSION](../domain/lifecycle-and-ownership.md#life-admission-业务接纳资格proposed) 重新校验当前业务资格；历史可读或 readiness 改善不能授予新派发资格，也不能改写历史 Engine／Execution 来源。
+- **结构化传输有界。** 若 Adapter 使用 JSONL、JSON-RPC、stdio 或其他结构化 machine transport，必须限制单帧和累计缓冲、设置 request deadline，并清理完成、拒绝或超时请求的 pending 状态。异常或超大输出不得无限占用 Host；无条件重启仍在工作的 runtime 不是默认恢复方式。
+- **宿主细节留在内部。** PATH、argv、PID、stdio、JSON-RPC、JSONL 等实现事实属于 Host／Adapter 内部，不成为公共 Engine Contract 的必需字段。
+
 ## 未决与验收边界
 
 需批准：首版 Task／参与者／Session 业务关联与资格规则（在实现持久化、调度和稳定公共接口前）、UI 关闭后的默认 Host 存活策略、持久化技术、事件与审计保留期限、远程身份机制、首个执行宿主的实际隔离配置。缺少这些不会改变未知结果、最小授权与状态归属规则，但会阻止对应部署宣称可恢复或安全隔离。
