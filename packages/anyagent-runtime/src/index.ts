@@ -150,6 +150,10 @@ interface AttachmentData {
   readonly expiresAt: number;
   inputId: string | null;
   status: "staged" | "claimed";
+  /** Host-staged ref retained only while a queued Input awaits native dispatch. */
+  queuedLocator?: string;
+  /** Cancelled queue source whose attachment can be claimed once by an edited draft. */
+  editSourceInputId?: string;
 }
 type ExecutionData = Mutable<RuntimeExecution> & { nativeExecutionId: string };
 type ApprovalData = Mutable<RuntimeApproval> & { nativeApprovalId: string };
@@ -1395,18 +1399,9 @@ export class TaskRuntime {
         "This Host does not provide a safe local attachment staging path.",
         "unsupported",
       );
-    if (
-      this.#store
-        .list<InputData>("input", task.id)
-        .some(
-          (record) =>
-            record.sessionId === session.id &&
-            record.status !== null &&
-            ACTIVE_INPUT_STATUSES.has(record.status),
-        )
-    )
-      throw new RuntimeEligibilityError("Cannot stage an attachment while this Session is busy.");
+    this.#assertNoUnknownInput(task.id, session.id);
     this.#assertNoActiveCompact(task.id, session.id);
+    this.#assertNoActiveFileRewind(task.id, session.id);
 
     const engine = this.#engineFor(task.data);
     const snapshot = await this.#capabilities(engine);
@@ -1440,18 +1435,9 @@ export class TaskRuntime {
       nativeSessionId: nativeSessionId as EngineSessionRef,
     });
     beforeDispatch();
-    if (
-      this.#store
-        .list<InputData>("input", task.id)
-        .some(
-          (record) =>
-            record.sessionId === session.id &&
-            record.status !== null &&
-            ACTIVE_INPUT_STATUSES.has(record.status),
-        )
-    )
-      throw new RuntimeEligibilityError("Cannot stage an attachment while this Session is busy.");
+    this.#assertNoUnknownInput(task.id, session.id);
     this.#assertNoActiveCompact(task.id, session.id);
+    this.#assertNoActiveFileRewind(task.id, session.id);
     const staged = validateAttachmentStageResult(await this.#stageAttachment(stageRequest));
 
     // The stager may take long enough for the Task to be frozen or the Session to change.
@@ -1545,6 +1531,7 @@ export class TaskRuntime {
     record.data.status = "cancelled";
     record.data.error = "Cancelled before native dispatch.";
     record.data.terminalAt = cancelledAt;
+    this.#clearQueuedAttachmentLocators(record);
     this.#save(
       "input",
       record.id,
@@ -1558,6 +1545,98 @@ export class TaskRuntime {
     );
     this.#publish(task.id, "input", record.id);
     return this.#publicInput(record.data);
+  }
+
+  withdrawQueuedInputForEdit(
+    input: TaskLifecycleRequest & { readonly inputId: string },
+  ): RuntimeInput {
+    this.#assertOpen();
+    const { task, session } = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "execution.run",
+    );
+    this.#requireActiveTask(task);
+    const source = this.#require<InputData>("input", input.inputId);
+    this.#assertRelated(
+      source.data.taskId,
+      source.data.participantId,
+      source.data.sessionId,
+      input,
+    );
+    if (
+      source.taskId !== task.id ||
+      source.sessionId !== session.id ||
+      source.data.status !== "queued"
+    )
+      throw new RuntimeEligibilityError("The source Input is no longer queued in this Session.");
+    const attachments = (source.data.attachments ?? []).map((reference) => {
+      const record = this.#store.get<AttachmentData>("attachment", reference.id);
+      if (
+        !record ||
+        record.status !== "claimed" ||
+        record.taskId !== task.id ||
+        record.sessionId !== session.id ||
+        record.data.status !== "claimed" ||
+        record.data.taskId !== task.id ||
+        record.data.participantId !== task.data.participantId ||
+        record.data.sessionId !== session.id ||
+        record.data.inputId !== source.id ||
+        record.data.authorizationId !== task.data.authorization.id ||
+        record.data.environmentId !== task.data.environment.id ||
+        record.data.engineId !== task.data.engineId ||
+        record.data.nativeSessionId !== session.data.nativeSessionId ||
+        record.data.fileName !== reference.fileName ||
+        record.data.mimeType !== reference.mimeType ||
+        record.data.sizeBytes !== reference.sizeBytes ||
+        record.data.expiresAt <= this.#now() ||
+        !record.data.queuedLocator?.trim()
+      )
+        throw new RuntimeEligibilityError(
+          "Queued attachment cannot be safely recovered for editing; the original queue item was retained.",
+          "ownership",
+        );
+      return record;
+    });
+    const cancelledAt = this.#now();
+    this.#store.transaction(() => {
+      for (const attachment of attachments) {
+        attachment.data.status = "staged";
+        attachment.data.inputId = null;
+        attachment.data.editSourceInputId = source.id;
+        this.#store.update(
+          this.#record(
+            "attachment",
+            attachment.id,
+            task.id,
+            session.id,
+            null,
+            attachment.data,
+            "staged",
+            attachment.createdAt,
+            cancelledAt,
+          ),
+        );
+      }
+      source.data.status = "cancelled";
+      source.data.error = "Withdrawn for editing before native dispatch.";
+      source.data.terminalAt = cancelledAt;
+      this.#save(
+        "input",
+        source.id,
+        task.id,
+        session.id,
+        source.id,
+        source.data,
+        "cancelled",
+        source.createdAt,
+        cancelledAt,
+      );
+    });
+    this.#publish(task.id, "input", source.id);
+    return this.#publicInput(source.data);
   }
 
   moveQueuedInput(
@@ -2061,6 +2140,8 @@ export class TaskRuntime {
           );
         if (queuedRecords[0]?.id !== promotedInputId)
           throw new RuntimeEligibilityError("Queued Inputs must be promoted in FIFO order.");
+        if (attachments?.length)
+          resolvedAttachments = this.#takeQueuedAttachments(task, session, id, attachments);
         const unknown = records.find(
           (record) => record.id !== promotedInputId && record.data.status === "unknown",
         );
@@ -2124,11 +2205,6 @@ export class TaskRuntime {
             throw new RuntimeEligibilityError(
               `Cannot queue while compaction ${compactRecords[0]!.id} is unresolved.`,
             );
-          if (attachments?.length)
-            throw new RuntimeEligibilityError(
-              "Queued Inputs currently support text only; attachments cannot be queued.",
-              "unsupported",
-            );
           queued = true;
         } else {
           if (queuedRecords.length)
@@ -2184,10 +2260,11 @@ export class TaskRuntime {
             idempotencyKey ?? null,
           ),
         );
-        if (attachments && !queued) {
+        if (attachments) {
           try {
-            resolvedAttachments = this.#claimAttachments(task, session, id, attachments);
+            resolvedAttachments = this.#claimAttachments(task, session, id, attachments, queued);
           } catch (error) {
+            if (queued) throw error;
             attachmentClaimError = error;
           }
         }
@@ -2211,7 +2288,7 @@ export class TaskRuntime {
         );
       return this.#publicInput(duplicateInput);
     }
-    if (resolvedAttachments)
+    if (resolvedAttachments && !promotedInputId)
       for (const attachment of resolvedAttachments) this.#attachmentLocators.delete(attachment.id);
     this.#publish(task.id, "input", id);
     if (queued) return this.#publicInput(data);
@@ -3654,6 +3731,7 @@ export class TaskRuntime {
             delivery: "queue",
             ...(data.idempotencyKey ? { idempotencyKey: data.idempotencyKey } : {}),
             ...(data.submissionConfig ? { submissionConfig: data.submissionConfig } : {}),
+            ...(data.attachments?.length ? { attachments: data.attachments } : {}),
           },
           undefined,
           queued.id,
@@ -3693,6 +3771,7 @@ export class TaskRuntime {
   #rejectQueuedInputs(taskId: string, sessionId: string, reason: string): void {
     for (const record of this.#store.list<InputData>("input", taskId)) {
       if (record.data.sessionId !== sessionId || record.data.status !== "queued") continue;
+      this.#clearQueuedAttachmentLocators(record);
       const rejectedAt = this.#now();
       record.data.status = "rejected";
       record.data.error = reason;
@@ -4267,7 +4346,36 @@ export class TaskRuntime {
       input.createdAt,
       now,
     );
+    if (TERMINAL_EXECUTION_STATUSES.has(data.status) && isTerminalEvent(event.type))
+      this.#rejectPendingInteractions(target.taskId, target.sessionId, execution.id, now);
     return TERMINAL_EXECUTION_STATUSES.has(data.status) && isTerminalEvent(event.type);
+  }
+
+  #rejectPendingInteractions(
+    taskId: string,
+    sessionId: string,
+    executionId: string,
+    now: number,
+  ): void {
+    for (const kind of ["approval", "user-input"] as const) {
+      for (const record of this.#store.list<ApprovalData | UserInputData>(kind, taskId)) {
+        if (record.data.executionId !== executionId || record.data.status !== "pending") continue;
+        const data = { ...record.data, status: "rejected" as const };
+        this.#save(
+          kind,
+          record.id,
+          taskId,
+          sessionId,
+          executionId,
+          data,
+          data.status,
+          record.createdAt,
+          now,
+          record.nativeKey,
+        );
+        this.#publish(taskId, kind, record.id);
+      }
+    }
   }
 
   #invalidTerminal(target: RunTarget, event: EngineEvent, detail: string): false {
@@ -4431,12 +4539,16 @@ export class TaskRuntime {
     session: StoredRecord<SessionData>,
     inputId: string,
     references: readonly RuntimeAttachmentReference[],
+    queued = false,
   ): EngineAttachment[] {
     const now = this.#now();
     const claims = references.map((reference) => {
       const record = this.#store.get<AttachmentData>("attachment", reference.id);
       const data = record?.data;
-      const locator = this.#attachmentLocators.get(reference.id);
+      const locator = this.#attachmentLocators.get(reference.id) ?? data?.queuedLocator;
+      const editSource = data?.editSourceInputId
+        ? this.#store.get<InputData>("input", data.editSourceInputId)
+        : null;
       if (
         !record ||
         !data ||
@@ -4444,6 +4556,12 @@ export class TaskRuntime {
         data.status !== "staged" ||
         data.expiresAt <= now ||
         data.inputId !== null ||
+        (data.editSourceInputId !== undefined &&
+          (!editSource ||
+            editSource.taskId !== task.id ||
+            editSource.sessionId !== session.id ||
+            editSource.data.status !== "cancelled" ||
+            !editSource.data.attachments?.some((item) => item.id === reference.id))) ||
         record.taskId !== task.id ||
         record.sessionId !== session.id ||
         data.taskId !== task.id ||
@@ -4468,6 +4586,9 @@ export class TaskRuntime {
     for (const claim of claims) {
       claim.data.status = "claimed";
       claim.data.inputId = inputId;
+      delete claim.data.editSourceInputId;
+      if (queued) claim.data.queuedLocator = claim.locator;
+      else delete claim.data.queuedLocator;
       this.#store.update(
         this.#record(
           "attachment",
@@ -4483,6 +4604,89 @@ export class TaskRuntime {
       );
     }
     return claims.map(({ reference, locator }) => ({ ...reference, locator }));
+  }
+
+  #takeQueuedAttachments(
+    task: StoredRecord<TaskData>,
+    session: StoredRecord<SessionData>,
+    inputId: string,
+    references: readonly RuntimeAttachmentReference[],
+  ): EngineAttachment[] {
+    const claims = references.map((reference) => {
+      const record = this.#store.get<AttachmentData>("attachment", reference.id);
+      const data = record?.data;
+      if (
+        !record ||
+        !data ||
+        record.status !== "claimed" ||
+        data.status !== "claimed" ||
+        data.inputId !== inputId ||
+        record.taskId !== task.id ||
+        record.sessionId !== session.id ||
+        data.taskId !== task.id ||
+        data.participantId !== task.data.participantId ||
+        data.sessionId !== session.id ||
+        data.authorizationId !== task.data.authorization.id ||
+        data.environmentId !== task.data.environment.id ||
+        data.engineId !== task.data.engineId ||
+        data.nativeSessionId !== session.data.nativeSessionId ||
+        data.fileName !== reference.fileName ||
+        data.mimeType !== reference.mimeType ||
+        data.sizeBytes !== reference.sizeBytes ||
+        data.expiresAt <= this.#now() ||
+        !data.queuedLocator?.trim()
+      )
+        throw new RuntimeEligibilityError(
+          "Queued attachment reference is unavailable or belongs to another Task and Session.",
+          "ownership",
+        );
+      return { record, data, reference, locator: data.queuedLocator };
+    });
+    for (const claim of claims) {
+      delete claim.data.queuedLocator;
+      this.#store.update(
+        this.#record(
+          "attachment",
+          claim.record.id,
+          task.id,
+          session.id,
+          inputId,
+          claim.data,
+          "claimed",
+          claim.record.createdAt,
+          this.#now(),
+        ),
+      );
+    }
+    return claims.map(({ reference, locator }) => ({ ...reference, locator }));
+  }
+
+  #clearQueuedAttachmentLocators(input: StoredRecord<InputData>): void {
+    for (const reference of input.data.attachments ?? []) {
+      const record = this.#store.get<AttachmentData>("attachment", reference.id);
+      if (
+        !record ||
+        record.taskId !== input.taskId ||
+        record.sessionId !== input.sessionId ||
+        record.data.inputId !== input.id ||
+        !record.data.queuedLocator
+      )
+        continue;
+      delete record.data.queuedLocator;
+      this.#store.update(
+        this.#record(
+          "attachment",
+          record.id,
+          input.taskId,
+          input.sessionId,
+          input.id,
+          record.data,
+          record.data.status,
+          record.createdAt,
+          this.#now(),
+        ),
+      );
+    }
   }
 
   async #qualifiedTaskSessionReadTarget(
@@ -4586,6 +4790,17 @@ export class TaskRuntime {
       throw new RuntimeEligibilityError(`Session is ${session.data.projection.status}.`);
     }
     return { task, session };
+  }
+
+  #assertNoUnknownInput(taskId: string, sessionId: string): void {
+    const unknown = this.#store
+      .list<InputData>("input", taskId)
+      .find((record) => record.sessionId === sessionId && record.data.status === "unknown");
+    if (unknown)
+      throw new RuntimeEligibilityError(
+        `Input ${unknown.id} has an unknown native result; reconcile it before staging.`,
+        "result-unknown",
+      );
   }
 
   #assertNoUnresolvedSessionWork(taskId: string, sessionId: string): void {

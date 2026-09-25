@@ -607,13 +607,14 @@ test("queued Input is rejected when its Task freezes or authorization expires be
   }
 });
 
-test("Runtime restart holds queued text until original reconciliation, native restore, and explicit resume", async () => {
+test("Runtime restart holds queued attachment until original reconciliation, native restore, and explicit resume", async () => {
   const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-queue-restart-"));
   const databasePath = join(directory, "runtime.sqlite");
   const engine = new ManualEngine();
   let runtime = createTaskRuntime({
     databasePath,
     engines: new Map([["manual", engine]]),
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
   });
   let taskId = "";
   let queuedId = "";
@@ -627,7 +628,34 @@ test("Runtime restart holds queued text until original reconciliation, native re
       authorizationId: task.authorizationId,
     };
     await runtime.submitInput({ ...identity, text: "A" });
-    queuedId = (await runtime.submitInput({ ...identity, text: "B", delivery: "queue" })).id;
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/restart.txt",
+      fileName: "restart.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    assert.equal(engine.runs.length, 1, "busy staging must not dispatch another native turn");
+    queuedId = (
+      await runtime.submitInput({
+        ...identity,
+        text: "B",
+        delivery: "queue",
+        attachments: [attachment],
+      })
+    ).id;
+    assert.equal(
+      JSON.stringify(runtime.getHistory(task.id)).includes("/private/restart.txt"),
+      false,
+    );
+    {
+      const database = new DatabaseSync(databasePath);
+      const stored = database
+        .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+        .get("attachment", attachment.id) as { data: string };
+      assert.match(stored.data, /queuedLocator/);
+      database.close();
+    }
     engine.emit(0, {
       type: "input.accepted",
       evidence: { source: "engine", evidenceId: "queue-restart-A-accepted" },
@@ -674,9 +702,368 @@ test("Runtime restart holds queued text until original reconciliation, native re
     await until(() => engine.runs.length === 2);
     assert.equal(engine.runs[1]?.input, "B");
     assert.equal(engine.runs[1]?.commandId, queuedId);
+    assert.deepEqual(engine.runs[1]?.attachments, [
+      { ...attachment, locator: "/private/restart.txt" },
+    ]);
+    {
+      const database = new DatabaseSync(databasePath);
+      const stored = database
+        .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+        .get("attachment", attachment.id) as { data: string };
+      assert.equal(stored.data.includes("/private/restart.txt"), false);
+      database.close();
+    }
   } finally {
     runtime.close();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("expired queued attachment is rejected before native promotion", async () => {
+  const engine = new ManualEngine();
+  let now = 0;
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/expired.txt",
+      fileName: "expired.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "expired queued file",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    now = 10 * 60 * 1_000;
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "expiry-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "expiry-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "expiry-A-completed" },
+    });
+    await until(
+      () =>
+        runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status ===
+        "rejected",
+    );
+    assert.equal(engine.runs.length, 1);
+    assert.match(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.error ?? "",
+      /queued attachment reference is unavailable/i,
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("cancelling queued attachment removes its stored dispatch locator", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-queue-cancel-attachment-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/cancel.txt",
+      fileName: "cancel.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "cancel queued file",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    assert.equal(
+      runtime.cancelQueuedInput({ ...identity, inputId: queued.id }).status,
+      "cancelled",
+    );
+    const database = new DatabaseSync(databasePath);
+    const stored = database
+      .prepare("SELECT data FROM runtime_records WHERE kind = ? AND id = ?")
+      .get("attachment", attachment.id) as { data: string };
+    assert.equal(stored.data.includes("/private/cancel.txt"), false);
+    database.close();
+    assert.equal(engine.runs.length, 1);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("queued attachment edit keeps selected tickets, removes others, and adds a new Host-staged file", async () => {
+  const engine = new ManualEngine();
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", engine]]),
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const other = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const stage = (fileName: string) =>
+      runtime.stageAttachment({
+        ...identity,
+        localPath: `/private/${fileName}`,
+        fileName,
+        mimeType: "text/plain",
+        sizeBytes: 4,
+      });
+    const keep = await stage("keep.txt");
+    const remove = await stage("remove.txt");
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "original",
+      delivery: "queue",
+      attachments: [keep, remove],
+    });
+    assert.throws(
+      () =>
+        runtime.withdrawQueuedInputForEdit({
+          ...identity,
+          taskId: other.id,
+          participantId: other.participant.id,
+          sessionId: other.session.id,
+          inputId: queued.id,
+        }),
+      /Task|ownership|Session/i,
+    );
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "queued",
+    );
+    const withdrawn = runtime.withdrawQueuedInputForEdit({ ...identity, inputId: queued.id });
+    assert.equal(withdrawn.status, "cancelled");
+    assert.deepEqual(withdrawn.attachments, [keep, remove]);
+    const add = await stage("add.txt");
+    const edited = await runtime.submitInput({
+      ...identity,
+      text: "edited",
+      delivery: "queue",
+      attachments: [keep, add],
+    });
+    assert.equal(edited.status, "queued");
+    await assert.rejects(
+      runtime.submitInput({
+        ...identity,
+        text: "stale removed ticket",
+        delivery: "queue",
+        attachments: [keep],
+      }),
+      /expired or does not belong/i,
+    );
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "edit-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "edit-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "edit-A-completed" },
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.commandId, edited.id);
+    assert.deepEqual(
+      engine.runs[1]?.attachments?.map((item) => item.fileName),
+      ["keep.txt", "add.txt"],
+    );
+    assert.equal(
+      engine.runs[1]?.attachments?.some((item) => item.fileName === "remove.txt"),
+      false,
+    );
+  } finally {
+    runtime.close();
+  }
+});
+
+test("withdrawn queued attachment survives restart only within its original Session and TTL", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "anyagent-queue-edit-restart-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  const engine = new ManualEngine();
+  let now = 1;
+  let runtime = createTaskRuntime({
+    databasePath,
+    engines: new Map([["manual", engine]]),
+    now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const other = await runtime.createTask({ engineId: "manual", environment, authorization });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await runtime.submitInput({ ...identity, text: "A" });
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/edited-after-restart.txt",
+      fileName: "edited-after-restart.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await runtime.submitInput({
+      ...identity,
+      text: "original queue text",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    runtime.withdrawQueuedInputForEdit({ ...identity, inputId: queued.id });
+    engine.emit(0, {
+      type: "input.accepted",
+      evidence: { source: "engine", evidenceId: "edit-restart-A-accepted" },
+    });
+    engine.emit(0, {
+      type: "execution.started",
+      evidence: { source: "engine", evidenceId: "edit-restart-A-started" },
+    });
+    engine.emit(0, {
+      type: "execution.completed",
+      evidence: { source: "engine", evidenceId: "edit-restart-A-completed" },
+    });
+    await until(() => runtime.getHistory(task.id)?.executions[0]?.status === "completed");
+    runtime.close();
+    runtime = createTaskRuntime({
+      databasePath,
+      engines: new Map([["manual", engine]]),
+      now: () => now,
+    });
+    await runtime.restoreTaskSession(identity);
+    await runtime.restoreTaskSession({
+      taskId: other.id,
+      participantId: other.participant.id,
+      sessionId: other.session.id,
+      authorizationId: other.authorizationId,
+    });
+    await assert.rejects(
+      runtime.submitInput({
+        taskId: other.id,
+        participantId: other.participant.id,
+        sessionId: other.session.id,
+        authorizationId: other.authorizationId,
+        text: "foreign ticket",
+        attachments: [attachment],
+      }),
+      /expired or does not belong/i,
+    );
+    assert.equal(engine.runs.length, 1);
+    const edited = await runtime.submitInput({
+      ...identity,
+      text: "edited after restart",
+      attachments: [attachment],
+    });
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.commandId, edited.id);
+    assert.equal(engine.runs[1]?.attachments?.[0]?.locator, "/private/edited-after-restart.txt");
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "cancelled",
+    );
+    assert.equal(
+      JSON.stringify(runtime.getHistory(task.id)).includes("/private/edited-after-restart.txt"),
+      false,
+    );
+    assert.equal(engine.runs.length, 2);
+  } finally {
+    runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+
+  const expiredEngine = new ManualEngine();
+  now = 1;
+  const expiringRuntime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["manual", expiredEngine]]),
+    now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
+  });
+  try {
+    const task = await expiringRuntime.createTask({
+      engineId: "manual",
+      environment,
+      authorization,
+    });
+    const identity = {
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+    };
+    await expiringRuntime.submitInput({ ...identity, text: "A" });
+    const attachment = await expiringRuntime.stageAttachment({
+      ...identity,
+      localPath: "/private/expiring-edit.txt",
+      fileName: "expiring-edit.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const queued = await expiringRuntime.submitInput({
+      ...identity,
+      text: "queued",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    expiringRuntime.withdrawQueuedInputForEdit({ ...identity, inputId: queued.id });
+    now = 10 * 60 * 1_000 + 2;
+    await assert.rejects(
+      expiringRuntime.submitInput({
+        ...identity,
+        text: "expired edit",
+        delivery: "queue",
+        attachments: [attachment],
+      }),
+      /expired or does not belong/i,
+    );
+    assert.equal(expiredEngine.runs.length, 1);
+  } finally {
+    expiringRuntime.close();
   }
 });
 
@@ -1272,13 +1659,14 @@ test("an unknown queued dispatch blocks later Inputs without resending the comma
   }
 });
 
-test("Runtime rejects busy queued attachments and records queue cancellation", async () => {
+test("Runtime stages busy queued attachments, dispatches them once, and records queue cancellation", async () => {
   const engine = new ManualEngine();
   let now = 0;
   const runtime = createTaskRuntime({
     databasePath: ":memory:",
     engines: new Map([["manual", engine]]),
     now: () => now,
+    stageAttachment: async ({ localPath }) => ({ locator: localPath, sizeBytes: 4 }),
   });
   try {
     const task = await runtime.createTask({
@@ -1293,22 +1681,21 @@ test("Runtime rejects busy queued attachments and records queue cancellation", a
       authorizationId: task.authorizationId,
     };
     await runtime.submitInput({ ...identity, text: "A" });
-    await assert.rejects(
-      runtime.submitInput({
-        ...identity,
-        text: "queued with file",
-        delivery: "queue",
-        attachments: [
-          { id: "attachment-1", fileName: "note.txt", mimeType: "text/plain", sizeBytes: 4 },
-        ],
-      }),
-      /support text only/i,
-    );
+    const attachment = await runtime.stageAttachment({
+      ...identity,
+      localPath: "/private/note.txt",
+      fileName: "note.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+    const withFile = await runtime.submitInput({
+      ...identity,
+      text: "queued with file",
+      delivery: "queue",
+      attachments: [attachment],
+    });
+    assert.equal(withFile.status, "queued");
     const queued = await runtime.submitInput({ ...identity, text: "cancel me", delivery: "queue" });
-    now = 10;
-    const cancelled = runtime.cancelQueuedInput({ ...identity, inputId: queued.id });
-    assert.equal(cancelled.status, "cancelled");
-    assert.equal(cancelled.error, "Cancelled before native dispatch.");
     assert.equal(engine.runs.length, 1);
     engine.emit(0, {
       type: "input.accepted",
@@ -1322,12 +1709,19 @@ test("Runtime rejects busy queued attachments and records queue cancellation", a
       type: "execution.completed",
       evidence: { source: "engine", evidenceId: "A-completed" },
     });
-    await until(
-      () =>
-        runtime.getHistory(task.id)!.inputs.find((input) => input.id === queued.id)?.status ===
-        "cancelled",
+    await until(() => engine.runs.length === 2);
+    assert.equal(engine.runs[1]?.commandId, withFile.id);
+    assert.deepEqual(engine.runs[1]?.attachments, [
+      { ...attachment, locator: "/private/note.txt" },
+    ]);
+    now = 10;
+    const cancelled = runtime.cancelQueuedInput({ ...identity, inputId: queued.id });
+    assert.equal(cancelled.status, "cancelled");
+    assert.equal(cancelled.error, "Cancelled before native dispatch.");
+    assert.equal(
+      runtime.getHistory(task.id)?.inputs.find((input) => input.id === queued.id)?.status,
+      "cancelled",
     );
-    assert.equal(engine.runs.length, 1);
     assert.equal(runtime.getHistory(task.id)?.executions.length, 1);
   } finally {
     runtime.close();
@@ -3935,6 +4329,13 @@ test("expired or finished-Execution interactions never reach the Engine", async 
       evidence: { source: "engine", evidenceId: "done" },
     });
     await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    await until(
+      () =>
+        runtime.getHistory(task.id)!.approvals[1]!.status === "rejected" &&
+        runtime.getHistory(task.id)!.userInputs[1]!.status === "rejected",
+    );
+    assert.equal(runtime.getHistory(task.id)!.approvals[1]!.requestEventId !== null, true);
+    assert.equal(runtime.getHistory(task.id)!.userInputs[1]!.requestEventId !== null, true);
     await assert.rejects(
       () =>
         runtime.replyToApproval({
@@ -3942,7 +4343,7 @@ test("expired or finished-Execution interactions never reach the Engine", async 
           approvalId: runtime.getHistory(task.id)!.approvals[1]!.id,
           optionId: "allow",
         }),
-      /finished Execution/i,
+      /rejected/i,
     );
     await assert.rejects(
       () =>
@@ -3951,12 +4352,101 @@ test("expired or finished-Execution interactions never reach the Engine", async 
           requestId: runtime.getHistory(task.id)!.userInputs[1]!.id,
           response: "yes",
         }),
-      /finished Execution/i,
+      /rejected/i,
     );
     assert.equal(engine.approvalReplies, 0);
     assert.equal(engine.userInputReplies, 0);
   } finally {
     runtime.close();
+  }
+});
+
+test("failed and stopped Executions retire pending interactions without native replies", async () => {
+  for (const status of ["failed", "stopped"] as const) {
+    const engine = new ManualEngine();
+    const runtime = createTaskRuntime({
+      databasePath: ":memory:",
+      engines: new Map([["manual", engine]]),
+    });
+    try {
+      const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+      const scope = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: authorization.id,
+      };
+      await runtime.submitInput({ ...scope, text: `waiting for ${status}` });
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "accepted" },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+      engine.emit(0, {
+        type: "approval.requested",
+        approvalId: `approval-${status}` as never,
+        operation: "write",
+        options: [{ id: "allow", label: "Allow", decision: "approve" }],
+        expiresAt: null,
+      });
+      engine.emit(0, {
+        type: "user-input.requested",
+        requestId: `question-${status}` as never,
+        prompt: "Continue?",
+        inputKind: "text",
+        expiresAt: null,
+      });
+      await until(
+        () =>
+          runtime.getHistory(task.id)!.approvals.length === 1 &&
+          runtime.getHistory(task.id)!.userInputs.length === 1,
+      );
+      engine.emit(
+        0,
+        status === "failed"
+          ? {
+              type: "execution.failed",
+              failure: {
+                kind: "execution-failed",
+                operation: "execution.run",
+                message: "native failure",
+                sideEffects: "none",
+              },
+              evidence: { source: "engine", evidenceId: "failed" },
+            }
+          : {
+              type: "execution.stopped",
+              evidence: { source: "engine", evidenceId: "stopped" },
+            },
+      );
+      await until(() => runtime.getHistory(task.id)!.executions[0]!.status === status);
+      const history = runtime.getHistory(task.id)!;
+      assert.equal(history.approvals[0]?.status, "rejected");
+      assert.equal(history.userInputs[0]?.status, "rejected");
+      assert.equal(history.events.filter((event) => event.type.endsWith(".requested")).length, 2);
+      await assert.rejects(
+        () =>
+          runtime.replyToApproval({
+            ...scope,
+            approvalId: history.approvals[0]!.id,
+            optionId: "allow",
+          }),
+        /rejected/i,
+      );
+      await assert.rejects(
+        () =>
+          runtime.replyToUserInput({
+            ...scope,
+            requestId: history.userInputs[0]!.id,
+            response: "yes",
+          }),
+        /rejected/i,
+      );
+      assert.equal(engine.approvalReplies, 0);
+      assert.equal(engine.userInputReplies, 0);
+    } finally {
+      runtime.close();
+    }
   }
 });
 

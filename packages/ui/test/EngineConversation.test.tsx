@@ -222,7 +222,12 @@ test("EngineConversation sends through the product composer and renders ordered 
     executionId: string;
     attachments?: Array<Record<string, unknown>>;
   }> = [];
-  const queuedRequests: Array<{ text: string; delivery: string; idempotencyKey: string }> = [];
+  const queuedRequests: Array<{
+    text: string;
+    delivery: string;
+    idempotencyKey: string;
+    attachments?: Array<Record<string, unknown>>;
+  }> = [];
   const stagedAttachmentRequests: Array<Record<string, unknown>> = [];
   const selectedLocalPaths = ["/tmp/anyagent-ui/src/two.ts"];
   const replies: Array<{ approvalId: string; optionId: string }> = [];
@@ -284,17 +289,19 @@ test("EngineConversation sends through the product composer and renders ordered 
       if (submittedTaskId !== taskId) throw new Error(`Unexpected task ${submittedTaskId}`);
       if (delivery === "queue") {
         assert.ok(idempotencyKey, "a queued request needs a stable retry identity");
-        queuedRequests.push({ text, delivery, idempotencyKey });
+        queuedRequests.push({ text, delivery, idempotencyKey, attachments });
+        const queueInputId = attachments?.length ? "input-queued-file" : "input-queued-test";
         history = {
           ...history,
           inputs: [
             ...history.inputs,
             {
-              id: "input-queued-test",
+              id: queueInputId,
               taskId,
               participantId,
               sessionId,
               text,
+              ...(attachments?.length ? { attachments } : {}),
               status: "queued",
               receivedAt: 1_001,
               acceptedAt: null,
@@ -351,6 +358,21 @@ test("EngineConversation sends through the product composer and renders ordered 
     },
     cancelQueuedInput: async ({ inputId }: { inputId: string }) => {
       if (queueCancelGate) await queueCancelGate;
+      history = {
+        ...history,
+        inputs: history.inputs.map((input) =>
+          input.id === inputId ? { ...input, status: "cancelled", terminalAt: 1_002 } : input,
+        ),
+      };
+      emit();
+    },
+    withdrawQueuedInputForEdit: async ({ inputId }: { inputId: string }) => {
+      if (queueCancelGate) await queueCancelGate;
+      const source = history.inputs.find(
+        (input) => input.id === inputId && input.status === "queued",
+      );
+      if (source?.attachments?.some((attachment) => attachment.id === "old-attachment"))
+        throw new Error("Host cannot recover an unverified attachment ticket");
       history = {
         ...history,
         inputs: history.inputs.map((input) =>
@@ -852,6 +874,121 @@ test("EngineConversation sends through the product composer and renders ordered 
       null,
       "cancelled pre-dispatch Input should not become a user message",
     );
+    const currentAttachmentTrigger = () =>
+      container
+        .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
+        ?.closest("button") as HTMLButtonElement | null;
+    await waitFor(() =>
+      assert.equal(
+        currentAttachmentTrigger()?.disabled,
+        false,
+        "busy Composer context action is available after queue cancellation settles",
+      ),
+    );
+    const queueAttachmentTrigger = currentAttachmentTrigger()!;
+    await act(async () => queueAttachmentTrigger.click());
+    await waitFor(() =>
+      assert.ok(document.querySelector('[data-testid="engine-composer-attachment-menu-item"]')),
+    );
+    const queuedAttachmentOption = document
+      .querySelector<HTMLElement>('[data-testid="engine-composer-attachment-menu-item"]')
+      ?.closest<HTMLElement>('[role="option"]');
+    assert.ok(queuedAttachmentOption);
+    await act(async () =>
+      queuedAttachmentOption.dispatchEvent(
+        new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }),
+      ),
+    );
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="engine-composer-attachment-0"]')),
+    );
+    await act(async () => queueDraft.__zcodeLexicalInputE2E.setText("Queued with file"));
+    assert.equal(composerSubmit()?.disabled, false, "busy attachment may enter the product queue");
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(queuedRequests.length, 3));
+    assert.equal(queuedRequests[2]?.delivery, "queue");
+    assert.deepEqual(queuedRequests[2]?.attachments, [
+      {
+        id: "runtime-attachment-3",
+        fileName: "two.ts",
+        mimeType: "application/octet-stream",
+        sizeBytes: 12,
+      },
+    ]);
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="v4-queue-item-edit-input-queued-file"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-edit-input-queued-file"]')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(queueDraft.__zcodeLexicalInputE2E.getText(), "Queued with file"),
+    );
+    assert.ok(container.querySelector('[data-testid="engine-composer-attachment-0"]'));
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(queuedRequests.length, 4));
+    assert.deepEqual(queuedRequests[3]?.attachments, queuedRequests[2]?.attachments);
+    assert.equal(stagedAttachmentRequests.length, 3, "kept ticket must not stage a second file");
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="v4-queue-item-edit-input-queued-file"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-edit-input-queued-file"]')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="engine-composer-attachment-0"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="engine-composer-attachment-0"] button')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(container.querySelector('[data-testid="engine-composer-attachment-0"]'), null),
+    );
+    const replacementTrigger = currentAttachmentTrigger();
+    assert.ok(replacementTrigger);
+    await act(async () => replacementTrigger.click());
+    await waitFor(() =>
+      assert.ok(document.querySelector('[data-testid="engine-composer-attachment-menu-item"]')),
+    );
+    const replacementOption = document
+      .querySelector<HTMLElement>('[data-testid="engine-composer-attachment-menu-item"]')
+      ?.closest<HTMLElement>('[role="option"]');
+    assert.ok(replacementOption);
+    await act(async () =>
+      replacementOption.dispatchEvent(
+        new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }),
+      ),
+    );
+    await act(async () => composerSubmit()?.click());
+    await waitFor(() => assert.equal(queuedRequests.length, 5));
+    assert.deepEqual(queuedRequests[4]?.attachments, [
+      {
+        id: "runtime-attachment-4",
+        fileName: "two.ts",
+        mimeType: "application/octet-stream",
+        sizeBytes: 12,
+      },
+    ]);
+    await waitFor(() =>
+      assert.ok(container.querySelector('[data-testid="v4-queue-item-delete-input-queued-file"]')),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="v4-queue-item-delete-input-queued-file"]')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(
+        container.querySelector('[data-testid="v4-queue-item-delete-input-queued-file"]'),
+        null,
+      ),
+    );
     assert.equal(container.querySelector(".chat-composer-region"), composer);
     assert.equal(
       container.querySelector('[data-testid="chat-model-select-trigger"]'),
@@ -872,8 +1009,8 @@ test("EngineConversation sends through the product composer and renders ordered 
       container
         .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
         ?.closest("button")?.disabled,
-      true,
-      "the native + action should be disabled while the Host is handling the submission",
+      false,
+      "the native + action accepts a queued attachment while the earlier turn runs",
     );
     permissionModeTrigger.click();
     thoughtLevelTrigger.click();
@@ -883,7 +1020,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       container
         .querySelector<SVGElement>("[data-composer-leading-content] svg.lucide-plus")
         ?.closest("button")?.disabled,
-      true,
+      false,
     );
     await waitFor(
       () => assert.equal(reportedTitle, structuredMentionPrompt),
@@ -1049,7 +1186,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       JSON.parse(
         dom.window.localStorage.getItem("zcode-chat-prompt-history:/tmp/anyagent-ui") ?? "[]",
       ),
-      [structuredMentionPrompt, "Queued while running"],
+      [structuredMentionPrompt, "Queued while running", "Queued with file"],
       "accepted direct and queued inputs should reuse the existing workspace prompt history",
     );
     const historyInput = document.querySelector('[data-testid="engine-composer-input"]') as
@@ -1058,6 +1195,12 @@ test("EngineConversation sends through the product composer and renders ordered 
         })
       | null;
     assert.ok(historyInput);
+    await act(async () => {
+      historyInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    assert.equal(historyInput.__zcodeLexicalInputE2E.getText(), "Queued with file");
     await act(async () => {
       historyInput.dispatchEvent(
         new dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
@@ -1425,6 +1568,7 @@ test("EngineConversation sends through the product composer and renders ordered 
             composerDraft: drafts.drafts[selectedTaskId],
             onRecoveredDraftChange: drafts.onRecoveredDraftChange,
             onRecoveredConfigChange: drafts.onRecoveredConfigChange,
+            onRecoveredAttachmentTicketsChange: drafts.onRecoveredAttachmentTicketsChange,
             draftStorageIssue: drafts.issues[selectedTaskId],
             onRecoveredSubmitPrepare: drafts.onSubmitPrepare,
             onComposerDraftSubmitted: drafts.onSubmitted,
@@ -1570,19 +1714,98 @@ test("EngineConversation sends through the product composer and renders ordered 
       '[data-testid="engine-composer-input"]',
     ) as HTMLElement & { __zcodeLexicalInputE2E: { setText: (value: string) => void } };
     await act(async () => recoveredB.__zcodeLexicalInputE2E.setText(""));
+    const recoveredTicket = {
+      id: "runtime-edit-ticket",
+      fileName: "kept.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    };
+    assert.equal(
+      queueControls!.onQueueEditPrepare(taskBId, "queued-file-before-restart", {
+        text: "Recovered file after restart",
+        attachmentTickets: [recoveredTicket],
+      }),
+      true,
+    );
+    historyB = {
+      ...historyB,
+      inputs: [
+        ...historyB.inputs,
+        {
+          id: "queued-file-before-restart",
+          taskId: taskBId,
+          participantId: activeTaskB.participant.id,
+          sessionId: activeTaskB.session.id,
+          text: "Recovered file after restart",
+          status: "queued",
+          receivedAt: 4_000,
+          attachments: [recoveredTicket],
+        },
+      ],
+    };
+    await act(async () => root.render(appFor(taskBId)));
+    queueControls = null;
+    await act(async () => root.render(queueAppFor(taskBId)));
+    assert.equal(
+      container.querySelector('[data-testid="engine-composer-attachments"]'),
+      null,
+      "a queued attachment cannot be recovered before the Host withdrawal is known",
+    );
+    historyB = {
+      ...historyB,
+      inputs: historyB.inputs.map((input) =>
+        input.id === "queued-file-before-restart" ? { ...input, status: "cancelled" } : input,
+      ),
+    };
+    await act(async () => emit(taskBId, historyB));
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector<HTMLElement>('[data-testid="engine-composer-input"]')
+          ?.__zcodeLexicalInputE2E?.getText(),
+        "Recovered file after restart",
+      );
+      assert.match(
+        container.querySelector('[data-testid="engine-composer-attachments"]')?.textContent ?? "",
+        /kept\.txt/,
+      );
+    });
+    assert.deepEqual(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`)
+        ?.queueEditAttachmentTickets,
+      [recoveredTicket],
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="engine-composer-attachment-0"] button')
+        ?.click(),
+    );
+    await waitFor(() =>
+      assert.equal(container.querySelector('[data-testid="engine-composer-attachments"]'), null),
+    );
+    assert.deepEqual(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`)
+        ?.queueEditAttachmentTickets,
+      [],
+      "removing a recovered ticket must update the saved restart draft",
+    );
+    const recoveredFileEditor = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & { __zcodeLexicalInputE2E: { setText: (value: string) => void } };
+    await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText(""));
     await waitFor(() =>
       assert.equal(
         readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`),
         null,
       ),
     );
-    await act(async () => recoveredB.__zcodeLexicalInputE2E.setText("ordinary draft"));
+    await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText("ordinary draft"));
     assert.equal(
       readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`),
       null,
       "ordinary Composer text must not become a queue recovery draft",
     );
-    await act(async () => recoveredB.__zcodeLexicalInputE2E.setText(""));
+    await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText(""));
     historyB = {
       ...historyB,
       inputs: [
@@ -1991,6 +2214,40 @@ test("EngineConversation sends through the product composer and renders ordered 
       "an empty review marker must block another submission until it is resolved",
     );
     assert.equal(queueControls!.onResolveReview(taskId, "discard"), true);
+    const repeatedEditor = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    ) as HTMLElement & {
+      __zcodeLexicalInputE2E: { getText: () => string; setText: (value: string) => void };
+    };
+    await act(async () => repeatedEditor.__zcodeLexicalInputE2E.setText(""));
+    for (const [inputId, message] of [
+      ["repeated-edit-first", "First repeated edit"],
+      ["repeated-edit-second", "Second repeated edit"],
+    ] as const) {
+      const ticket = {
+        id: `${inputId}-ticket`,
+        fileName: `${inputId}.txt`,
+        mimeType: "text/plain",
+        sizeBytes: 6,
+      };
+      assert.equal(
+        queueControls!.onQueueEditPrepare(taskId, inputId, {
+          text: message,
+          attachmentTickets: [ticket],
+        }),
+        true,
+      );
+      await act(async () => assert.equal(queueControls!.onQueueRecovered(taskId, inputId), true));
+      await waitFor(() => {
+        assert.equal(repeatedEditor.__zcodeLexicalInputE2E.getText(), message);
+        assert.match(
+          container.querySelector('[data-testid="engine-composer-attachments"]')?.textContent ?? "",
+          new RegExp(ticket.fileName.replace(".", "\\."), "u"),
+        );
+      });
+      await act(async () => assert.equal(queueControls!.onSubmitted(taskId, message), true));
+      await act(async () => repeatedEditor.__zcodeLexicalInputE2E.setText(""));
+    }
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -2709,6 +2966,20 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
       execution.querySelectorAll(`[data-testid="engine-answer-${executionId}"]`).length,
       2,
     );
+    for (const id of ["approval-one", "approval-two", "request-one", "request-two"])
+      assert.equal(
+        execution.querySelector(
+          `[data-testid="engine-${id.startsWith("approval") ? "approval" : "user-input"}-${id}"]`,
+        ),
+        null,
+        `${id} must not remain actionable after Execution completion`,
+      );
+    for (const status of ["failed", "stopped"] as const) {
+      history.executions[0] = { ...history.executions[0]!, status };
+      await render();
+      assert.equal(execution.querySelector("[data-testid^='engine-approval-']"), null);
+      assert.equal(execution.querySelector("[data-testid^='engine-user-input-']"), null);
+    }
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -3483,10 +3754,8 @@ test("an active ZCode Harness task switches models within its Session and submit
     await submitCurrentDraft();
     await waitFor(
       () =>
-        assert.ok(
-          document.body.textContent?.includes("M1 Engine 对话暂不执行 ZCode CLI 自定义命令"),
-        ),
-      "/help should explain that discovered CLI custom commands are not executed by M1",
+        assert.ok(document.body.textContent?.includes("M1 Engine 经 Host 核对当前 CLI 命令目录后")),
+      "/help should explain the Task-scoped custom command dispatch path",
     );
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/help"));
     await submitCurrentDraft();
@@ -3617,15 +3886,6 @@ test("an active ZCode Harness task switches models within its Session and submit
         `${command} should preserve its draft and explain the semantic/ownership boundary`,
       );
     }
-
-    await act(async () => input.__zcodeLexicalInputE2E!.setText("/custom-note take notes"));
-    await submitCurrentDraft();
-    assert.equal(submissions.length, 0, "a CLI custom command must not be sent as ordinary input");
-    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/custom-note take notes");
-    await waitFor(
-      () => assert.ok(document.body.textContent?.includes("不执行此类命令，输入已保留")),
-      "a custom CLI command should explain that M1 does not execute it",
-    );
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/future-native arg"));
     await submitCurrentDraft();
@@ -4263,6 +4523,42 @@ test("an active ZCode Harness task switches models within its Session and submit
         ?.disabled,
       false,
     );
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(() =>
+      assert.ok(container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]')),
+    );
+    const customInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    )! as HTMLElement & {
+      __zcodeLexicalInputE2E?: { setText: (text: string) => void; getText: () => string };
+    };
+    await act(async () => customInput.__zcodeLexicalInputE2E!.setText("/custom"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:custom-note"]')),
+      "current CLI custom commands should appear in the original Composer picker",
+    );
+    const submissionsBeforeCustom = submissions.length;
+    await act(async () => customInput.__zcodeLexicalInputE2E!.setText("/custom-note take notes"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforeCustom + 1));
+    assert.deepEqual(
+      {
+        taskId: submissions.at(-1)?.taskId,
+        participantId: submissions.at(-1)?.participantId,
+        sessionId: submissions.at(-1)?.sessionId,
+        authorizationId: submissions.at(-1)?.authorizationId,
+        text: submissions.at(-1)?.text,
+      },
+      {
+        taskId,
+        participantId,
+        sessionId,
+        authorizationId: "authorization-engine-ui",
+        text: "/custom-note take notes",
+      },
+      "custom slash must submit through the original Task/Session Host request",
+    );
+    await waitFor(() => assert.equal(customInput.__zcodeLexicalInputE2E!.getText(), ""));
   } finally {
     await act(async () => root.unmount());
     container.remove();

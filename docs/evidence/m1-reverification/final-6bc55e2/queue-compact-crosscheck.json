@@ -1,0 +1,72 @@
+{
+  "productCommit": "6bc55e2eeab63bc495a9c2c954feb15549969e52",
+  "scenario": "Original Composer real CLI long turn, queued next turn, edit queued draft, automatic promotion, then idle /compact",
+  "productTaskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+  "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+  "nativeSessionId": "sess_9d44aa52-029e-43dd-9d66-cff20dc86a9a",
+  "uiObserved": [
+    "While the first real CLI turn displayed numbered output and Stop, the original Composer offered Add to queue; the next text appeared in the queue with Edit, Send now and Remove controls.",
+    "Edit returned the queued text to the original Composer. After changing its marker and submitting again, the new queue item appeared while the first turn was still streaming.",
+    "The first turn completed with QUEUE_FIRST_DONE_6BC. The revised queued turn then ran automatically and replied QUEUE_SECOND_EDITED_DONE_6BC. The superseded marker QUEUE_SECOND_DONE_6BC was not executed.",
+    "Idle /compact appeared in the original slash picker, disabled Composer controls while running, then returned the Composer to Send."
+  ],
+  "productRecords": [
+    {
+      "kind": "input",
+      "id": "input_203ec6ee-f2f6-4909-ac36-e16a02c65571",
+      "requestedDelivery": "startNow",
+      "status": "completed",
+      "textMarker": "QUEUE_FIRST_DONE_6BC"
+    },
+    {
+      "kind": "input",
+      "id": "input_2c46e887-62ec-445c-89a8-e5e0fd229dd2",
+      "requestedDelivery": "queue",
+      "status": "cancelled",
+      "textMarker": "QUEUE_SECOND_DONE_6BC"
+    },
+    {
+      "kind": "input",
+      "id": "input_044579f1-79c9-44f2-8fec-13dd70561b9f",
+      "requestedDelivery": "queue",
+      "status": "completed",
+      "textMarker": "QUEUE_SECOND_EDITED_DONE_6BC"
+    },
+    {
+      "kind": "compact-operation",
+      "id": "compact_f1f8da74-8269-403f-8e2c-ae1c0f9d0eda",
+      "status": "completed",
+      "requestedAtMs": 1790323443525,
+      "terminalAtMs": 1790323502466,
+      "terminalEvidence": "Native compaction lifecycle is success."
+    }
+  ],
+  "nativeRecords": [
+    {
+      "id": "queue_input_203ec6ee-f2f6-4909-ac36-e16a02c65571",
+      "admittedSequence": 5,
+      "status": "promoted"
+    },
+    {
+      "id": "queue_input_044579f1-79c9-44f2-8fec-13dd70561b9f",
+      "admittedSequence": 6,
+      "status": "promoted"
+    },
+    {
+      "id": "queue_compact_f1f8da74-8269-403f-8e2c-ae1c0f9d0eda",
+      "admittedSequence": 7,
+      "status": "admitted",
+      "text": "/compact"
+    },
+    {
+      "summaryMessageId": "msg_mugodzkm_b47d98d4-83c7-422e-a0c9-7618835cf561",
+      "role": "user",
+      "summaryTitle": "Compact summary"
+    }
+  ],
+  "limits": [
+    "This proves text queue edit/cancel/promotion and idle compaction only. Queued attachments and busy compaction remain implementation gaps.",
+    "Native compact queue intent remains recorded as admitted while product operation has native lifecycle success evidence; these represent different facts.",
+    "The visible sequence was observed with CUA in this task, but no durable screenshot file was saved."
+  ]
+}

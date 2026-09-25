@@ -1,0 +1,30 @@
+{
+  "productCommit": "6bc55e2eeab63bc495a9c2c954feb15549969e52",
+  "scenario": "Formal UI Stop during a real ZCode CLI streaming turn in the isolated original Task",
+  "productTaskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+  "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+  "nativeSessionId": "sess_9d44aa52-029e-43dd-9d66-cff20dc86a9a",
+  "productInputId": "input_1615bec4-d3ce-41dc-9d26-2f4496c6de74",
+  "productExecutionId": "execution_19e59943-68ea-4ff6-acbe-67d5e06fab23",
+  "nativeInputId": "queue_input_1615bec4-d3ce-41dc-9d26-2f4496c6de74",
+  "stopRequestId": "stop_e0e02441-c30b-418e-9c48-d232b28d5cae",
+  "uiObserved": "The original message was streaming and the Composer offered Request Stop. Immediately after clicking it, UI said the stop request was submitted and actual stop evidence was still pending. The final answer remained partial, and the Composer returned to Send.",
+  "eventSummary": [
+    { "type": "execution.started", "count": 1, "firstMs": 1790323604839 },
+    { "type": "input.accepted", "count": 1, "firstMs": 1790323604839 },
+    { "type": "message.delta", "count": 14, "firstMs": 1790323609435, "lastMs": 1790323612888 },
+    { "type": "execution.stopped", "count": 1, "firstMs": 1790323612895 }
+  ],
+  "finalProductState": {
+    "input": "stopped",
+    "execution": "stopped",
+    "stopRequest": "confirmed",
+    "deliveryStatus": "delivered",
+    "nativeStopEvidenceId": "88da7f78-54c8-4b83-bbbd-f8848dab5b89"
+  },
+  "nativeAssistantMessageId": "msg_mugog6lj_014e2aab-7d1b-4d44-b6cd-11ffda75d892",
+  "limits": [
+    "This is a positive real CLI stop path. It does not demonstrate a disconnected or unknown stop outcome.",
+    "CUA UI observations remain in this task trace; no durable screenshot file was saved."
+  ]
+}

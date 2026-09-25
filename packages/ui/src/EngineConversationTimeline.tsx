@@ -508,17 +508,23 @@ function nativeElicitationRequest(request: EngineUserInput): ZCodeElicitationReq
 
 function ApprovalEntry({
   approval,
+  executionTerminal = false,
   workspacePath,
   disabledReason,
   busyAction,
   onReply,
 }: {
   approval: EngineApproval;
+  executionTerminal?: boolean;
   workspacePath: string;
   disabledReason: string | null;
   busyAction: string | null;
   onReply: (approvalId: string, optionId: string, feedback?: string) => void;
 }) {
+  if (executionTerminal && approval.status === "pending")
+    return (
+      <p className="ml-4 text-xs text-foreground-subtle">执行已结束，此授权请求不可再答复。</p>
+    );
   if (approval.status !== "pending") {
     if (approval.status === "expired" || approval.status === "unknown")
       return (
@@ -556,15 +562,19 @@ function ApprovalEntry({
 
 function InlineUserInput({
   request,
+  executionTerminal = false,
   disabledReason,
   busyAction,
   onReply,
 }: {
   request: EngineUserInput;
+  executionTerminal?: boolean;
   disabledReason: string | null;
   busyAction: string | null;
   onReply: (requestId: string, response: EngineUserInputAnswer) => void;
 }) {
+  if (executionTerminal && request.status === "pending")
+    return <p className="ml-4 text-xs text-foreground-subtle">执行已结束，此提问不可再答复。</p>;
   if (request.status !== "pending") {
     if (request.status === "expired" || request.status === "unknown")
       return (
@@ -1116,6 +1126,7 @@ export function EngineConversationTimeline({
             const execution = executionTurn.execution;
             const deltas = executionTurn.deltas;
             const streaming = isInProgress(execution.status);
+            const terminal = ["completed", "failed", "stopped"].includes(execution.status);
             const answerDisplay = visibleAssistantAnswer(executionTurn);
             const { finalReplacesPartialStream, finalAlreadyShown } = answerDisplay;
             const toolParts = new Map(toolEvents(executionTurn).map((item) => [item.id, item]));
@@ -1291,6 +1302,7 @@ export function EngineConversationTimeline({
                       <ApprovalEntry
                         key={approval.id}
                         approval={approval}
+                        executionTerminal={terminal}
                         workspacePath={workspacePath}
                         disabledReason={readOnlySource ? "继承来源只读。" : approvalBlockedReason}
                         busyAction={busyAction}
@@ -1304,6 +1316,7 @@ export function EngineConversationTimeline({
                       <InlineUserInput
                         key={request.id}
                         request={request}
+                        executionTerminal={terminal}
                         disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
                         busyAction={busyAction}
                         onReply={onReplyUserInput}
@@ -1424,6 +1437,7 @@ export function EngineConversationTimeline({
                     <ApprovalEntry
                       key={approval.id}
                       approval={approval}
+                      executionTerminal={terminal}
                       workspacePath={workspacePath}
                       disabledReason={readOnlySource ? "继承来源只读。" : approvalBlockedReason}
                       busyAction={busyAction}
@@ -1436,6 +1450,7 @@ export function EngineConversationTimeline({
                     <InlineUserInput
                       key={request.id}
                       request={request}
+                      executionTerminal={terminal}
                       disabledReason={readOnlySource ? "继承来源只读。" : userInputBlockedReason}
                       busyAction={busyAction}
                       onReply={onReplyUserInput}
