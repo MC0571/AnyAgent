@@ -59,12 +59,12 @@ test("resumed Goal status survives strict native session event validation", () =
       interruptedToolCount: 0,
       messageCount: 2,
       partCount: 2,
-      resumedTarget: "verified",
+      resumedTarget: "complete",
     },
   } as Parameters<typeof mapSessionEventForProtocol>[0];
   const mapped = mapSessionEventForProtocol(event);
   assert.ok(mapped);
   const parsed = zcodeSessionEventSchema.parse(mapped);
   assert.equal(parsed.type, "session.resumed");
-  assert.equal(parsed.payload.resumedTarget, "verified");
+  assert.equal(parsed.payload.resumedTarget, "complete");
 });
