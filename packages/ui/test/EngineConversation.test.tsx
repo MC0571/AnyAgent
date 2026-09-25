@@ -225,6 +225,7 @@ test("EngineConversation sends through the product composer and renders ordered 
     executionId: string;
     attachments?: Array<Record<string, unknown>>;
   }> = [];
+  const submittedTaskIds: string[] = [];
   const queuedRequests: Array<{
     text: string;
     delivery: string;
@@ -242,7 +243,11 @@ test("EngineConversation sends through the product composer and renders ordered 
   let clock = 1_000;
   const taskRecord = (id: string) => {
     const current = id === taskBId ? activeTaskB : activeTask;
-    return { ...current, currentEngine: engineProjection };
+    const currentEngineMatchesTask = current.currentEngine?.engineId === current.engine?.engineId;
+    return {
+      ...current,
+      currentEngine: currentEngineMatchesTask ? current.currentEngine : engineProjection,
+    };
   };
   const emit = (changedTaskId = taskId, changedHistory = history) => {
     for (const listener of changes) {
@@ -258,12 +263,15 @@ test("EngineConversation sends through the product composer and renders ordered 
       engineProbePaths.push(workspace?.workspacePath);
       if (workspace?.workspacePath === unavailableWorkspacePath)
         throw new Error("Project directory unavailable");
-      return [engineProjection];
+      return activeTaskB.engine.engineId === "zcode"
+        ? [engineProjection, activeTaskB.currentEngine]
+        : [engineProjection];
     },
     listTasks: async () => [taskRecord(taskId), taskRecord(taskBId)],
     getTask: async (id: string) => taskRecord(id),
     getHistory: async (id: string) => (id === taskBId ? historyB : history),
     getTaskSlashCommandCatalog: async () => ({ slashCommands: [] }),
+    getAssistantFeedback: async () => ({ state: "current", values: {} }),
     stageAttachment: async (input: Record<string, unknown>) => {
       stagedAttachmentRequests.push(input);
       return {
@@ -286,6 +294,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       delivery?: string;
       idempotencyKey?: string;
     }) => {
+      submittedTaskIds.push(submittedTaskId);
       if (failNextSubmit) {
         failNextSubmit = false;
         throw new Error("Fake host rejected this input");
@@ -1586,7 +1595,9 @@ test("EngineConversation sends through the product composer and renders ordered 
             selectedTaskId,
             onSelectTask: () => {},
             composerDraft: drafts.drafts[selectedTaskId],
+            taskComposerDraft: drafts.taskComposerDrafts[selectedTaskId],
             onRecoveredDraftChange: drafts.onRecoveredDraftChange,
+            onTaskComposerDraftChange: drafts.onTaskComposerDraftChange,
             onRecoveredConfigChange: drafts.onRecoveredConfigChange,
             onRecoveredAttachmentTicketsChange: drafts.onRecoveredAttachmentTicketsChange,
             draftStorageIssue: drafts.issues[selectedTaskId],
@@ -1600,7 +1611,11 @@ test("EngineConversation sends through the product composer and renders ordered 
           })
         : createElement("div", { "data-testid": "automation-page" });
     }
-    const queueAppFor = (selectedTaskId: string, page: "engine" | "automations" = "engine") =>
+    const queueAppFor = (
+      selectedTaskId: string,
+      page: "engine" | "automations" = "engine",
+      ownerKey = "queue-edit-workspace",
+    ) =>
       createElement(
         TooltipProvider,
         null,
@@ -1616,7 +1631,7 @@ test("EngineConversation sends through the product composer and renders ordered 
               createElement(
                 TabStoreProvider,
                 null,
-                createElement(QueueEditWorkspace, { selectedTaskId, page }),
+                createElement(QueueEditWorkspace, { key: ownerKey, selectedTaskId, page }),
               ),
             ),
           ),
@@ -1826,6 +1841,7 @@ test("EngineConversation sends through the product composer and renders ordered 
       "ordinary Composer text must not become a queue recovery draft",
     );
     await act(async () => recoveredFileEditor.__zcodeLexicalInputE2E.setText(""));
+    assert.equal(recoveredFileEditor.__zcodeLexicalInputE2E.getText(), "");
     historyB = {
       ...historyB,
       inputs: [
@@ -2283,6 +2299,117 @@ test("EngineConversation sends through the product composer and renders ordered 
       assert.ok(container.textContent?.includes("Host policy changed"));
       assert.ok(container.textContent?.includes("read-only"));
     }, "a revoked current Host grant should keep history available and block new work with its reason");
+
+    // Ordinary M1 drafts are scoped by product Task, including Fake Tasks without a native ID.
+    const taskDraftText = "DRAFT_A_UNSENT_5B2_926";
+    const taskDraftScope = `anyagent-task-composer:${taskId}`;
+    const taskBDraftScope = `anyagent-task-composer:${taskBId}`;
+    activeTask = { ...task, currentEngine: engineProjection };
+    activeTaskB = {
+      ...task,
+      id: taskBId,
+      authorizationId: "authorization-old-zcode-b",
+      engine: { ...task.engine, engineId: "zcode" },
+      currentEngine: { ...engineProjection, engineId: "zcode" },
+      participant: { ...task.participant, id: "participant-old-zcode-b" },
+      environment: { ...task.environment, id: "environment-old-zcode-b" },
+      session: {
+        ...task.session,
+        id: "session-old-zcode-b",
+        nativeSessionId: "native-old-zcode-b",
+      },
+    };
+    history = emptyHistory(taskId);
+    historyB = emptyHistory(taskBId);
+    unavailableWorkspacePath = null;
+    inspectorOpen = false;
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`);
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskBId}`);
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope);
+    clearV4ComposerDraft("/tmp/anyagent-ui", undefined, taskBDraftScope);
+
+    const mountedComposerInput = () =>
+      container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]') as
+        | (HTMLElement & {
+            __zcodeLexicalInputE2E: {
+              getText: () => string;
+              setText: (text: string) => void;
+            };
+          })
+        | null;
+    await act(async () => root.render(queueAppFor(taskId, "engine", "draft-isolation-owner")));
+    await waitFor(() => {
+      const input = mountedComposerInput();
+      assert.ok(input?.__zcodeLexicalInputE2E);
+      assert.equal(input.__zcodeLexicalInputE2E.getText(), "");
+    }, "a fresh Fake Task should start with an empty composer");
+    await act(async () => mountedComposerInput()!.__zcodeLexicalInputE2E.setText(taskDraftText));
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope)?.text,
+      taskDraftText,
+    );
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, `anyagent-queue-edit:${taskId}`),
+      null,
+      "an ordinary unsent prompt must not be stored as a queue edit",
+    );
+
+    await act(async () => root.render(queueAppFor(taskBId, "engine", "draft-isolation-owner")));
+    await waitFor(() => {
+      const input = mountedComposerInput();
+      assert.ok(input?.__zcodeLexicalInputE2E);
+      assert.equal(input.__zcodeLexicalInputE2E.getText(), "");
+    }, "the old ZCode Task must not inherit Fake Task A's composer draft");
+    assert.equal(readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskBDraftScope), null);
+
+    // A new hook owner models a cold workspace remount and proves the V4 draft scope restores A.
+    await act(async () =>
+      root.render(queueAppFor(taskId, "engine", "draft-isolation-cold-remount")),
+    );
+    const returnedTaskAInput = mountedComposerInput();
+    assert.ok(returnedTaskAInput?.__zcodeLexicalInputE2E);
+    await waitFor(
+      () => assert.equal(returnedTaskAInput.__zcodeLexicalInputE2E.getText(), taskDraftText),
+      "Task A's ordinary draft should restore from the existing V4 composer store",
+    );
+
+    const submissionsBeforeDraft = submissions.length;
+    const taskSubmissionsBeforeDraft = submittedTaskIds.length;
+    failNextSubmit = true;
+    await act(async () =>
+      returnedTaskAInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    await waitFor(() => assert.equal(submittedTaskIds.length, taskSubmissionsBeforeDraft + 1));
+    assert.equal(submittedTaskIds.at(-1), taskId);
+    assert.equal(returnedTaskAInput.__zcodeLexicalInputE2E.getText(), taskDraftText);
+    assert.equal(
+      readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope)?.text,
+      taskDraftText,
+      "a rejected Host submission must leave A's draft recoverable",
+    );
+
+    await act(async () =>
+      returnedTaskAInput.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforeDraft + 1));
+    assert.deepEqual(submittedTaskIds.slice(-2), [taskId, taskId]);
+    assert.equal(submissions.at(-1)?.text, taskDraftText);
+    await waitFor(() => {
+      assert.equal(returnedTaskAInput.__zcodeLexicalInputE2E.getText(), "");
+      assert.equal(readV4ComposerDraft("/tmp/anyagent-ui", undefined, taskDraftScope), null);
+    }, "accepted Task A input should clear the corresponding saved draft");
   } finally {
     await act(async () => root.unmount());
     container.remove();

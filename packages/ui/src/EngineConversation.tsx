@@ -454,7 +454,9 @@ export function EngineConversation({
   conversationFindNavigationRequestId = 0,
   onConversationFindMatchStateChange,
   composerDraft,
+  taskComposerDraft,
   onRecoveredDraftChange,
+  onTaskComposerDraftChange,
   onRecoveredConfigChange,
   draftStorageIssue,
   onRecoveredSubmitPrepare,
@@ -480,11 +482,13 @@ export function EngineConversation({
   conversationFindNavigationRequestId?: number;
   onConversationFindMatchStateChange?: (state: ConversationFindMatchState) => void;
   composerDraft?: EngineTaskComposerDraft;
+  taskComposerDraft?: Pick<EngineTaskComposerDraft, "text" | "editorStateJson"> | null;
   onRecoveredDraftChange?: (
     taskId: string,
     text: string,
     editorStateJson?: string,
   ) => string | void;
+  onTaskComposerDraftChange?: (taskId: string, text: string, editorStateJson?: string) => void;
   onRecoveredConfigChange?: (
     taskId: string,
     config: NonNullable<EngineTaskComposerDraft["config"]>,
@@ -720,6 +724,27 @@ export function EngineConversation({
     }
   }, [projection]);
   const visibleTask = task?.id === selectedTaskId ? task : null;
+  const taskComposerDraftInitialRef = useRef<{
+    taskId: string | null;
+    ready: boolean;
+    draft: Pick<EngineTaskComposerDraft, "text" | "editorStateJson"> | null | undefined;
+  }>({ taskId: selectedTaskId, ready: taskComposerDraft !== undefined, draft: taskComposerDraft });
+  if (taskComposerDraftInitialRef.current.taskId !== selectedTaskId) {
+    taskComposerDraftInitialRef.current = {
+      taskId: selectedTaskId,
+      ready: taskComposerDraft !== undefined,
+      draft: taskComposerDraft,
+    };
+  } else if (!taskComposerDraftInitialRef.current.ready && taskComposerDraft !== undefined) {
+    taskComposerDraftInitialRef.current = {
+      taskId: selectedTaskId,
+      ready: true,
+      draft: taskComposerDraft,
+    };
+  }
+  const taskComposerDraftInitial = taskComposerDraftInitialRef.current.ready
+    ? taskComposerDraftInitialRef.current.draft
+    : undefined;
   useLayoutEffect(() => {
     setTaskSlashCommandCatalog(null);
     setTaskSlashCommandCatalogUnavailable(null);
@@ -3193,6 +3218,8 @@ export function EngineConversation({
                   className="p-0"
                   workspacePath={composerWorkspacePath}
                   taskId={activeNativeSessionId}
+                  initialValue={taskComposerDraftInitial?.text}
+                  initialEditorStateJson={taskComposerDraftInitial?.editorStateJson}
                   taskSkillCatalogRequest={
                     isZCodeHarness
                       ? {
@@ -3207,7 +3234,7 @@ export function EngineConversation({
                   promptHistory={promptHistory}
                   inputApiRef={inputApiRef}
                   onChange={(value) => {
-                    if (!onRecoveredDraftChange) return;
+                    if (!onRecoveredDraftChange && !onTaskComposerDraftChange) return;
                     let editorStateJson: string | undefined;
                     try {
                       const editorState = inputApiRef.current?.getEditorState();
@@ -3217,7 +3244,9 @@ export function EngineConversation({
                     } catch {
                       // Plain text remains recoverable when the editor state cannot be serialized.
                     }
-                    const restoreText = onRecoveredDraftChange(
+                    if (taskComposerDraft !== undefined)
+                      onTaskComposerDraftChange?.(visibleTask.id, value, editorStateJson);
+                    const restoreText = onRecoveredDraftChange?.(
                       visibleTask.id,
                       value,
                       editorStateJson,
