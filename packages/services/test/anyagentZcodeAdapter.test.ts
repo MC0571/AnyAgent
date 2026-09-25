@@ -5770,7 +5770,7 @@ test("native AskUserQuestion empty result resolves its exact request once before
       kind: "result",
       toolCallId: "empty-question-tool-call",
       toolName: "AskUserQuestion",
-      result: { questions: [], answers: {} },
+      result: { questions: [{ question: "Which option?" }], answers: {} },
     },
     "another-session",
   );
@@ -5778,19 +5778,19 @@ test("native AskUserQuestion empty result resolves its exact request once before
     kind: "result",
     toolCallId: "empty-question-tool-call",
     toolName: "AskUserQuestion",
-    result: { questions: [], answers: {} },
+    result: { questions: [{ question: "Which option?" }], answers: {} },
   });
   emit("empty-result-wrong-call", 4, "empty-question-turn", "tool.updated", {
     kind: "result",
     toolCallId: "another-tool-call",
     toolName: "AskUserQuestion",
-    result: { questions: [], answers: {} },
+    result: { questions: [{ question: "Which option?" }], answers: {} },
   });
   emit("empty-result-wrong-tool", 5, "empty-question-turn", "tool.updated", {
     kind: "result",
     toolCallId: "empty-question-tool-call",
     toolName: "Read",
-    result: { questions: [], answers: {} },
+    result: { questions: [{ question: "Which option?" }], answers: {} },
   });
   emit("empty-result-malformed-question", 6, "empty-question-turn", "tool.updated", {
     kind: "result",
