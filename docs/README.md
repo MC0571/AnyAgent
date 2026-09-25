@@ -66,7 +66,7 @@
 | [跨 Engine 协作](../VISION.md#跨-engine-协作) | [关联与状态](domain/lifecycle-and-ownership.md) | [协作契约](specs/cross-engine-collaboration.md) | [运行流程](architecture/runtime-and-trust-boundaries.md) | [0003](decisions/0003-cross-engine-collaboration-is-task-scoped.md) | AC-03、07、08；EA-10—EA-13 |
 | [工作区与权限](../VISION.md#工作区与权限有真实边界) | [Workspace 与授权资产](domain/README.md) | [共享能力](specs/shared-capabilities.md) | [信任边界](architecture/runtime-and-trust-boundaries.md) | [0002](decisions/0002-engine-native-and-product-shared-tools-are-distinct.md)、[0003](decisions/0003-cross-engine-collaboration-is-task-scoped.md) | AC-04、06、07、09 |
 | [双重产品定位](../VISION.md#产品定位)、[领域扩展](../VISION.md#领域工具与插件) | [工具和扩展归属](domain/README.md) | [公共能力与扩展](specs/shared-capabilities.md) | [Core 与 Reference App](architecture/README.md) | [0001](decisions/0001-domain-tools-are-optional-plugins.md)、[0002](decisions/0002-engine-native-and-product-shared-tools-are-distinct.md) | AC-09—11 |
-| [独立产品与本地优先](../VISION.md#本地优先与产品独立) | [状态所有权](domain/lifecycle-and-ownership.md) | [能力和兼容边界](specs/engine-adapter.md) | [ZCode 过渡](architecture/zcode-transition.md) | 0001—0003 约束过渡；尚无第三方选型 ADR | AC-07、10、11；EA-11、EA-12 |
+| [独立产品与本地优先](../VISION.md#本地优先与产品独立) | [状态所有权](domain/lifecycle-and-ownership.md) | [能力和兼容边界](specs/engine-adapter.md) | [ZCode 过渡](architecture/zcode-transition.md)、[运行与信任边界](architecture/runtime-and-trust-boundaries.md#rt-05本地-engine-安装探测与运行代次) | 0001—0003 约束过渡；尚无第三方选型 ADR | AC-07、10、11、14；EA-11、EA-12 |
 | [用户观察和中止](../VISION.md#跨-engine-协作) | [业务接纳及收尾](domain/lifecycle-and-ownership.md) | [接入](specs/engine-adapter.md)、[协作](specs/cross-engine-collaboration.md) | [持久化与恢复](architecture/runtime-and-trust-boundaries.md) | [0004](decisions/0004-task-closure-is-distinct-from-execution-state.md) | AC-07、12、13；EA-13 |
 
 ## 集成验收场景
@@ -88,6 +88,7 @@
 | AC-11 | 替换某候选协议库/接入库，保持同一组产品契约轨迹并禁用库专属扩展 | [架构](architecture/README.md) 与 [过渡边界](architecture/zcode-transition.md)：变更集中于适配和组装边界，公共状态不依赖供应商类型，扩展差异如实表达 |
 | AC-12 | Task 已终态，Session 仍打开或恢复成功；提交新输入、委派和共享工具请求，再读取历史与核对迟到证据 | [业务接纳门槛](domain/lifecycle-and-ownership.md)、[EA-08](specs/engine-adapter.md#首版待实现验收proposed)：拒绝旧 Task 的新业务派发，不因恢复重授执行资格；仍可读取、对账和进行获准的停止控制，Session 可用不改变冻结状态 |
 | AC-13 | 远程执行永久未知；用户明确放弃协调并归档，随后重启 Host、申请原资源写权，再收到迟到证据 | [LIFE-03](domain/lifecycle-and-ownership.md#life-03-取消停止与副作用)、[CO-09](specs/cross-engine-collaboration.md#首版待实现验收proposed)：允许管理收尾，未知和占用风险仍可查；不释放受影响资源、不把原 Session 当作空闲、不自动重授写权或恢复授权；迟到证据只对账，不重开任务 |
+| AC-14 | 系统存在两个同名 Engine executable；Host 先探测并固定安装 A。派发前 PATH／配置变化，使普通重新搜索可能找到 B；在 A 有活动 Execution 时触发 model/capability/readiness helper probe timeout/failure；新 generation 建立后再到达旧 generation 的迟到 cleanup callback | [RT-05](architecture/runtime-and-trust-boundaries.md#rt-05本地-engine-安装探测与运行代次) 与 [业务接纳门槛](domain/lifecycle-and-ownership.md#life-admission-业务接纳资格proposed)：Launch 使用已核验安装 A；关键证据失效时重新核验或拒绝，不能静默切到 B。helper failure 不能结束、重绑或改变活动 Execution；late cleanup 只能作用于旧 generation。无可信终态时保持 unknown，不自动重发原业务输入；历史 Engine／Execution 来源不随当前 UI、默认 Engine 或 readiness 结果漂移 |
 
 ## Session 与 Task 专项验收映射
 
