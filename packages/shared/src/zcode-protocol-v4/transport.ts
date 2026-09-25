@@ -483,6 +483,8 @@ export const v4ConversationRowsRangeParamsSchema = z.object({
   clientMode: z.enum(["desktop-continuous", "web-remote-replayable"]).optional(),
   // 取 rowId < beforeRowId 的行；缺省 = 从当前尾部向前。
   beforeRowId: z.number().optional(),
+  // Adapter reconciliation may ask for durable native terminal provenance for one exact command.
+  nativeTerminalSourceCommandId: z.string().trim().min(1).max(1024).optional(),
   limit: z.number().min(1).max(PROTOCOL_V4_LIMITS.rowsRangeMaxLimit),
 });
 export type V4ConversationRowsRangeParams = z.infer<typeof v4ConversationRowsRangeParamsSchema>;

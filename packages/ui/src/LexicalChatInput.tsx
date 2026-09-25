@@ -22,6 +22,7 @@ import {
 } from "@/shortcuts/composerShortcuts.js";
 import { useEffectiveShortcutBindings } from "@/shortcuts/useShortcutBindings.js";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -1324,6 +1325,7 @@ interface LexicalChatInputProps {
   taskId: string | null;
   /** 仅影响 Skill 引用目录；草稿可使用 prewarm Session runtime。 */
   skillCatalogSessionId?: string | null;
+  taskSkillCatalogRequest?: TaskSkillReferenceCatalogRequest;
   inputTestId?: string;
   editorApiRef?: React.MutableRefObject<LexicalChatInputHandle | null>;
   promptHistory?: readonly string[];
@@ -1356,6 +1358,7 @@ export function LexicalChatInput({
   workspaceIdentity,
   taskId,
   skillCatalogSessionId,
+  taskSkillCatalogRequest,
   inputTestId,
   editorApiRef,
   promptHistory = [],
@@ -1503,6 +1506,7 @@ export function LexicalChatInput({
           workspacePath={workspacePath}
           workspaceIdentity={workspaceIdentity}
           sessionId={skillCatalogSessionId ?? taskId}
+          taskCatalogRequest={taskSkillCatalogRequest}
           provider={activeTaskProvider}
           container={triggerPanelContainer}
           disabled={disabled}
@@ -1514,6 +1518,7 @@ export function LexicalChatInput({
             workspacePath={workspacePath}
             workspaceIdentity={workspaceIdentity}
             sessionId={skillCatalogSessionId ?? taskId}
+            taskCatalogRequest={taskSkillCatalogRequest}
             provider={activeTaskProvider}
             container={triggerPanelContainer}
             disabled={disabled}

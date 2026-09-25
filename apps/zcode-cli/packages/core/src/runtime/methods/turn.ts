@@ -64,6 +64,11 @@ import { appendBrowserTurnScreenshot } from "./browser-turn-screenshot.js";
 import { clearBrowserTurnState } from "../../repl/browser-turn-state.js";
 import { applySubmissionExecutionState, createTurnModel } from "./turn-model.js";
 import { rebuildContextPrefix } from "./context-refresh.js";
+import {
+  confirmStoppedTurnWithdrawal,
+  NATIVE_TURN_STARTED_ENTRY,
+  tagPreRecordedTurnInput,
+} from "../../agent/stopped-turn-history.js";
 
 const TARGET_RUN_HEARTBEAT_MS = 15_000;
 
@@ -131,6 +136,7 @@ export async function executeTurnCommand(
   let startedTarget: SessionGoal | null = null;
   let targetRunHeartbeat: ReturnType<typeof setInterval> | undefined;
   let userMessageId: MessageId | undefined;
+  let providerHistoryHasTurnInput = false;
   let loopState: RegularTurnLoopState | undefined;
   let shouldRetryTitleGenerationAfterTurn = false;
   // 线上“已工作 N 秒”但没有终态的根因候选是：内层 Turn try/catch 之前的 await
@@ -334,6 +340,23 @@ export async function executeTurnCommand(
       await this.appendEvent(turnStartedEvent, turnTraceContext);
       completeTurnPhase("turn_started_event", phaseStartedAt);
       events.push(turnStartedEvent);
+      if (this.sessionStore?.saveSessionEntry) {
+        // A command may launch multiple native turns with the same inputId. Persist
+        // each turn before model execution so a failed Stop cannot be hidden by an
+        // earlier turn's terminal after restart.
+        await this.sessionStore.saveSessionEntry({
+          id: `native-turn-started:${String(turnId)}`,
+          sessionID: this.sessionId,
+          type: NATIVE_TURN_STARTED_ENTRY,
+          touchSession: false,
+          time: { created: Date.now(), updated: Date.now() },
+          data: {
+            turnId: String(turnId),
+            messageId: String(userMessageId),
+            ...(options?.inputId ? { inputId: options.inputId } : {}),
+          },
+        });
+      }
       phaseStartedAt = startTurnPhase("target_accounting");
       startedTarget = await this.startTargetTurnAccounting({
         inputID: targetRunInputID,
@@ -477,11 +500,12 @@ export async function executeTurnCommand(
         if (options?.skipInputRecord !== true && options?.inputVisibility === "model-only") {
           const inputSource = options.inputSource ?? "goal-continuation";
           const userContent = buildUserContentFromTurn(input, resolvedAttachments);
-          this.messageHistory.addUser(
-            userContent,
-            runtimeInputMetadata(options.inputPresentation) ??
-              runtimeMetadataForSyntheticUserMessageSource(inputSource),
-          );
+          providerHistoryHasTurnInput = true;
+          this.messageHistory.addUser(userContent, {
+            ...(runtimeInputMetadata(options.inputPresentation) ??
+              runtimeMetadataForSyntheticUserMessageSource(inputSource)),
+            turnId: String(turnId),
+          });
           // /goal 自动续跑是 runtime 注入给模型的内部 user-role 输入，
           // 不是用户在聊天里新发的一条消息。持久化时保留 raw 输入供恢复/排查使用，
           // 但用 model-only 语义阻止 UI-facing snapshot 把它渲染成用户气泡。
@@ -501,12 +525,21 @@ export async function executeTurnCommand(
             visibility: "model-only",
           });
         } else if (options?.skipInputRecord !== true) {
+          providerHistoryHasTurnInput = true;
           this.messageHistory.addEntries(
             buildRuntimeUserEntriesFromTurn(input, resolvedAttachments, {
               browserAmbientContext: options?.browserAmbientContext,
             }).map((entry) => {
               const metadata = runtimeInputMetadata(options?.inputPresentation);
-              return entry.kind !== "attachment" && metadata ? { ...entry, metadata } : entry;
+              return entry.kind !== "attachment"
+                ? {
+                    ...entry,
+                    metadata: {
+                      ...(metadata ?? entry.metadata ?? { source: "real_user" }),
+                      turnId: String(turnId),
+                    },
+                  }
+                : entry;
             }),
           );
           // /init 和自定义 slash command 会把模型输入展开成较长的内部
@@ -539,6 +572,13 @@ export async function executeTurnCommand(
             },
           );
           shouldRetryTitleGenerationAfterTurn = !titleGenerationStarted;
+        } else if (options?.recordedInputMessageId) {
+          tagPreRecordedTurnInput(
+            this.messageHistory,
+            String(options.recordedInputMessageId),
+            String(turnId),
+          );
+          providerHistoryHasTurnInput = true;
         }
         // Plugin reminder 必须在对应 user 消息写入历史和 session store 后再追加：
         // provider 形态因此稳定为 user → system，cold hydration 也按同一因果顺序恢复。
@@ -729,6 +769,24 @@ export async function executeTurnCommand(
           startedTarget = finishedTarget;
         }
         if (coreError.type === CoreErrorType.TurnCancelled) {
+          if (providerHistoryHasTurnInput) {
+            // The transcript stays intact; only subsequent provider context loses
+            // the unfinished request. Do this before TurnComplete can drain queued Input.
+            await confirmStoppedTurnWithdrawal({
+              history: this.messageHistory,
+              sessionStore: this.sessionStore,
+              sessionId: this.sessionId,
+              turnId: String(turnId),
+              userMessageId,
+              allowPreRecordedMessage: options?.skipInputRecord === true,
+              holdQueue: () => {
+                // No native terminal event may release queued work while
+                // provider context withdrawal is unconfirmed.
+                this.queueAutoDrain = false;
+                this.queueExternalDrainActive = false;
+              },
+            });
+          }
           await this.pauseActiveTargetForCancellation(turnTraceContext);
           if (activeTurn) {
             await this.fallbackPendingGuidesToQueue({

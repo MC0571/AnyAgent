@@ -1,0 +1,181 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "tasks": [
+    {
+      "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "records": [
+        {
+          "kind": "participant",
+          "id": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "status": "active"
+        },
+        {
+          "kind": "session",
+          "id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "status": "active",
+          "nativeSessionId": "sess_418b065d-7596-481c-982e-273f7ab1afc7"
+        },
+        {
+          "kind": "task",
+          "id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+          "status": "active",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "authorizationId": "authorization_f8fdade6-e2d9-4b06-a83f-cb012471bb49"
+        },
+        {
+          "kind": "input",
+          "id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "35c27963-88d7-4b3e-b2dd-6076ce4e56c4",
+          "text": "PR25_B0_DENY：请调用 Write 工具在当前项目目录创建 m1-b0-deny.txt，内容严格为 SHOULD_NOT_EXIST_B0。先执行工具再回答。"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "35c27963-88d7-4b3e-b2dd-6076ce4e56c4"
+        },
+        {
+          "kind": "input",
+          "id": "input_8782045b-b68f-4240-9f75-f29c636184cb",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "bc82be11-3768-4232-a882-254b2799b622",
+          "text": "PR25_B0_ALLOW：请用 Write 工具在当前项目目录创建 m1-b0-allow.txt，内容严格为 ALLOW_ONCE_B0，然后只回复 ALLOW_DONE_B0。"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_0409ccd3-4754-49b8-9a41-eca6c4028496",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "bc82be11-3768-4232-a882-254b2799b622"
+        },
+        {
+          "kind": "input",
+          "id": "input_362b6630-4697-4a82-9e9f-349ba81f4d12",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "418591cd-c314-4fe2-8982-ea7e96fe6315",
+          "text": "PR25_B0_AFTER_COMPACT：只回复 COMPACT_RESUME_B0。"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_126b542c-792a-42eb-8781-85f4967f07cb",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "418591cd-c314-4fe2-8982-ea7e96fe6315"
+        },
+        {
+          "kind": "input",
+          "id": "input_65ffcb57-7912-4d9d-b331-f303b15611c9",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "6ad12f94-78ec-4e41-8240-c5e65b66d382",
+          "text": "PR25_B0_COLD_R4：请用 Markdown 一级标题“恢复成功”、一个 TypeScript 代码块 const marker = \"COLD_R4_B0\";，最后单独输出 COLD_R4_B0。"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_213030ca-1113-4b4e-a97a-13c23304ae75",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "6ad12f94-78ec-4e41-8240-c5e65b66d382"
+        },
+        {
+          "kind": "input",
+          "id": "input_09da96bd-5fb7-4d4c-9d22-37b10ff34128",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "30e60e66-c011-4701-b826-0f9ee8d8e99a",
+          "text": "PR25_B0_QUESTION：请先调用 AskUserQuestion 工具，只提一个必须由用户选择的问题：选 A 还是 B？选项 A 和 B。收到回答后只输出 QUESTION_B0_<所选字母>。请不要自行猜测。"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_b6460f04-6aea-498b-b08f-36e059a109d7",
+          "status": "completed",
+          "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+          "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+          "nativeExecutionId": "30e60e66-c011-4701-b826-0f9ee8d8e99a"
+        }
+      ]
+    },
+    {
+      "taskId": "task_c26b32e2-fe4d-456e-860f-7cc067c09fa6",
+      "records": [
+        {
+          "kind": "participant",
+          "id": "participant_0988a9ef-480b-44ed-9c8c-3b0909848d03",
+          "status": "active"
+        },
+        {
+          "kind": "session",
+          "id": "session_5e22bbd7-892b-4a11-bdff-c5d8da42a5e3",
+          "status": "active",
+          "nativeSessionId": "sess_b322fa00-cade-46ac-a780-68a1542fd007"
+        },
+        {
+          "kind": "task",
+          "id": "task_c26b32e2-fe4d-456e-860f-7cc067c09fa6",
+          "status": "active",
+          "participantId": "participant_0988a9ef-480b-44ed-9c8c-3b0909848d03",
+          "sessionId": "session_5e22bbd7-892b-4a11-bdff-c5d8da42a5e3",
+          "authorizationId": "authorization_c986bae8-008e-4e00-922b-af7dadc2a85e",
+          "forkedFrom": {
+            "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+            "inputId": "input_09da96bd-5fb7-4d4c-9d22-37b10ff34128",
+            "executionId": "execution_b6460f04-6aea-498b-b08f-36e059a109d7"
+          }
+        },
+        {
+          "kind": "input",
+          "id": "input_71008ae1-e0f6-48a2-a218-b117af2c0804",
+          "status": "completed",
+          "participantId": "participant_0988a9ef-480b-44ed-9c8c-3b0909848d03",
+          "sessionId": "session_5e22bbd7-892b-4a11-bdff-c5d8da42a5e3",
+          "nativeExecutionId": "aa2efd25-ebb7-4a93-8604-aeae06c81f23",
+          "text": "PR25_B0_FORK_CHILD：只回复 FORK_CHILD_B0。"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_1da83c76-20c6-4e1d-9ff8-20091b2cb4ef",
+          "status": "completed",
+          "participantId": "participant_0988a9ef-480b-44ed-9c8c-3b0909848d03",
+          "sessionId": "session_5e22bbd7-892b-4a11-bdff-c5d8da42a5e3",
+          "nativeExecutionId": "aa2efd25-ebb7-4a93-8604-aeae06c81f23"
+        }
+      ]
+    }
+  ],
+  "question": {
+    "id": "user-input_38fe7e11-6db4-4884-9c5c-76328e91ab66",
+    "requestEventId": "event_24101647-7efd-4c18-a484-942e43828d8e",
+    "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+    "participantId": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+    "sessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+    "executionId": "execution_b6460f04-6aea-498b-b08f-36e059a109d7",
+    "nativeRequestId": "perm_42ead5f0-57ef-461b-9c26-a6912cd02fa0",
+    "prompt": "选 A 还是 B？",
+    "status": "forwarded",
+    "response": {
+      "action": "accept",
+      "content": {
+        "answers": {
+          "选 A 还是 B？": "B"
+        },
+        "answer_0": "B",
+        "answer": "B"
+      }
+    }
+  }
+}

@@ -2,15 +2,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { IAnyAgentService } from "@zcode/services";
 import { toast } from "@/components/ui/toast.js";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu.js";
+import {
+  EngineTaskContextMenuContent,
+  EngineTaskRow,
+  useEngineTaskSidebarData,
+  type EngineTask,
+} from "@/EngineTaskSidebar.js";
+import { shortId } from "@/EngineUiParts.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
 import { useLocalWorkspaceScopes } from "@/hooks/useLocalWorkspaceScopes.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getTaskTimelineGroupMessage, groupTaskTimelineItems } from "@/lib/taskTimelineGroups.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
-import { compareZCodeTaskListItems } from "@/lib/taskListOrdering.js";
+import {
+  compareTaskListItemsWithRunningFirst,
+  compareZCodeTaskListItems,
+} from "@/lib/taskListOrdering.js";
 import { buildWorkspaceServiceLookup } from "@/lib/workspaceServiceResolver.js";
 import { logger } from "@/logger.js";
 import { MemoTaskItem, TaskListItemContextMenuContent } from "@/TaskListItem.js";
@@ -23,6 +34,25 @@ import { useRemoteTimelineTaskStore } from "@/store/remoteTimelineTaskStore.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import { applyTaskQueryCacheMutation } from "@/store/taskQueryCacheStore.js";
+import { isTaskListRowActive } from "@/v4/taskListRowActivity.js";
+
+type TimelineDisplayItem =
+  | {
+      kind: "native";
+      task: ZCodeTaskMeta;
+      taskId: string;
+      createdAt: number;
+      updatedAt: number;
+      running: boolean;
+    }
+  | {
+      kind: "engine";
+      task: EngineTask;
+      taskId: string;
+      createdAt: number;
+      updatedAt: number;
+      running: boolean;
+    };
 
 function buildTimelineItemKey(workspacePath: string, taskId: string, workspaceIdentity?: string) {
   return `${buildTaskWorkspaceKey(workspacePath, workspaceIdentity)}:${taskId}`;
@@ -47,7 +77,15 @@ export function WorkspaceTimelineTasksSection({
   groupByDate = true,
   taskRowVariant = "timeline",
   emptyMessage,
+  hideEmptyMessage = false,
+  hiddenTaskIds,
   onSelectTask,
+  engineService,
+  engineTaskData,
+  engineSelectedTaskId,
+  onSelectEngineTask,
+  onRefreshEngineState,
+  onNativeSessionIdsChange,
 }: {
   workspaceTabs: WorkspaceTabState[];
   activeWorkspacePath: string;
@@ -57,6 +95,14 @@ export function WorkspaceTimelineTasksSection({
   groupByDate?: boolean;
   taskRowVariant?: "default" | "timeline";
   emptyMessage?: string;
+  hideEmptyMessage?: boolean;
+  hiddenTaskIds?: ReadonlySet<string>;
+  engineService?: IAnyAgentService | null;
+  engineTaskData?: ReturnType<typeof useEngineTaskSidebarData>;
+  engineSelectedTaskId?: string | null;
+  onSelectEngineTask?: (taskId: string) => void;
+  onRefreshEngineState?: () => void;
+  onNativeSessionIdsChange?: (ids: ReadonlySet<string>) => void;
   onSelectTask: (
     targetWorkspacePath: string,
     taskId: string,
@@ -65,6 +111,17 @@ export function WorkspaceTimelineTasksSection({
   ) => void;
 }) {
   const { intl, locale } = useZCodeIntl();
+  const fetchedEngineTaskData = useEngineTaskSidebarData({
+    service: engineTaskData ? null : engineService && onSelectEngineTask ? engineService : null,
+    onRefresh: engineTaskData ? undefined : onRefreshEngineState,
+    onNativeSessionIdsChange: engineTaskData ? undefined : onNativeSessionIdsChange,
+  });
+  const {
+    tasks: engineTasks,
+    titles: engineTitles,
+    runningByTask,
+    error: engineError,
+  } = engineTaskData ?? fetchedEngineTaskData;
   const baseServices = useBaseWorkspaceServices();
   const scopedWorkspaceTabs = useLocalWorkspaceScopes({
     workspaceTabs,
@@ -95,6 +152,7 @@ export function WorkspaceTimelineTasksSection({
   const [pendingArchiveItemKey, setPendingArchiveItemKey] = useState<string | null>(null);
   const [renamingItemKey, setRenamingItemKey] = useState<string | null>(null);
   const [contextMenuItemKey, setContextMenuItemKey] = useState<string | null>(null);
+  const [contextMenuEngineTaskId, setContextMenuEngineTaskId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   // timeline 不应沿用 10 条首屏限制，和其它 sidebar 列表的 20 条基准保持一致。
   // 这里把首屏和每次“显示更多”的阶梯统一成 20，避免用户误以为列表只加载到 10/20 就结束。
@@ -172,12 +230,55 @@ export function WorkspaceTimelineTasksSection({
       (workspaceKey) => remoteTimelineItemsByWorkspaceKey[workspaceKey] ?? [],
     );
   }, [remoteTimelineItemsByWorkspaceKey, remoteWorkspaceKeys]);
+  const engineNativeSessionIds = useMemo(
+    () =>
+      new Set(
+        engineTasks.flatMap((task) =>
+          task.engine.engineId === "zcode" && task.session.nativeSessionId
+            ? [task.session.nativeSessionId]
+            : [],
+        ),
+      ),
+    [engineTasks],
+  );
   const sortedItems = useMemo(() => {
-    return [...localItems, ...remoteItems].sort((left, right) =>
-      compareZCodeTaskListItems(left, right, taskSortBy),
-    );
-  }, [localItems, remoteItems, taskSortBy]);
+    return [...localItems, ...remoteItems]
+      .filter(
+        (item) => !hiddenTaskIds?.has(item.taskId) && !engineNativeSessionIds.has(item.taskId),
+      )
+      .sort((left, right) => compareZCodeTaskListItems(left, right, taskSortBy));
+  }, [engineNativeSessionIds, hiddenTaskIds, localItems, remoteItems, taskSortBy]);
   const items = sortedItems.slice(0, visibleTaskLimit);
+  const displayItems = useMemo(
+    () =>
+      [
+        ...sortedItems.map(
+          (task): TimelineDisplayItem => ({
+            kind: "native",
+            task,
+            taskId: task.taskId,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+            running: isTaskListRowActive(task),
+          }),
+        ),
+        ...engineTasks.map(
+          (task): TimelineDisplayItem => ({
+            kind: "engine",
+            task,
+            taskId: task.id,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+            running: runningByTask[task.id] ?? false,
+          }),
+        ),
+      ]
+        .sort((left, right) =>
+          compareTaskListItemsWithRunningFirst(left, right, taskSortBy, (item) => item.running),
+        )
+        .slice(0, visibleTaskLimit),
+    [engineTasks, runningByTask, sortedItems, taskSortBy, visibleTaskLimit],
+  );
   const itemByKey = useMemo(() => {
     const nextItemByKey = new Map<string, ZCodeTaskMeta>();
     for (const item of items) {
@@ -193,27 +294,33 @@ export function WorkspaceTimelineTasksSection({
   itemByKeyRef.current = itemByKey;
   workspaceServiceLookupRef.current = workspaceServiceLookup;
   const timelineGroups = useMemo(() => {
-    const visibleItems = items.filter((item) =>
-      workspaceServiceLookup.has(buildTaskWorkspaceKey(item.workspacePath, item.workspaceIdentity)),
+    const visibleItems = displayItems.filter((item) =>
+      item.kind === "engine"
+        ? true
+        : workspaceServiceLookup.has(
+            buildTaskWorkspaceKey(item.task.workspacePath, item.task.workspaceIdentity),
+          ),
     );
     if (!groupByDate) {
       return [{ key: "all", label: null, items: visibleItems }];
     }
-    return groupTaskTimelineItems(items, {
+    return groupTaskTimelineItems(displayItems, {
       sortBy: taskSortBy,
       now: Date.now(),
       locale,
     })
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) =>
-          workspaceServiceLookup.has(
-            buildTaskWorkspaceKey(item.workspacePath, item.workspaceIdentity),
-          ),
+        items: group.items.filter(
+          (item) =>
+            item.kind === "engine" ||
+            workspaceServiceLookup.has(
+              buildTaskWorkspaceKey(item.task.workspacePath, item.task.workspaceIdentity),
+            ),
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [groupByDate, items, locale, taskSortBy, workspaceServiceLookup]);
+  }, [displayItems, groupByDate, locale, taskSortBy, workspaceServiceLookup]);
   const remoteTotal = remoteWorkspaceKeys.reduce(
     (sum, workspaceKey) =>
       sum +
@@ -222,7 +329,10 @@ export function WorkspaceTimelineTasksSection({
         0),
     0,
   );
-  const total = localTotal + remoteTotal;
+  const nativeDuplicateCount = [...localItems, ...remoteItems].filter(
+    (item) => hiddenTaskIds?.has(item.taskId) || engineNativeSessionIds.has(item.taskId),
+  ).length;
+  const total = localTotal + remoteTotal - nativeDuplicateCount + engineTasks.length;
   const remoteHasMore = remoteWorkspaceKeys.some(
     (workspaceKey) => remoteTimelineHasMoreByWorkspaceKey[workspaceKey],
   );
@@ -237,8 +347,8 @@ export function WorkspaceTimelineTasksSection({
     );
   });
   const loading = localLoading || syncingRemoteWorkspaces;
-  const hasKnownMore = localHasMore || remoteHasMore || total > items.length;
-  const currentLimitFilled = sortedItems.length >= visibleTaskLimit;
+  const hasKnownMore = localHasMore || remoteHasMore || total > displayItems.length;
+  const currentLimitFilled = sortedItems.length + engineTasks.length >= visibleTaskLimit;
   // 远端/本地 hasMore 偶尔会在下一轮请求完成前保持旧值。
   // 如果当前已加载数量没有填满 limit，说明这轮已经到底了，不能继续显示 show more。
   const canLoadMore = loading ? hasKnownMore : currentLimitFilled && hasKnownMore;
@@ -585,7 +695,7 @@ export function WorkspaceTimelineTasksSection({
     }
   }, [itemByKey]);
 
-  if (items.length === 0 && loading) {
+  if (displayItems.length === 0 && loading) {
     return (
       <div className="flex min-h-0 flex-col px-2">
         <TaskListLoadingHint />
@@ -593,7 +703,14 @@ export function WorkspaceTimelineTasksSection({
     );
   }
 
-  if (items.length === 0) {
+  if (displayItems.length === 0) {
+    if (engineError)
+      return (
+        <p role="alert" className="px-3 py-2 text-ui-base text-destructive">
+          {engineError}
+        </p>
+      );
+    if (hideEmptyMessage) return null;
     return (
       <div className="px-3 py-2 text-ui-base text-foreground-subtle">
         {emptyMessage ?? intl.formatMessage({ id: "taskList.noTasks" })}
@@ -603,6 +720,11 @@ export function WorkspaceTimelineTasksSection({
 
   return (
     <div className="flex min-h-0 flex-col">
+      {engineError ? (
+        <p role="alert" className="px-3 py-2 text-ui-base text-destructive">
+          {engineError}
+        </p>
+      ) : null}
       {renamingItemKey !== null ? (
         <TaskRenameDialog
           open
@@ -667,6 +789,7 @@ export function WorkspaceTimelineTasksSection({
         onOpenChange={(open) => {
           if (!open) {
             setContextMenuItemKey(null);
+            setContextMenuEngineTaskId(null);
           }
         }}
       >
@@ -682,7 +805,23 @@ export function WorkspaceTimelineTasksSection({
                     </div>
                   ) : null}
                   <ul className="space-y-0.5">
-                    {group.items.map((item) => {
+                    {group.items.map((entry) => {
+                      if (entry.kind === "engine") {
+                        return (
+                          <EngineTaskRow
+                            key={`engine:${entry.task.id}`}
+                            task={entry.task}
+                            title={engineTitles[entry.task.id] ?? shortId(entry.task.id)}
+                            active={entry.task.id === engineSelectedTaskId}
+                            onSelectTask={(taskId) => onSelectEngineTask?.(taskId)}
+                            onOpenContextMenu={(taskId) => {
+                              setContextMenuItemKey(null);
+                              setContextMenuEngineTaskId(taskId);
+                            }}
+                          />
+                        );
+                      }
+                      const item = entry.task;
                       const itemKey = buildTimelineItemKey(
                         item.workspacePath,
                         item.taskId,
@@ -716,7 +855,10 @@ export function WorkspaceTimelineTasksSection({
                           onStartRenameTask={handlers.onStartRenameTask}
                           onArchiveTask={handlers.onArchiveTask}
                           onMarkTaskAsUnread={handlers.onMarkTaskAsUnread}
-                          onOpenTaskContextMenu={handlers.onOpenTaskContextMenu}
+                          onOpenTaskContextMenu={(taskId) => {
+                            setContextMenuEngineTaskId(null);
+                            handlers.onOpenTaskContextMenu(taskId);
+                          }}
                           intl={intl}
                         />
                       );
@@ -727,7 +869,9 @@ export function WorkspaceTimelineTasksSection({
             })}
           </ul>
         </ContextMenuTrigger>
-        {contextMenuItem && contextMenuWorkspaceServices && contextMenuItemKey ? (
+        {contextMenuEngineTaskId ? (
+          <EngineTaskContextMenuContent taskId={contextMenuEngineTaskId} />
+        ) : contextMenuItem && contextMenuWorkspaceServices && contextMenuItemKey ? (
           <TaskListItemContextMenuContent
             workspacePath={contextMenuItem.workspacePath}
             remoteSessionId={contextMenuWorkspaceServices.remoteSessionId}

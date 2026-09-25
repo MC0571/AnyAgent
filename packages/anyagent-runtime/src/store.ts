@@ -45,6 +45,9 @@ export class RuntimeStore {
       CREATE INDEX IF NOT EXISTS runtime_records_task_kind ON runtime_records(task_id, kind, created_at, id);
       CREATE INDEX IF NOT EXISTS runtime_records_session_kind ON runtime_records(session_id, kind, created_at, id);
       CREATE INDEX IF NOT EXISTS runtime_records_native_key ON runtime_records(session_id, kind, native_key);
+      CREATE UNIQUE INDEX IF NOT EXISTS runtime_input_idempotency_key
+        ON runtime_records(task_id, native_key)
+        WHERE kind = 'input' AND native_key IS NOT NULL;
       CREATE TABLE IF NOT EXISTS runtime_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
   }

@@ -29,6 +29,7 @@ export type V4InteractionAnswer = {
 
 const ASK_USER_QUESTION_HIDDEN_GRACE_MS = 60_000;
 const ASK_USER_QUESTION_AUTO_RESOLUTION_MS = 300_000;
+const SETTLED_INTERACTION_LIMIT = 512;
 interface V4InteractionRegistryOptions {
   hiddenGraceMs?: number;
   autoResolutionMs?: number;
@@ -72,6 +73,17 @@ export interface V4InteractionRegistrationOptions {
   onAutoResolutionUpdated?: (state: V4InteractionAutoResolution) => void | Promise<void>;
 }
 
+export type V4InteractionResolution =
+  | "delivered"
+  | "already-resolved"
+  | "not-found"
+  | "busy";
+
+interface SettledInteraction {
+  readonly sessionId: string;
+  readonly resolution: "delivered" | "retired";
+}
+
 interface RegisteredInteraction {
   /** broker 侧回调：把 v4 answer 映射成对应 schema 的应答并 resolve 反向请求。 */
   resolve: (answer: V4InteractionAnswer) => void;
@@ -89,6 +101,8 @@ interface RegisteredInteraction {
 
 export class V4InteractionRegistry {
   private readonly pending = new Map<string, RegisteredInteraction>();
+  /** Recent IDs cannot be rebound to another execution; delivered IDs identify late answers. */
+  private readonly settled = new Map<string, SettledInteraction>();
   private readonly queuesBySession = new Map<string, string[]>();
   private readonly hiddenGraceMs: number;
   private readonly autoResolutionMs: number;
@@ -112,7 +126,17 @@ export class V4InteractionRegistry {
     resolve: (answer: V4InteractionAnswer) => void,
     options?: V4InteractionRegistrationOptions,
   ): () => void {
+    if (this.settled.has(interactionId)) {
+      throw new Error("A settled interaction ID cannot be registered again");
+    }
     const previous = this.pending.get(interactionId);
+    if (
+      previous?.options &&
+      options &&
+      previous.options.sessionId !== options.sessionId
+    ) {
+      throw new Error("An interaction ID cannot move between sessions");
+    }
     const token = Symbol(interactionId);
     if (previous) {
       this.clearTimers(previous);
@@ -148,43 +172,54 @@ export class V4InteractionRegistry {
     return () => {
       const current = this.pending.get(interactionId);
       if (!current || current.token !== token) return;
-      this.remove(interactionId, current);
+      this.remove(interactionId, current, "retired");
     };
   }
 
-  /**
-   * v4 resolveInteraction 命令收口：投递应答给等待中的 broker deferred。
-   * 返回是否命中——未命中（已被应答/已注销/未知 id）时命令面按幂等成功收口
-   * （proto.alreadyResolved 语义，多端先到先得，晚到应答无害）。
-   */
-  resolve(interactionId: string, answer: V4InteractionAnswer): boolean {
+  /** Report actual delivery separately from an already settled or unknown request. */
+  resolve(
+    interactionId: string,
+    answer: V4InteractionAnswer,
+    sessionId: string | null,
+  ): V4InteractionResolution {
     const entry = this.pending.get(interactionId);
-    if (!entry || entry.fullAccessPending) return false;
+    if (entry) {
+      if (!sessionId || entry.options?.sessionId !== sessionId) return "not-found";
+      if (entry.fullAccessPending) return "busy";
+    } else {
+      const settled = this.settled.get(interactionId);
+      return sessionId && settled?.sessionId === sessionId && settled.resolution === "delivered"
+        ? "already-resolved"
+        : "not-found";
+    }
     // 先删再 resolve：resolve 可能同步触发 broker finally 的注销，避免重入下重复投递。
-    this.remove(interactionId, entry);
+    this.remove(interactionId, entry, "delivered");
     entry.resolve(answer);
-    return true;
+    return "delivered";
   }
 
-  /** 带权限副作用的应答只对已登记的同 session 能力开放；失败保留请求供重试。 */
-  async resolveFullAccess(interactionId: string, sessionId: string): Promise<boolean> {
+  /** Full-access side effects are limited to the matching pending Session request. */
+  async resolveFullAccess(
+    interactionId: string,
+    sessionId: string,
+  ): Promise<V4InteractionResolution> {
     const entry = this.pending.get(interactionId);
-    if (!entry) return false;
-    if (entry.options?.sessionId !== sessionId || !entry.options.fullAccess) {
-      throw new Error("Full access is not supported for this interaction");
+    if (!entry) {
+      const settled = this.settled.get(interactionId);
+      return settled?.sessionId === sessionId && settled.resolution === "delivered"
+        ? "already-resolved"
+        : "not-found";
     }
-    if (entry.fullAccessPending) {
-      await entry.fullAccessPending;
-      return true;
-    }
+    if (entry.options?.sessionId !== sessionId || !entry.options.fullAccess) return "not-found";
+    if (entry.fullAccessPending) return "busy";
     const operation = entry.options.fullAccess();
     entry.fullAccessPending = operation;
     try {
       await operation;
-      if (this.pending.get(interactionId) !== entry) return false;
-      this.remove(interactionId, entry);
+      if (this.pending.get(interactionId) !== entry) return "already-resolved";
+      this.remove(interactionId, entry, "delivered");
       entry.resolve({ optionId: "allowOnce" });
-      return true;
+      return "delivered";
     } finally {
       delete entry.fullAccessPending;
     }
@@ -296,7 +331,7 @@ export class V4InteractionRegistry {
         this.resolve(interactionId, {
           action: "accept",
           content: { answers: {} },
-        });
+        }, entry.options?.sessionId ?? null);
       });
       return;
     }
@@ -337,7 +372,7 @@ export class V4InteractionRegistry {
         this.resolve(interactionId, {
           action: "accept",
           content: { answers: {} },
-        });
+        }, entry.options?.sessionId ?? null);
       },
       Math.max(0, autoResolution.deadlineAt - now),
     );
@@ -367,10 +402,23 @@ export class V4InteractionRegistry {
     delete entry.deadlineTimer;
   }
 
-  private remove(interactionId: string, entry: RegisteredInteraction): void {
+  private remove(
+    interactionId: string,
+    entry: RegisteredInteraction,
+    resolution?: SettledInteraction["resolution"],
+  ): void {
+    if (this.pending.get(interactionId) !== entry) return;
     this.pending.delete(interactionId);
     this.clearTimers(entry);
     const sessionId = entry.options?.sessionId;
+    if (resolution && sessionId) {
+      this.settled.delete(interactionId);
+      this.settled.set(interactionId, { sessionId, resolution });
+      if (this.settled.size > SETTLED_INTERACTION_LIMIT) {
+        const oldest = this.settled.keys().next().value;
+        if (oldest !== undefined) this.settled.delete(oldest);
+      }
+    }
     if (!sessionId) return;
     const queue = this.queuesBySession.get(sessionId);
     if (!queue) return;

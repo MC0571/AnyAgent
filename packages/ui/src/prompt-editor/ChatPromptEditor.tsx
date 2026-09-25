@@ -7,6 +7,7 @@ import type {
   MutableRefObject,
   ReactNode,
 } from "react";
+import type { TaskSkillReferenceCatalogRequest } from "@zcode/services";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TID_CHAT_SEND_BUTTON } from "@zcode/shared";
 import { ArrowUpIcon, Hand, XIcon } from "lucide-react";
@@ -27,7 +28,11 @@ import {
 } from "@/lib/workspaceFileDrag.js";
 import { appendWorkspaceFileMentionToComposer } from "@/lib/workspaceFileComposer.js";
 import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragState.js";
-import { ChatPromptActionMenu } from "@/prompt-editor/ChatPromptActionMenu.js";
+import {
+  ChatPromptActionMenu,
+  ChatPromptActionMenuDisabledTrigger,
+} from "@/prompt-editor/ChatPromptActionMenu.js";
+import type { SharedContextImportRequest } from "@/prompt-editor/SharedContextImportDialog.js";
 import { useComposerToolbarFit } from "@/prompt-editor/useComposerToolbarFit.js";
 
 function runAfterFrame(callback: () => void) {
@@ -43,11 +48,14 @@ export function ChatPromptEditor({
   workspaceIdentity,
   taskId,
   skillCatalogSessionId,
+  taskSkillCatalogRequest,
   initialValue,
   syncInitialValueOnMount = true,
   placeholder,
   disabled = false,
   disabledReason,
+  actionMenuDisabled = false,
+  actionMenuDisabledReason,
   submitting = false,
   submitDisabled = false,
   allowSubmitWhenEmpty = false,
@@ -62,6 +70,7 @@ export function ChatPromptEditor({
   dragAttachmentHint,
   topContent,
   leadingActions,
+  trailingActions,
   attachmentAction,
   betweenCancelAndSubmitAction,
   submitControl,
@@ -88,17 +97,23 @@ export function ChatPromptEditor({
   excludedSlashCommandNames,
   appSlashCommands,
   enableMentionPanel,
+  fileReferencesOnly = false,
+  onImportSharedContext,
 }: {
   workspacePath: string;
   workspaceIdentity?: string;
   taskId: string | null;
   /** 仅供 Composer Skill catalog；可为草稿的 prewarm Session。 */
   skillCatalogSessionId?: string | null;
+  taskSkillCatalogRequest?: TaskSkillReferenceCatalogRequest;
   initialValue?: string;
   syncInitialValueOnMount?: boolean;
   placeholder?: string;
   disabled?: boolean;
   disabledReason?: string;
+  /** Disable the native + menu when this input mode cannot handle its actions. */
+  actionMenuDisabled?: boolean;
+  actionMenuDisabledReason?: string;
   submitting?: boolean;
   submitDisabled?: boolean;
   allowSubmitWhenEmpty?: boolean;
@@ -113,6 +128,7 @@ export function ChatPromptEditor({
   dragAttachmentHint?: string;
   topContent?: ReactNode;
   leadingActions?: ReactNode;
+  trailingActions?: ReactNode;
   attachmentAction?: {
     label: string;
     onSelect: () => void;
@@ -148,6 +164,10 @@ export function ChatPromptEditor({
   appSlashCommands?: readonly AppSlashCommand[];
   /** mention 面板开关（透传 LexicalChatInput）。 */
   enableMentionPanel?: boolean;
+  /** Restrict the + menu's context catalog to Host-searched workspace files. */
+  fileReferencesOnly?: boolean;
+  /** Route share-code import through the current Task's Host/Runtime service. */
+  onImportSharedContext?: (request: SharedContextImportRequest) => Promise<boolean>;
 }) {
   const { intl } = useZCodeIntl();
   const toolbarRef = useComposerToolbarFit();
@@ -375,6 +395,7 @@ export function ChatPromptEditor({
           workspaceIdentity={workspaceIdentity}
           taskId={taskId}
           skillCatalogSessionId={skillCatalogSessionId}
+          taskSkillCatalogRequest={taskSkillCatalogRequest}
           inputTestId={inputTestId}
           editorApiRef={resolvedInputApiRef}
           promptHistory={promptHistory}
@@ -389,19 +410,29 @@ export function ChatPromptEditor({
           <div className="flex min-w-0 flex-1 items-center" data-composer-leading-actions>
             <div className="flex shrink-0 items-center gap-1" data-composer-leading-content>
               {hasActionMenu ? (
-                <ChatPromptActionMenu
-                  actionMenuTitle={actionMenuTitle}
-                  excludedSlashCommandNames={excludedSlashCommandNames}
-                  attachmentAction={attachmentAction}
-                  disabled={disabled}
-                  disabledReason={disabledReason}
-                  inputApiRef={resolvedInputApiRef}
-                  workspacePath={workspacePath}
-                  workspaceIdentity={workspaceIdentity}
-                  sessionId={taskId}
-                  container={resolvedTriggerPanelContainer}
-                  showPlugins={enableMentionPanel !== false}
-                />
+                disabled || actionMenuDisabled ? (
+                  <ChatPromptActionMenuDisabledTrigger
+                    actionMenuTitle={actionMenuTitle}
+                    disabledReason={actionMenuDisabledReason ?? disabledReason}
+                    testId={attachmentAction?.testId}
+                  />
+                ) : (
+                  <ChatPromptActionMenu
+                    actionMenuTitle={actionMenuTitle}
+                    excludedSlashCommandNames={excludedSlashCommandNames}
+                    attachmentAction={attachmentAction}
+                    disabled={false}
+                    disabledReason={actionMenuDisabledReason ?? disabledReason}
+                    inputApiRef={resolvedInputApiRef}
+                    workspacePath={workspacePath}
+                    workspaceIdentity={workspaceIdentity}
+                    sessionId={taskId}
+                    container={resolvedTriggerPanelContainer}
+                    showPlugins={enableMentionPanel !== false}
+                    fileReferencesOnly={fileReferencesOnly}
+                    onImportSharedContext={onImportSharedContext}
+                  />
+                )
               ) : null}
               {/* 权限/模式选择曾作为 leadingActions 先于动作菜单渲染，导致常驻顺序与产品规范相反。*/}
               {leadingActions}
@@ -414,6 +445,7 @@ export function ChatPromptEditor({
             className="ml-auto flex shrink-0 items-center justify-end gap-1.5"
             data-composer-trailing-actions
           >
+            {trailingActions}
             {onCancel && cancelLabel ? (
               <ControlHintTooltip title={cancelLabel} shortcut="Esc">
                 <Button

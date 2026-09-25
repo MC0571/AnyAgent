@@ -1,0 +1,79 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "source": {
+    "taskId": "task_be8094b4-7cd6-4d66-b680-2a1f0ff2d548",
+    "participantId": "participant_be21eca2-7c3f-4e47-905e-9ecaa626748a",
+    "productSessionId": "session_5a3e08d7-9c14-45f9-a09e-dbdf0285dc01",
+    "nativeSessionId": "share-import-1defa4d0-abbb-423f-971f-96a35d1aefa7",
+    "sourceInputId": "input_8a9aa292-2020-4fd9-8fb4-0071a0450598",
+    "sourceExecutionId": "execution_1fbfb8e0-b7dc-441a-982b-1d96dcb035ee",
+    "authorizationId": "authorization_da1d774d-fc49-496a-8ec5-75f98cf5f486",
+    "productInputSubmissionConfig": {
+      "mode": "build",
+      "planEnabled": false,
+      "modelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      }
+    },
+    "nativeModel": {
+      "userMessageId": "msg_mugfezuc_4af06a4b-f435-4e70-a76b-a125f66533c4",
+      "userModelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "assistantMessageId": "msg_mugfezui_c90ebafd-a8ff-4d9d-8e34-5f3914906456",
+      "assistantProviderId": "opencode-go-messages",
+      "assistantModelId": "qwen3.8-flash"
+    }
+  },
+  "child": {
+    "taskId": "task_443189c7-c428-4480-8984-c93266ebfd43",
+    "participantId": "participant_e06ee359-3ba3-4a7f-b320-2d619efe90e4",
+    "productSessionId": "session_61cf9a1f-7539-4937-bd6f-a0be4904ac7c",
+    "nativeSessionId": "sess_35b0c9b3-33a7-4b00-9990-b4f54d06d089",
+    "forkedFrom": {
+      "taskId": "task_be8094b4-7cd6-4d66-b680-2a1f0ff2d548",
+      "inputId": "input_8a9aa292-2020-4fd9-8fb4-0071a0450598",
+      "executionId": "execution_1fbfb8e0-b7dc-441a-982b-1d96dcb035ee"
+    },
+    "authorizationId": "authorization_c5f90b84-277e-4cef-a41a-2ffcceb60c86",
+    "inputId": "input_aeba02b7-7624-4523-a3b6-518db3dec007",
+    "inputStatus": "completed",
+    "executionId": "execution_51553854-86ec-4e99-bff2-01f0ffb9e9f6",
+    "executionStatus": "completed",
+    "actualResult": "PR25_OK",
+    "nativeInputId": "queue_input_aeba02b7-7624-4523-a3b6-518db3dec007",
+    "nativeSourceCommandId": "input_aeba02b7-7624-4523-a3b6-518db3dec007",
+    "productInputSubmissionConfig": {
+      "mode": "build",
+      "planEnabled": false,
+      "modelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      }
+    },
+    "nativeModel": {
+      "userMessageId": "msg_mugfjg0d_8dd72150-6c06-425a-ad77-50f8aa321e9b",
+      "userModelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "assistantMessageId": "msg_mugfjg0k_fb45d2bc-15ac-423a-9dc6-32e63c735c1b",
+      "assistantProviderId": "opencode-go-messages",
+      "assistantModelId": "qwen3.8-flash"
+    }
+  }
+}

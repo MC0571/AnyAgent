@@ -24,6 +24,12 @@ export interface V4ComposerDraft {
   lastPlanTransitionId?: string;
   lastPermissionGrantId?: string;
   modelSelection?: ModelSelection;
+  /** AnyAgent queue-edit scopes only: makes a prepared Input merge idempotent. */
+  queueEditRecoveredInputIds?: string[];
+  /** Preserves the original queue mode, including plan, across draft restoration. */
+  queueEditOriginalMode?: SubmissionMode;
+  /** AnyAgent queue draft must be checked against history before restoration. */
+  queueEditRequiresReview?: true;
   /** 首次分享导入等待公共新任务初始化；不能由空 Session snapshot 抢先填充。 */
   initializeFromNewTask?: true;
   updatedAt: number;
@@ -63,10 +69,11 @@ function getV4ComposerDraftStorageKey(workspacePath: string, workspaceIdentity?:
   return `${STORAGE_KEY_PREFIX}${encodeURIComponent(workspaceKey)}`;
 }
 
-function readDraftFile(key: string): V4DraftFile {
+function readDraftFile(key: string): V4DraftFile | null {
   const storage = getStorage();
+  if (!storage) return null;
   try {
-    const raw = storage?.getItem(key);
+    const raw = storage.getItem(key);
     if (!raw) return { version: 1, scopes: {} };
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.scopes)) {
@@ -81,7 +88,7 @@ function readDraftFile(key: string): V4DraftFile {
     return { version: 1, scopes };
   } catch (error) {
     warnStorageFailure(key, error);
-    return { version: 1, scopes: {} };
+    return null;
   }
 }
 
@@ -133,6 +140,17 @@ function readDraft(value: unknown): V4ComposerDraft | null {
       ? { lastPlanTransitionId: value.lastPlanTransitionId }
       : {}),
     ...(modelSelection ? { modelSelection } : {}),
+    ...(Array.isArray(value.queueEditRecoveredInputIds)
+      ? {
+          queueEditRecoveredInputIds: value.queueEditRecoveredInputIds.filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          ),
+        }
+      : {}),
+    ...(submissionModeSchema.safeParse(value.queueEditOriginalMode).success
+      ? { queueEditOriginalMode: value.queueEditOriginalMode as SubmissionMode }
+      : {}),
+    ...(value.queueEditRequiresReview === true ? { queueEditRequiresReview: true as const } : {}),
     ...(value.initializeFromNewTask === true && !mode.success
       ? { initializeFromNewTask: true as const }
       : {}),
@@ -166,12 +184,24 @@ export function readV4ComposerDraft(
   workspaceIdentity: string | undefined,
   scopeId: string,
 ): V4ComposerDraft | null {
+  return readV4ComposerDraftResult(workspacePath, workspaceIdentity, scopeId).draft;
+}
+
+export function readV4ComposerDraftResult(
+  workspacePath: string,
+  workspaceIdentity: string | undefined,
+  scopeId: string,
+):
+  | { readonly ok: true; readonly draft: V4ComposerDraft | null }
+  | { readonly ok: false; readonly draft: null } {
   const key = getV4ComposerDraftStorageKey(workspacePath, workspaceIdentity);
-  const draft = readDraftFile(key).scopes[scopeId];
+  const file = readDraftFile(key);
+  if (!file) return { ok: false, draft: null };
+  const draft = file.scopes[scopeId];
   if (!draft || typeof draft.text !== "string") {
-    return null;
+    return { ok: true, draft: null };
   }
-  return draft;
+  return { ok: true, draft };
 }
 
 export function persistV4ComposerDraft(
@@ -182,12 +212,16 @@ export function persistV4ComposerDraft(
 ) {
   const key = getV4ComposerDraftStorageKey(workspacePath, workspaceIdentity);
   const file = readDraftFile(key);
+  if (!file) return false;
   if (
     !draft.text.trim() &&
     !draft.editorStateJson &&
     !draft.mention &&
     !draft.mode &&
     !draft.modelSelection &&
+    !draft.queueEditRecoveredInputIds?.length &&
+    !draft.queueEditOriginalMode &&
+    !draft.queueEditRequiresReview &&
     !draft.initializeFromNewTask
   ) {
     delete file.scopes[scopeId];
@@ -204,6 +238,7 @@ export function clearV4ComposerDraft(
 ) {
   const key = getV4ComposerDraftStorageKey(workspacePath, workspaceIdentity);
   const file = readDraftFile(key);
+  if (!file) return false;
   if (!(scopeId in file.scopes)) {
     return true;
   }

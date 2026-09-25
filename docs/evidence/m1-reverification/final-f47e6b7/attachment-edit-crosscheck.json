@@ -1,0 +1,144 @@
+{
+  "productCodeCommit": "f47e6b7679f199d82d2f78fc8534aa417b110367",
+  "environment": "macOS arm64; isolated project and App home /tmp/anyagent-opencode-go.aBEA0z",
+  "nativeCliVersion": "0.16.9",
+  "adapterVersion": "m1.2",
+  "model": "opencode-go-messages/qwen3.8-flash",
+  "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+  "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+  "nativeSessionId": "sess_18b475fb-0313-4a58-888d-f753f46c695f",
+  "productInputsAndExecutions": [
+    {
+      "inputId": "input_8b89f723-ae18-46aa-9a5a-373b4a0ab553",
+      "executionId": "execution_12ee9557-0d6a-435d-b2c9-01b0a709e1d9",
+      "status": "completed",
+      "executionStatus": "completed",
+      "text": "PR25_F47_ATTACH_SOURCE: Read both attached text files and report their marker strings.",
+      "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+      "participantId": "participant_afc8d3a1-c3f6-423e-bf6f-d997deac248a",
+      "sessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+      "authorizationId": "authorization_135f48c5-bad4-4ed2-bfed-055b4eb6747e",
+      "revisionOf": null,
+      "nativeRevisionCommandId": null,
+      "attachments": [
+        {
+          "id": "attachment_42cb7130-5320-487e-b6f6-9a4a12e17e4d",
+          "fileName": "pr25-attachment-keep.txt",
+          "mimeType": "text/plain",
+          "sizeBytes": 25
+        },
+        {
+          "id": "attachment_d2463390-3256-4a3c-8e72-9838fe8a7a77",
+          "fileName": "pr25-attachment-remove.txt",
+          "mimeType": "text/plain",
+          "sizeBytes": 27
+        }
+      ],
+      "result": "TOOL_READ_DDA_OK"
+    },
+    {
+      "inputId": "input_fbab06e6-74a8-44b4-934c-bcb0a2b6a8ee",
+      "executionId": "execution_98cc5aba-cb0a-422e-8981-c3557c64d006",
+      "status": "completed",
+      "executionStatus": "completed",
+      "text": "PR25_F47_ATTACH_EDIT: Use only the retained and newly added attached files; report both marker strings.",
+      "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+      "participantId": "participant_afc8d3a1-c3f6-423e-bf6f-d997deac248a",
+      "sessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+      "authorizationId": "authorization_135f48c5-bad4-4ed2-bfed-055b4eb6747e",
+      "revisionOf": {
+        "kind": "edit",
+        "inputId": "input_8b89f723-ae18-46aa-9a5a-373b4a0ab553",
+        "executionId": "execution_12ee9557-0d6a-435d-b2c9-01b0a709e1d9"
+      },
+      "nativeRevisionCommandId": "revision_a5e9c483-2153-4c42-80ec-459c2f66e6e4",
+      "attachments": [
+        {
+          "id": "attachment_42cb7130-5320-487e-b6f6-9a4a12e17e4d",
+          "fileName": "pr25-attachment-keep.txt",
+          "mimeType": "text/plain",
+          "sizeBytes": 25
+        },
+        {
+          "id": "attachment_7d09aeef-0939-4010-9248-374abcc66c15",
+          "fileName": "pr25-attachment-add.txt",
+          "mimeType": "text/plain",
+          "sizeBytes": 24
+        }
+      ],
+      "result": "Both attached files were read successfully. The marker strings are:\n\n- Retained attachment (`pr25-attachment-keep.txt`): **PR25_ATTACHMENT_KEEP_925**\n- Newly added attachment (`pr25-attachment-add.txt`): **PR25_ATTACHMENT_ADD_925**"
+    }
+  ],
+  "nativeUserMessages": [
+    {
+      "messageId": "msg_mugi9iar_bb2298d0-8484-4cb5-aba7-f5c021d26a81",
+      "sourceCommandId": "input_8b89f723-ae18-46aa-9a5a-373b4a0ab553",
+      "nativeTurnId": "turn_866f9dc7-ba59-4993-87ba-f6e9e13b4bd6",
+      "modelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "parts": [
+        {
+          "partId": "part_mugi9ib2_f79edf84-61bb-4c5a-a3df-51838ac8d068",
+          "type": "text",
+          "text": "PR25_F47_ATTACH_SOURCE: Read both attached text files and report their marker strings.",
+          "fileName": null
+        },
+        {
+          "partId": "part_mugi9ib2_73fbf380-25cc-4a2f-8c8e-15bd79fa1e2d",
+          "type": "file",
+          "text": null,
+          "fileName": "pr25-attachment-keep.txt"
+        },
+        {
+          "partId": "part_mugi9ib2_b58ebb48-dc53-4250-a66d-2b8ae9ae7bef",
+          "type": "file",
+          "text": null,
+          "fileName": "pr25-attachment-remove.txt"
+        }
+      ]
+    },
+    {
+      "messageId": "msg_mugibo6l_65aacb36-1681-4537-9789-644983c0b5d4",
+      "sourceCommandId": "revision_a5e9c483-2153-4c42-80ec-459c2f66e6e4",
+      "nativeTurnId": "turn_818df959-7656-46c7-a5c8-cac79fc160de",
+      "modelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "parts": [
+        {
+          "partId": "part_mugibo6p_44a1f1b2-8217-41ad-9208-571a1d26c145",
+          "type": "text",
+          "text": "PR25_F47_ATTACH_EDIT: Use only the retained and newly added attached files; report both marker strings.",
+          "fileName": null
+        },
+        {
+          "partId": "part_mugibo6p_e8f9d4f1-4e87-493d-8489-87c2dc95c218",
+          "type": "file",
+          "text": null,
+          "fileName": "pr25-attachment-keep.txt"
+        },
+        {
+          "partId": "part_mugibo6p_722664c7-743f-456f-9c61-131f1495e49c",
+          "type": "file",
+          "text": null,
+          "fileName": "pr25-attachment-add.txt"
+        }
+      ]
+    }
+  ],
+  "uiObservation": [
+    "source draft showed keep and remove files; after send both appeared in the same original conversation",
+    "edit draft showed both; remove was removed, keep retained, add staged; edited message showed only keep and add",
+    "source model reply repeated previous turn text; edited model reply reported keep/add markers; transport and model-output claims are separate"
+  ],
+  "observationLayer": "formal macOS App UI plus same-scenario selected product/native SQLite; no repository screenshot file"
+}

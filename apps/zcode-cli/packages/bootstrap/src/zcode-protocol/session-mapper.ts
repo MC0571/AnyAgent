@@ -385,6 +385,8 @@ export function shouldExposeSessionEventToProtocol(event: SessionEvent): boolean
     return Boolean(delta);
   }
   return (
+    kind === "text_start" ||
+    kind === "text_end" ||
     kind === "tool_input_start" ||
     kind === "tool_input_delta" ||
     kind === "tool_input_end" ||
@@ -880,7 +882,12 @@ function mapPendingPermission(permission: PendingPermission): ZCodePendingPermis
 function mapPermissionRequestedPayload(payload: unknown): Record<string, unknown> {
   // 同 mapPendingPermission：这个 payload 是整体 spread 出去的，新字段必须在这里显式解构
   // 剔除，否则会直接漏进 strict 的 zcodePermissionRequestedEventPayloadSchema。
-  const { display: _display, optionsPolicy, ...record } = asRecord(payload);
+  const {
+    display: _display,
+    fullAccessSupported: _fullAccessSupported,
+    optionsPolicy,
+    ...record
+  } = asRecord(payload);
   const toolName = stringValue(record.toolName) ?? "unknown";
   return {
     ...record,

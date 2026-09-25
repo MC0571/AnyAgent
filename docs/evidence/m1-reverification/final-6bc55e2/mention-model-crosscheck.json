@@ -1,0 +1,162 @@
+{
+  "productCommit": "6bc55e2eeab63bc495a9c2c954feb15549969e52",
+  "scenario": "cold restored original Task; third turn original Composer @file mention and fourth turn same Provider model change",
+  "productTaskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+  "nativeSessionId": "sess_9d44aa52-029e-43dd-9d66-cff20dc86a9a",
+  "uiObserved": [
+    "After app restart and intervening M0 flag-off run, original sidebar Task opened read-only; explicit Restore original Session enabled Composer while preserving Task/Participant/Session/native Session.",
+    "Typed @m2-6bc in original Composer, chose m2-6bc-allow.txt from file mention popup, submitted third turn. Original message displayed Read of that file and final M2_6BC_ALLOW.",
+    "Original aggregated Harness picker changed OpenCode Go (Responses) gpt-5.6-luna to grok-4.6 for fourth turn. Reply GROK_6BC_OK."
+  ],
+  "productInputs": [
+    {
+      "id": "input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "sessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "text": "PR25_6BC_APPROVAL_ALLOW: Use the Write tool to create m2-6bc-allow.txt in the current isolated project with exact content M2_6BC_ALLOW. Ask for permission and wait. After writing, reply M2_6BC_WRITE_DONE.",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "nativeExecutionId": "input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620"
+    },
+    {
+      "id": "input_8df40c19-570c-4fda-9c2c-8bacb98274cd",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "sessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "text": "PR25_6BC_APPROVAL_DENY: Please call Write to create m2-6bc-deny.txt with exact content MUST_NOT_EXIST_6BC, then report whether it was actually written. Do not ask a preliminary question.",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "nativeExecutionId": "input_8df40c19-570c-4fda-9c2c-8bacb98274cd"
+    },
+    {
+      "id": "input_fcff8748-56f3-4d5e-87ce-2333f75f150f",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "sessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "text": "[m2-6bc-allow.txt](./m2-6bc-allow.txt) PR25_6BC_MENTION: Read the mentioned file and reply with its exact marker only.",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "nativeExecutionId": "input_fcff8748-56f3-4d5e-87ce-2333f75f150f"
+    },
+    {
+      "id": "input_ad2a3a54-706c-41b6-b931-8acf99b9ad15",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "sessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "text": "PR25_6BC_MODEL_SWITCH: Reply exactly GROK_6BC_OK. Do not call tools.",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "grok-4.6",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      },
+      "nativeExecutionId": "input_ad2a3a54-706c-41b6-b931-8acf99b9ad15"
+    }
+  ],
+  "nativeSessionInputs": [
+    {
+      "index": 0,
+      "nativeInputId": "queue_input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620",
+      "status": "promoted",
+      "text": "PR25_6BC_APPROVAL_ALLOW: Use the Write tool to create m2-6bc-allow.txt in the current isolated project with exact content M2_6BC_ALLOW. Ask for permission and wait. After writing, reply M2_6BC_WRITE_DONE.",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      }
+    },
+    {
+      "index": 1,
+      "nativeInputId": "queue_input_8df40c19-570c-4fda-9c2c-8bacb98274cd",
+      "status": "promoted",
+      "text": "PR25_6BC_APPROVAL_DENY: Please call Write to create m2-6bc-deny.txt with exact content MUST_NOT_EXIST_6BC, then report whether it was actually written. Do not ask a preliminary question.",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      }
+    },
+    {
+      "index": 2,
+      "nativeInputId": "queue_input_fcff8748-56f3-4d5e-87ce-2333f75f150f",
+      "status": "promoted",
+      "text": "[m2-6bc-allow.txt](./m2-6bc-allow.txt) PR25_6BC_MENTION: Read the mentioned file and reply with its exact marker only.",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      }
+    },
+    {
+      "index": 3,
+      "nativeInputId": "queue_input_ad2a3a54-706c-41b6-b931-8acf99b9ad15",
+      "status": "promoted",
+      "text": "PR25_6BC_MODEL_SWITCH: Reply exactly GROK_6BC_OK. Do not call tools.",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "grok-4.6",
+        "variant": "xhigh"
+      }
+    }
+  ],
+  "nativeTools": [
+    {
+      "tool": "AskUserQuestion",
+      "status": "completed"
+    },
+    {
+      "tool": "Write",
+      "status": "completed"
+    },
+    {
+      "tool": "Write",
+      "status": "error"
+    },
+    {
+      "tool": "Read",
+      "status": "completed"
+    }
+  ],
+  "limits": [
+    "Stored text shows markdown link for the mention; product/native Input text agrees, with completed native Read and exact file marker.",
+    "No screenshot file saved to repository; CUA window observations are in this task trace.",
+    "Cross-Harness or cross-Provider hot switching was not attempted here."
+  ]
+}

@@ -2,6 +2,7 @@ import {
   isZCodeAgentProvider,
   resolveModelProviderFamilySpecByProviderId,
   zcodeProviderAccountAccessSchema,
+  ZCODE_AGENT_PROVIDER,
   type ZCodeProviderAccountAccess,
   type ZCodeProvider,
 } from "@zcode/shared";
@@ -19,6 +20,102 @@ export interface ModelProviderGroupLabelOptions {
   startPlanBadgeLabel?: string;
   teamPlanBadgeLabel?: string;
   teamPlanFallbackLabel?: string;
+}
+
+export interface HarnessModelSelectOption {
+  engineId: string;
+  label: string;
+  selectable: boolean;
+  reason?: string;
+}
+
+/** Picker-only namespace; Harness identities are never encoded as provider/model identities. */
+export const HARNESS_MODEL_SELECT_VALUE_PREFIX = "anyagent-harness:";
+const HARNESS_ZCODE_MODEL_VALUE_PREFIX = "anyagent-harness-zcode-model:";
+
+export function encodeHarnessZCodeModelValue(providerModelValue: string): string {
+  return `${HARNESS_ZCODE_MODEL_VALUE_PREFIX}${encodeURIComponent(providerModelValue)}`;
+}
+
+export function decodeHarnessZCodeModelValue(value: string): string | null {
+  if (!value.startsWith(HARNESS_ZCODE_MODEL_VALUE_PREFIX)) return null;
+  try {
+    return decodeURIComponent(value.slice(HARNESS_ZCODE_MODEL_VALUE_PREFIX.length));
+  } catch {
+    return null;
+  }
+}
+
+export function buildZCodeHarnessModelGroup(view: ModelSelectionView): ModelSelectGroup | null {
+  const items = buildRegistryModelSelectGroups(ZCODE_AGENT_PROVIDER, view).flatMap((group) =>
+    group.items.map((item) => ({
+      ...item,
+      key: `harness-zcode:${item.key}`,
+      value: encodeHarnessZCodeModelValue(item.value),
+      name: `${group.label} · ${item.name}`,
+    })),
+  );
+  return items.length ? { key: "harness-zcode-models", label: "Harness · zcode", items } : null;
+}
+
+export function encodeHarnessModelSelectValue(engineId: string): string {
+  return `${HARNESS_MODEL_SELECT_VALUE_PREFIX}${encodeURIComponent(engineId)}`;
+}
+
+export function decodeHarnessModelSelectValue(value: string): string | null {
+  if (!value.startsWith(HARNESS_MODEL_SELECT_VALUE_PREFIX)) return null;
+  try {
+    const engineId = decodeURIComponent(value.slice(HARNESS_MODEL_SELECT_VALUE_PREFIX.length));
+    return engineId.trim() ? engineId : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isHarnessModelSelectValue(value: string): boolean {
+  return value.startsWith(HARNESS_MODEL_SELECT_VALUE_PREFIX);
+}
+
+export function buildHarnessModelSelectGroups(
+  harnesses: readonly HarnessModelSelectOption[],
+): ModelSelectGroup[] {
+  const items = harnesses.flatMap((harness) => {
+    const engineId = harness.engineId.trim();
+    const label = harness.label.trim();
+    if (!engineId || !label) return [];
+    const reason = harness.reason?.trim();
+    return [
+      {
+        key: `harness:${engineId}`,
+        value: encodeHarnessModelSelectValue(engineId),
+        name: label,
+        ...(!harness.selectable && reason ? { badgeLabel: reason } : {}),
+      },
+    ];
+  });
+  return items.length > 0 ? [{ key: "harnesses", label: "Harness", directItems: true, items }] : [];
+}
+
+/** Dispatches picker intent without treating a Harness identifier as a Provider model. */
+export function dispatchComposerModelSelectValue(params: {
+  value: string;
+  harnesses: readonly HarnessModelSelectOption[];
+  sessionId: string | null;
+  onSelectHarness: (engineId: string | null) => void;
+  onSelectProvider: (value: string) => void;
+}): "harness" | "provider" | "ignored" {
+  if (isHarnessModelSelectValue(params.value)) {
+    const engineId = decodeHarnessModelSelectValue(params.value);
+    if (engineId === null) return "ignored";
+    const harness = params.harnesses.find((candidate) => candidate.engineId === engineId);
+    if (!harness?.selectable || params.sessionId !== null) return "ignored";
+    params.onSelectHarness(engineId);
+    return "harness";
+  }
+
+  params.onSelectHarness(null);
+  params.onSelectProvider(params.value);
+  return "provider";
 }
 
 function supportsRegistryApiFormat(

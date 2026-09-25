@@ -1,0 +1,253 @@
+{
+  "productCommit": "6bc55e2eeab63bc495a9c2c954feb15549969e52",
+  "scenario": "formal Desktop UI, original Composer, one Task two real ZCode CLI turns with structured question, allow and deny approval",
+  "environment": {
+    "system": "macOS Darwin arm64",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "electron": "41.0.3",
+    "cli": "zcode-cli/0.16.9",
+    "adapter": "m1.2",
+    "model": "opencode-go-responses/gpt-5.6-luna",
+    "reasoning": "max",
+    "isolatedData": "/tmp/anyagent-opencode-go.aBEA0z"
+  },
+  "uiObserved": [
+    "Selected Harness · zcode · OpenCode Go (Responses)/gpt-5.6-luna from the original model selector.",
+    "Keyboard Return submitted the first and second turn from original Composer.",
+    "Turn 1: original AskUserQuestion dialog displayed Allow/Decline; Allow answered, followed by original Write permission dialog; allow_once confirmed. UI showed Write, changed-file summary, M2_6BC_WRITE_DONE.",
+    "Turn 2: original Write permission dialog displayed; Deny selected. UI answer said file was not written and Write call was rejected."
+  ],
+  "productRecords": [
+    {
+      "kind": "participant",
+      "id": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": null,
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "active",
+      "nativeSessionId": "sess_9d44aa52-029e-43dd-9d66-cff20dc86a9a"
+    },
+    {
+      "kind": "task",
+      "id": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": null,
+      "status": "active",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1"
+    },
+    {
+      "kind": "input",
+      "id": "input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "nativeExecutionId": "input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "textMarker": "PR25_6BC_APPROVAL_ALLOW"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_f1922027-4493-4ae5-85e2-99735b350537",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "nativeExecutionId": "input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620",
+      "inputId": "input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620"
+    },
+    {
+      "kind": "user-input",
+      "id": "user-input_d779ed62-7879-4e0f-8f09-bada78406e9c",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "forwarded",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "executionId": "execution_f1922027-4493-4ae5-85e2-99735b350537",
+      "nativeRequestId": "perm_47185d1d-4d45-44dd-aa5a-37921aaa4837",
+      "response": {
+        "action": "accept",
+        "content": {
+          "answers": {
+            "May I create `m2-6bc-allow.txt` with the exact content `M2_6BC_ALLOW`?": "Allow"
+          },
+          "answer_0": "Allow",
+          "answer": "Allow"
+        }
+      }
+    },
+    {
+      "kind": "approval",
+      "id": "approval_86357267-d6b2-4796-9fb7-15d6e65a23bf",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "forwarded",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "executionId": "execution_f1922027-4493-4ae5-85e2-99735b350537",
+      "nativeApprovalId": "perm_7d5aaeee-ff46-40ca-ae92-98327541da77",
+      "repliedOptionId": "allow_once"
+    },
+    {
+      "kind": "input",
+      "id": "input_8df40c19-570c-4fda-9c2c-8bacb98274cd",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "nativeExecutionId": "input_8df40c19-570c-4fda-9c2c-8bacb98274cd",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "textMarker": "PR25_6BC_APPROVAL_DENY"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_e452c2b1-ac0f-4f12-a02c-0f82bc0c0382",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "completed",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "nativeExecutionId": "input_8df40c19-570c-4fda-9c2c-8bacb98274cd",
+      "inputId": "input_8df40c19-570c-4fda-9c2c-8bacb98274cd"
+    },
+    {
+      "kind": "approval",
+      "id": "approval_32e08994-06b7-4b32-915c-c4108dd32911",
+      "taskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+      "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+      "status": "rejected",
+      "participantId": "participant_03030d0a-8e89-4735-b08a-f198cf6264b1",
+      "executionId": "execution_e452c2b1-ac0f-4f12-a02c-0f82bc0c0382",
+      "nativeApprovalId": "perm_3ffe9468-4464-43b5-8c86-be4e76e499e1",
+      "repliedOptionId": "deny"
+    }
+  ],
+  "nativeSessionInputs": [
+    {
+      "id": "queue_input_5cfcc7f9-ad94-4ac9-9309-f37f49b2e620",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 0,
+      "promotedSequence": 0
+    },
+    {
+      "id": "queue_input_8df40c19-570c-4fda-9c2c-8bacb98274cd",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 1,
+      "promotedSequence": 1
+    }
+  ],
+  "nativeMessages": [
+    {
+      "id": "msg_mugndfoc_c3d03386-fe90-4efd-b896-af66cdbf472a",
+      "sequence": 0,
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      }
+    },
+    {
+      "id": "msg_mugndfom_0390bac2-a5da-4b01-810c-af88b6a699b8",
+      "sequence": 1,
+      "role": "assistant",
+      "model": null
+    },
+    {
+      "id": "msg_mugndynm_8dea30bc-a558-4c45-99c8-7aba09ffbacd",
+      "sequence": 2,
+      "role": "assistant",
+      "model": null
+    },
+    {
+      "id": "msg_mugneb7d_0f03833f-a0d3-4a8f-be71-5070447b947b",
+      "sequence": 3,
+      "role": "assistant",
+      "model": null
+    },
+    {
+      "id": "msg_mugnguss_3af452d6-aa14-409c-818f-cdf40c5f96e6",
+      "sequence": 4,
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-responses",
+        "modelID": "gpt-5.6-luna",
+        "variant": "max"
+      }
+    },
+    {
+      "id": "msg_mugngut8_239f5c54-8a34-4e12-9822-07c288a34877",
+      "sequence": 5,
+      "role": "assistant",
+      "model": null
+    },
+    {
+      "id": "msg_mugnh7bm_4ba10c9d-827f-4da2-941b-21e7b25b5e46",
+      "sequence": 6,
+      "role": "assistant",
+      "model": null
+    }
+  ],
+  "nativeToolParts": [
+    {
+      "id": "part_mugndk4j_753d27fb-cd20-4959-87b4-0c5882eea870",
+      "tool": "AskUserQuestion",
+      "status": "completed",
+      "errorClass": null
+    },
+    {
+      "id": "part_mugne1rg_22cf585f-e17e-4832-9ca4-1470953389d3",
+      "tool": "Write",
+      "status": "completed",
+      "errorClass": null
+    },
+    {
+      "id": "part_mugngy63_aeb411a5-d226-477c-8fe6-1e3a60095c54",
+      "tool": "Write",
+      "status": "error",
+      "errorClass": "user_rejected"
+    }
+  ],
+  "files": {
+    "allowed": {
+      "exists": true,
+      "sha256": "8e33cbdc0cae4b5e176cd94f1a74476d3b4bdca7ab60989e3653669b819c1566",
+      "contentMarker": "M2_6BC_ALLOW"
+    },
+    "denied": {
+      "exists": false
+    }
+  },
+  "limitations": [
+    "CUA screenshot and accessibility tree were observed in this task trace but no screenshot file was saved to repository.",
+    "This positive real CLI run does not exercise the synthetic expiry race; that is covered by Runtime and Adapter fault-injection tests.",
+    "No M0 flag-off re-run was performed on 6bc55e2; previous f47e6b7 M0 run remains historical evidence."
+  ]
+}

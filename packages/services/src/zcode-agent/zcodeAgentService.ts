@@ -5267,6 +5267,9 @@ export function createZCodeAgentService(
           sessionId: params.sessionId,
           clientMode: trusted.clientMode,
           ...(params.beforeRowId !== undefined ? { beforeRowId: params.beforeRowId } : {}),
+          ...(params.nativeTerminalSourceCommandId
+            ? { nativeTerminalSourceCommandId: params.nativeTerminalSourceCommandId }
+            : {}),
           limit: params.limit,
         },
         v4ConversationRowsRangeResultSchema,

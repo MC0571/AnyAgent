@@ -2,6 +2,57 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EngineContractError, FakeEngine, type EngineEvent } from "../src/index.js";
 
+test("fake can delay automatic steps so a streamed partial answer is observable", async () => {
+  const fake = new FakeEngine({
+    autoAdvance: true,
+    stepDelayMs: 5,
+    script: [
+      { type: "message.delta", text: "partial" },
+      { type: "execution.completed", result: "partial" },
+    ],
+  });
+  const session = await fake.createSession();
+  const run = await fake.run({ session, input: "observe streaming" });
+  const events = run.events[Symbol.asyncIterator]();
+  let delivered = false;
+  const first = events.next().then((event) => {
+    delivered = true;
+    return event.value;
+  });
+  await Promise.resolve();
+  assert.equal(delivered, false);
+  assert.equal((await first)?.type, "message.delta");
+  assert.equal((await events.next()).value?.type, "execution.completed");
+});
+
+test("default Fake replies distinguish consecutive rounds in one Session", async () => {
+  const fake = new FakeEngine({ autoAdvance: true });
+  const session = await fake.createSession();
+  const results: string[] = [];
+  for (const input of ["first", "second"]) {
+    const run = await fake.run({ session, input });
+    const events: EngineEvent[] = [];
+    const stream = run.events[Symbol.asyncIterator]();
+    while (true) {
+      const next = await stream.next();
+      assert.equal(next.done, false);
+      events.push(next.value);
+      if (next.value.type === "execution.completed") break;
+    }
+    const streamed = events
+      .filter((event) => event.type === "message.delta")
+      .map((event) => (event.type === "message.delta" ? event.text : ""))
+      .join("");
+    const completion = events.find((event) => event.type === "execution.completed");
+    assert.equal(completion?.type, "execution.completed");
+    if (completion?.type === "execution.completed") assert.equal(completion.result, streamed);
+    results.push(streamed);
+  }
+  assert.match(results[0] ?? "", /round 1/);
+  assert.match(results[1] ?? "", /round 2/);
+  assert.notEqual(results[0], results[1]);
+});
+
 test("fake streams accepted, started, public tool/file, and completed evidence in order", async () => {
   const fake = new FakeEngine();
   const session = await fake.createSession();
@@ -269,6 +320,7 @@ test("capability support and current availability remain independent and refresh
   const initial = fake.getCapabilities();
   assert.equal(initial.engineId, "fake");
   assert.equal(initial.configurationVersion, "fake-config-1");
+  assert.equal(initial.capabilities["execution.revise"]?.support, "unsupported");
   assert.deepEqual(initial.capabilities["execution.run"], {
     support: "supported",
     availability: "unknown",

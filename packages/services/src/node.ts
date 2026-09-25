@@ -2424,9 +2424,20 @@ export function createLocalServices(options: {
   // 注册链上的懒工厂（如 OffPeak）会各自创建 tasks-index sqlite repo；先收集到本数组，
   // services 集合建好后在 return 前统一登记进 sharedSqliteRepos 侧表
   const sqliteReposToClose: Array<{ close(): void }> = [];
+  const promptAttachmentTransferService = createLocalPromptAttachmentTransferService();
   const anyAgentService =
     options.serviceAuthorityMode === "desktop-local" && process.env.ANYAGENT_M1_WORKBENCH === "1"
-      ? createAnyAgentService(zcodeAgentService)
+      ? createAnyAgentService(
+          zcodeAgentService,
+          async () => (await providerConfigRuntime.configService.read()).revision,
+          async (selection) => {
+            await providerRuntime.start();
+            const validation = providerRuntime.registryService.validateSelection(selection);
+            return validation.ok ? undefined : `所选模型配置无效：${validation.code}`;
+          },
+          promptAttachmentTransferService,
+          conversationShareService,
+        )
       : null;
   if (anyAgentService) sqliteReposToClose.push(anyAgentService);
   const services = new ServiceCollection()
@@ -2580,7 +2591,7 @@ export function createLocalServices(options: {
         oauthService,
       }),
     )
-    .register(IPromptAttachmentTransferService, createLocalPromptAttachmentTransferService());
+    .register(IPromptAttachmentTransferService, promptAttachmentTransferService);
   if (anyAgentService) services.register(IAnyAgentService, anyAgentService.service);
 
   // 即使初始配置关闭也必须登记 lifecycle disposer：terminal fence 需要早于任意延迟 setting/acquire

@@ -1,0 +1,64 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "taskId": "task_f46d7224-cb85-44b7-bdab-5436da143af4",
+  "rows": [
+    {
+      "kind": "participant",
+      "id": "participant_2041a9c4-ec2d-4d57-b81c-91645b698f6e",
+      "session_id": null,
+      "input_id": null,
+      "execution_id": null,
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_8e2d48f0-c3f1-488d-993b-c1954af3f017",
+      "session_id": "session_8e2d48f0-c3f1-488d-993b-c1954af3f017",
+      "input_id": null,
+      "execution_id": null,
+      "status": "active",
+      "nativeSessionId": "sess_b3dc2447-f978-4d6e-9b03-1febed71f19f"
+    },
+    {
+      "kind": "task",
+      "id": "task_f46d7224-cb85-44b7-bdab-5436da143af4",
+      "session_id": null,
+      "input_id": null,
+      "execution_id": null,
+      "status": "active"
+    },
+    {
+      "kind": "input",
+      "id": "input_40001954-8bea-4a48-bcb1-6efa63c76968",
+      "session_id": "session_8e2d48f0-c3f1-488d-993b-c1954af3f017",
+      "input_id": "input_40001954-8bea-4a48-bcb1-6efa63c76968",
+      "execution_id": null,
+      "status": "stopped",
+      "text": "PR25_B0_STOP：请先回答 BEGIN_STOP_B0，然后逐行写出 100 条 TypeScript 类型收窄建议，每条一整句，最后写 END_STOP_B0。不要调用工具。",
+      "nativeExecutionId": "ac42a424-6d76-4671-9d0c-f729475f3dd7"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_4dc18bd8-f715-46dc-95c0-cc7408709b0a",
+      "session_id": "session_8e2d48f0-c3f1-488d-993b-c1954af3f017",
+      "input_id": "input_40001954-8bea-4a48-bcb1-6efa63c76968",
+      "execution_id": "execution_4dc18bd8-f715-46dc-95c0-cc7408709b0a",
+      "status": "stopped",
+      "nativeExecutionId": "ac42a424-6d76-4671-9d0c-f729475f3dd7"
+    },
+    {
+      "kind": "stop-request",
+      "id": "stop_c227c072-7393-40b2-92be-510b58082357",
+      "session_id": "session_8e2d48f0-c3f1-488d-993b-c1954af3f017",
+      "input_id": "execution_4dc18bd8-f715-46dc-95c0-cc7408709b0a",
+      "execution_id": null,
+      "status": "confirmed",
+      "requestedAt": 1790285034291,
+      "deliveryStatus": "delivered",
+      "deliveryEvidence": {
+        "source": "engine",
+        "evidenceId": "c8a63a65-b39d-4f72-a692-d4d08da5dcc1"
+      }
+    }
+  ]
+}

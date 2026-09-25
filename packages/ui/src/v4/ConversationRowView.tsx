@@ -11,6 +11,7 @@ import {
   GitBranchIcon,
   GoalIcon,
   PencilIcon,
+  RotateCcwIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   TrendingUpDownIcon,
@@ -26,6 +27,7 @@ import {
   TID_V4_FEEDBACK_DISLIKE,
   TID_V4_FEEDBACK_LIKE,
   TID_V4_FORK,
+  TID_V4_RETRY,
   TID_V4_ROW,
   TID_V4_ROW_ATTACHMENTS,
   testId,
@@ -170,7 +172,7 @@ const CopyRowAction = memo(function CopyRowAction({
   tooltip = label,
 }: {
   text: string;
-  rowId: number;
+  rowId?: number;
   label: string;
   tooltip?: string;
 }) {
@@ -192,7 +194,7 @@ const CopyRowAction = memo(function CopyRowAction({
       aria-label={label}
       label={label}
       tooltip={tooltip}
-      data-testid={`v4-copy-${rowId}`}
+      data-testid={rowId === undefined ? undefined : `v4-copy-${rowId}`}
       disabled={text.length === 0}
       onClick={handleCopy}
     >
@@ -1274,31 +1276,50 @@ const UserInputRowView = memo(function UserInputRowView({
           {status}
         </div>
       ) : null}
-      {/* 手机远控没有 hover，v4 迁移时漏掉了旧 UserMessage 的常显分支，
-          导致复制和编辑入口不可发现；远控直接显示，桌面端继续通过 hover/focus 降噪。 */}
-      <MessageActions
-        className={cn(
-          "mt-1",
-          "opacity-0 transition-opacity group-hover/user-row:opacity-100 focus-within:opacity-100",
-        )}
-      >
-        <CopyRowAction
-          text={row.text}
-          rowId={row.rowId}
-          label={intl.formatMessage({ id: "chat.message.copy" })}
-        />
-        {onEdit && row.entityId ? (
-          <MessageAction
-            label={intl.formatMessage({ id: "chat.message.edit" })}
-            tooltip={intl.formatMessage({ id: "chat.message.edit" })}
-            data-testid={testId(TID_V4_EDIT, String(row.rowId))}
-            onClick={handleOpenEdit}
-          >
-            <PencilIcon className="size-3.5" />
-          </MessageAction>
-        ) : null}
-      </MessageActions>
+      <ConversationUserInputActions
+        text={row.text}
+        rowId={row.rowId}
+        onEdit={onEdit && row.entityId ? handleOpenEdit : undefined}
+      />
     </RowShell>
+  );
+});
+
+/** Shared native user-row copy/edit actions; Engine supplies product callbacks, not fake row IDs. */
+export const ConversationUserInputActions = memo(function ConversationUserInputActions({
+  text,
+  rowId,
+  editActionTestId,
+  onEdit,
+}: {
+  text: string;
+  rowId?: number;
+  editActionTestId?: string;
+  onEdit?: () => void;
+}) {
+  const { intl } = useZCodeIntl();
+  // Desktop matches the native hover/focus behavior; remote styling remains in MessageActions.
+  return (
+    <MessageActions className="mt-1 opacity-0 transition-opacity group-hover/user-row:opacity-100 focus-within:opacity-100">
+      <CopyRowAction
+        text={text}
+        rowId={rowId}
+        label={intl.formatMessage({ id: "chat.message.copy" })}
+      />
+      {onEdit ? (
+        <MessageAction
+          label={intl.formatMessage({ id: "chat.message.edit" })}
+          tooltip={intl.formatMessage({ id: "chat.message.edit" })}
+          data-testid={
+            editActionTestId ??
+            (rowId === undefined ? undefined : testId(TID_V4_EDIT, String(rowId)))
+          }
+          onClick={onEdit}
+        >
+          <PencilIcon className="size-3.5" />
+        </MessageAction>
+      ) : null}
+    </MessageActions>
   );
 });
 
@@ -1312,20 +1333,40 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   sessionId,
   turnId,
   onFork,
+  onForkAction,
+  forkActionId,
+  onRetry,
+  onRetryAction,
+  retryActionId,
   onFeedbackChange,
+  onFeedbackAction,
+  unsupportedFeedbackReason,
+  unsupportedForkReason,
   className,
 }: {
-  rowId: number;
+  rowId?: number;
   entityId?: string;
   text: string;
-  createdAt: number;
+  createdAt?: number;
   feedback?: AssistantMessageFeedback | null;
   hookInvocations?: readonly HookInvocationRow[];
   sessionId?: string | null;
   turnId?: string;
   onFork?: (target: ConversationRowTarget) => void;
+  /** Product-backed fork action; native row identity stays inside its Adapter. */
+  onForkAction?: () => void;
+  forkActionId?: string;
   onRetry?: (target: ConversationRowTarget) => void;
+  /** Product-backed retry action; the Adapter resolves the native row target. */
+  onRetryAction?: () => void;
+  retryActionId?: string;
   onFeedbackChange?: AssistantFeedbackHandler;
+  /** Harness-backed message action with Runtime-owned identity and authorization. */
+  onFeedbackAction?: (
+    feedback: "like" | "dislike" | null,
+  ) => Promise<boolean | void> | boolean | void;
+  unsupportedFeedbackReason?: string;
+  unsupportedForkReason?: string;
   className?: string;
 }) {
   const { intl, locale } = useZCodeIntl();
@@ -1339,8 +1380,10 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
     id: localFeedback === "dislike" ? "chat.message.disliked" : "chat.message.dislike",
   });
   const forkLabel = intl.formatMessage({ id: "chat.message.fork" });
-  const timeLabel = formatMessageTimeLabel(createdAt, locale, intl);
+  const retryLabel = intl.formatMessage({ id: "chat.message.retry" });
+  const timeLabel = formatMessageTimeLabel(createdAt ?? 0, locale, intl);
   const resolveTooltip = (label: string): string | undefined => label;
+  const feedbackActionId = rowId === undefined ? entityId : String(rowId);
 
   useEffect(() => {
     setLocalFeedback(feedback);
@@ -1348,6 +1391,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
 
   const handleFeedback = useCallback(
     (nextFeedback: AssistantMessageFeedback) => {
+      const target = entityId && rowId !== undefined ? { rowId, entityId } : undefined;
       const previousFeedback = localFeedback;
       const resolvedFeedback = previousFeedback === nextFeedback ? null : nextFeedback;
       setLocalFeedback(resolvedFeedback);
@@ -1355,8 +1399,13 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
         messageId: entityId ?? null,
         reaction: resolvedFeedback ?? "none",
       });
-      if (entityId) {
-        void Promise.resolve(onFeedbackChange?.({ rowId, entityId }, resolvedFeedback)).then(
+      const persistFeedback = onFeedbackAction
+        ? onFeedbackAction(resolvedFeedback)
+        : target
+          ? onFeedbackChange?.(target, resolvedFeedback)
+          : undefined;
+      if (persistFeedback !== undefined) {
+        void Promise.resolve(persistFeedback).then(
           (result) => {
             if (result === false) setLocalFeedback(previousFeedback);
           },
@@ -1371,7 +1420,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
           },
         );
       }
-      if (platform && entityId) {
+      if (platform && target) {
         void reportAppTelemetryEvent(
           platform,
           {
@@ -1380,24 +1429,38 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
             eventType: "ck",
             eventExtraDetail: { reaction: resolvedFeedback ?? "none" },
             ...(sessionId ? { talkId: sessionId } : {}),
-            messageId: entityId,
+            messageId: target.entityId,
           },
           "ConversationRowView",
         );
       }
     },
-    [entityId, localFeedback, onFeedbackChange, platform, rowId, sessionId],
+    [entityId, localFeedback, onFeedbackAction, onFeedbackChange, platform, rowId, sessionId],
   );
   const handleFork = useCallback(() => {
-    if (entityId) {
+    if (onForkAction || (entityId && rowId !== undefined)) {
       runUserAction({
         input: { featureId: "conversation.history.branch", action: "fork", trigger: "button" },
-        operation: () => onFork?.({ rowId, entityId }),
+        operation: () =>
+          onForkAction?.() ??
+          (entityId && rowId !== undefined ? onFork?.({ rowId, entityId }) : undefined),
         completed: { resultSource: "optimistic_projection" },
         failureStage: "fork",
       });
     }
-  }, [entityId, onFork, rowId]);
+  }, [entityId, onFork, onForkAction, rowId]);
+  const handleRetry = useCallback(() => {
+    if (onRetryAction || (entityId && rowId !== undefined)) {
+      runUserAction({
+        input: { featureId: "conversation.history.branch", action: "retry", trigger: "button" },
+        operation: () =>
+          onRetryAction?.() ??
+          (entityId && rowId !== undefined ? onRetry?.({ rowId, entityId }) : undefined),
+        completed: { resultSource: "optimistic_projection" },
+        failureStage: "retry",
+      });
+    }
+  }, [entityId, onRetry, onRetryAction, rowId]);
   return (
     <MessageActions className={cn(className)}>
       <CopyRowAction
@@ -1406,14 +1469,15 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
         label={copyLabel}
         tooltip={resolveTooltip(copyLabel)}
       />
-      {entityId && onFeedbackChange ? (
+      {feedbackActionId &&
+      (onFeedbackAction || (entityId && rowId !== undefined && onFeedbackChange)) ? (
         <>
           <MessageAction
             aria-label={likeLabel}
             aria-pressed={localFeedback === "like"}
             label={likeLabel}
             tooltip={resolveTooltip(likeLabel)}
-            data-testid={testId(TID_V4_FEEDBACK_LIKE, String(rowId))}
+            data-testid={testId(TID_V4_FEEDBACK_LIKE, feedbackActionId)}
             className={localFeedback === "like" ? "!bg-success/10" : undefined}
             onClick={() => handleFeedback("like")}
           >
@@ -1431,7 +1495,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
             aria-pressed={localFeedback === "dislike"}
             label={dislikeLabel}
             tooltip={resolveTooltip(dislikeLabel)}
-            data-testid={testId(TID_V4_FEEDBACK_DISLIKE, String(rowId))}
+            data-testid={testId(TID_V4_FEEDBACK_DISLIKE, feedbackActionId)}
             className={localFeedback === "dislike" ? "!bg-warning/10" : undefined}
             onClick={() => handleFeedback("dislike")}
           >
@@ -1445,16 +1509,64 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
             </span>
           </MessageAction>
         </>
+      ) : unsupportedFeedbackReason ? (
+        <>
+          <MessageAction
+            aria-label={likeLabel}
+            aria-disabled="true"
+            aria-description={unsupportedFeedbackReason}
+            title={unsupportedFeedbackReason}
+            label={likeLabel}
+            tooltip={unsupportedFeedbackReason}
+            className="cursor-not-allowed opacity-50"
+          >
+            <ThumbsUpIcon className="size-3.5" />
+          </MessageAction>
+          <MessageAction
+            aria-label={dislikeLabel}
+            aria-disabled="true"
+            aria-description={unsupportedFeedbackReason}
+            title={unsupportedFeedbackReason}
+            label={dislikeLabel}
+            tooltip={unsupportedFeedbackReason}
+            className="cursor-not-allowed opacity-50"
+          >
+            <ThumbsDownIcon className="size-3.5" />
+          </MessageAction>
+        </>
       ) : null}
-      {onFork && entityId ? (
+      {onForkAction || (onFork && entityId && rowId !== undefined) ? (
         <MessageAction
           aria-label={forkLabel}
           label={forkLabel}
           tooltip={resolveTooltip(forkLabel)}
-          data-testid={testId(TID_V4_FORK, String(rowId))}
+          data-testid={testId(TID_V4_FORK, forkActionId ?? String(rowId))}
           onClick={handleFork}
         >
           <TrendingUpDownIcon className="size-3.5" />
+        </MessageAction>
+      ) : unsupportedForkReason ? (
+        <MessageAction
+          aria-label={forkLabel}
+          aria-disabled="true"
+          aria-description={unsupportedForkReason}
+          title={unsupportedForkReason}
+          label={forkLabel}
+          tooltip={unsupportedForkReason}
+          className="cursor-not-allowed opacity-50"
+        >
+          <TrendingUpDownIcon className="size-3.5" />
+        </MessageAction>
+      ) : null}
+      {onRetryAction || (onRetry && entityId && rowId !== undefined) ? (
+        <MessageAction
+          aria-label={retryLabel}
+          label={retryLabel}
+          tooltip={resolveTooltip(retryLabel)}
+          data-testid={testId(TID_V4_RETRY, retryActionId ?? String(rowId))}
+          onClick={handleRetry}
+        >
+          <RotateCcwIcon className="size-3.5" />
         </MessageAction>
       ) : null}
       {turnId && hookInvocations ? (

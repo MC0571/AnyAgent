@@ -1,6 +1,7 @@
 import type {
   CapabilityStatus,
   EngineApprovalOption,
+  EngineApprovalPresentation,
   EngineApprovalRef,
   EngineCapability,
   EngineEvent,
@@ -8,13 +9,19 @@ import type {
   EngineFailure,
   EngineSessionRef,
   EngineUserInputOption,
+  EngineUserInputPresentation,
   EngineUserInputRef,
 } from "./types.js";
 
 export type FakeEngineStep =
   | { readonly type: "input.accepted" }
   | { readonly type: "execution.started" }
-  | { readonly type: "message.delta"; readonly text: string }
+  | {
+      readonly type: "message.delta";
+      readonly text: string;
+      readonly messageId?: string;
+      readonly blockId?: string;
+    }
   | {
       readonly type: "tool.started";
       readonly name: string;
@@ -43,6 +50,7 @@ export type FakeEngineStep =
       readonly operation: string;
       readonly scope?: string;
       readonly options?: readonly EngineApprovalOption[];
+      readonly presentation?: EngineApprovalPresentation;
       readonly expiresAt?: number | null;
     }
   | {
@@ -50,6 +58,7 @@ export type FakeEngineStep =
       readonly prompt: string;
       readonly inputKind: "text" | "choice" | "form";
       readonly options?: readonly EngineUserInputOption[];
+      readonly presentation?: EngineUserInputPresentation;
       readonly expiresAt?: number | null;
     }
   | { readonly type: "execution.completed"; readonly result?: string }
@@ -57,6 +66,7 @@ export type FakeEngineStep =
 
 export interface FakeEngineOptions {
   readonly autoAdvance?: boolean;
+  readonly stepDelayMs?: number;
   readonly now?: () => number;
   readonly script?: readonly FakeEngineStep[];
   readonly capabilities?: Partial<Record<EngineCapability, CapabilityStatus>>;
@@ -65,6 +75,33 @@ export interface FakeEngineOptions {
   readonly adapterVersion?: string;
   readonly configurationVersion?: string | null;
   readonly environment?: string | null;
+}
+
+export function defaultFakeCapability(capability: EngineCapability): CapabilityStatus {
+  const unavailable =
+    capability === "execution.reconcile" ||
+    capability === "assistant.feedback" ||
+    capability === "workspace.file-rewind" ||
+    capability === "session.fork" ||
+    capability === "session.compact" ||
+    capability === "execution.revise";
+  return {
+    support: unavailable ? "unsupported" : "supported",
+    availability: unavailable ? "unknown" : "available",
+    ...(capability === "execution.reconcile"
+      ? { reason: "Fake Engine has no native reconciliation query." }
+      : capability === "assistant.feedback"
+        ? { reason: "Fake Engine does not store assistant feedback." }
+        : capability === "workspace.file-rewind"
+          ? { reason: "Fake Engine does not track native workspace checkpoints." }
+          : capability === "session.fork"
+            ? { reason: "Fake Engine has no native conversation to fork." }
+            : capability === "execution.revise"
+              ? { reason: "Fake Engine has no native conversation branch to revise." }
+              : capability === "session.compact"
+                ? { reason: "Fake Engine has no native Session compaction command." }
+                : {}),
+  };
 }
 
 export interface PendingApproval {
@@ -142,8 +179,12 @@ export class AsyncEventQueue implements AsyncIterable<EngineEvent>, AsyncIterato
 
 export const CAPABILITIES: readonly EngineCapability[] = [
   "session.create",
+  "session.resume",
+  "session.fork",
+  "session.compact",
   "session.close",
   "execution.run",
+  "execution.revise",
   "execution.interrupt",
   "execution.reconcile",
   "events.stream",
@@ -151,30 +192,36 @@ export const CAPABILITIES: readonly EngineCapability[] = [
   "events.file",
   "approval.respond",
   "user-input.respond",
+  "assistant.feedback",
+  "workspace.file-rewind",
 ];
 
-export const DEFAULT_SCRIPT: readonly FakeEngineStep[] = [
-  { type: "input.accepted" },
-  { type: "execution.started" },
-  { type: "message.delta", text: "I will inspect the file. " },
-  {
-    type: "tool.started",
-    toolCallId: "fake-tool-1",
-    name: "read_file",
-    input: { path: "README.md" },
-  },
-  {
-    type: "file.changed",
-    path: "README.md",
-    operation: "modified",
-    diff: "@@ -1 +1 @@\n-old\n+new",
-  },
-  {
-    type: "tool.completed",
-    toolCallId: "fake-tool-1",
-    result: { path: "README.md" },
-    sideEffects: "known",
-  },
-  { type: "message.delta", text: "The file has been updated." },
-  { type: "execution.completed", result: "done" },
-];
+export function defaultScript(round: number): readonly FakeEngineStep[] {
+  const opening = `Fake round ${round}: I will inspect the file. `;
+  const closing = `The file has been updated (round ${round}).`;
+  return [
+    { type: "input.accepted" },
+    { type: "execution.started" },
+    { type: "message.delta", text: opening, messageId: `fake-message-${round}`, blockId: "text" },
+    {
+      type: "tool.started",
+      toolCallId: "fake-tool-1",
+      name: "read_file",
+      input: { path: "README.md" },
+    },
+    {
+      type: "file.changed",
+      path: "README.md",
+      operation: "modified",
+      diff: "@@ -1 +1 @@\n-old\n+new",
+    },
+    {
+      type: "tool.completed",
+      toolCallId: "fake-tool-1",
+      result: { path: "README.md" },
+      sideEffects: "known",
+    },
+    { type: "message.delta", text: closing, messageId: `fake-message-${round}`, blockId: "text" },
+    { type: "execution.completed", result: opening + closing },
+  ];
+}

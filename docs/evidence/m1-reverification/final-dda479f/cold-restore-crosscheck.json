@@ -1,0 +1,52 @@
+{
+  "productCodeCommit": "dda479f031212729dfcb289a983161e32686e872",
+  "environment": "macOS arm64; isolated local project and App home /tmp/anyagent-opencode-go.aBEA0z",
+  "nativeCliVersion": "0.16.9",
+  "adapterVersion": "m1.2",
+  "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+  "participantId": "participant_afc8d3a1-c3f6-423e-bf6f-d997deac248a",
+  "authorizationId": "authorization_135f48c5-bad4-4ed2-bfed-055b4eb6747e",
+  "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+  "nativeSessionId": "sess_18b475fb-0313-4a58-888d-f753f46c695f",
+  "taskStatus": "active",
+  "sessionStatus": "active",
+  "inputCountBeforeQuit": 2,
+  "inputCountAfterExplicitRestoreAndThirdRound": 3,
+  "runtimeIntegrityIssueCountAfterColdRestore": 0,
+  "inputs": [
+    {
+      "productInputId": "input_65223867-5522-4519-8d4a-ab338bc09a1c",
+      "text": "PR25_DDA_R1: Reply exactly DDA_R1_OK.",
+      "status": "completed",
+      "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+      "participantId": "participant_afc8d3a1-c3f6-423e-bf6f-d997deac248a",
+      "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+      "productExecutionId": "execution_8e4567ee-cb12-4f84-9e2b-a3b7db87d937",
+      "nativeExecutionId": "input_65223867-5522-4519-8d4a-ab338bc09a1c",
+      "nativeUserMessageId": "msg_muggxnzs_4795d0c3-a76f-4c8d-a372-8c28e069a03d"
+    },
+    {
+      "productInputId": "input_3aec590e-0e14-45d8-82a4-80afabad58a4",
+      "text": "PR25_DDA_R2: Reply exactly DDA_R2_OK.",
+      "status": "completed",
+      "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+      "participantId": "participant_afc8d3a1-c3f6-423e-bf6f-d997deac248a",
+      "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+      "productExecutionId": "execution_1be419cf-595a-4517-95f6-dddf945b7259",
+      "nativeExecutionId": "input_3aec590e-0e14-45d8-82a4-80afabad58a4",
+      "nativeUserMessageId": "msg_muggxwqa_0581e290-fcc9-4617-ac8b-675501613c95"
+    },
+    {
+      "productInputId": "input_621420e6-95b9-482a-9096-d3e79aa7ad19",
+      "text": "PR25_DDA_R3: Reply exactly DDA_R3_OK.",
+      "status": "completed",
+      "taskId": "task_aafeaad6-2c3f-45a6-a996-d3b10a3a414f",
+      "participantId": "participant_afc8d3a1-c3f6-423e-bf6f-d997deac248a",
+      "productSessionId": "session_659c88b4-0d0a-460a-a9db-5f6d33898e7e",
+      "productExecutionId": "execution_8a901b9a-1875-492b-8d10-d3497ce745d4",
+      "nativeExecutionId": "input_621420e6-95b9-482a-9096-d3e79aa7ad19",
+      "nativeUserMessageId": "msg_mugh2tkn_adef67bc-57e5-440c-bd36-00da7015e9da"
+    }
+  ],
+  "observationLayer": "formal macOS App UI plus selected product/native SQLite; screenshot observed through CUA but no repository image file"
+}

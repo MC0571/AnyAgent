@@ -1,0 +1,62 @@
+{
+  "productCodeCommit": "07bced37c5e82e1a9413b305dc2f0fa0c2358d85",
+  "scenario": "Cold App restart, open original sidebar Task, history-only, click explicit restore, send next turn",
+  "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+  "nativeSessionId": "share-import-929acf3a-3577-46e3-9c06-2024c67e5963",
+  "productRecords": [
+    {
+      "kind": "execution",
+      "id": "execution_384c0c09-9202-4448-a2c8-8b9133b6cece",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "inputId": "input_6fe60bc1-7a47-48f5-a65b-851f05311cfb",
+      "status": "completed",
+      "result": "COLD_RESTORED_925",
+      "nativeExecutionId": "input_6fe60bc1-7a47-48f5-a65b-851f05311cfb",
+      "acceptedAt": 1790303393618,
+      "startedAt": 1790303393618,
+      "terminalAt": 1790303401469
+    },
+    {
+      "kind": "input",
+      "id": "input_6fe60bc1-7a47-48f5-a65b-851f05311cfb",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "authorizationId": "authorization_3a1725fc-2b4d-462c-931f-cb85e6aeb304",
+      "status": "completed",
+      "text": "PR25_FINAL_COLD_RESTORE: Reply exactly COLD_RESTORED_925.",
+      "nativeCommandId": "input_6fe60bc1-7a47-48f5-a65b-851f05311cfb",
+      "nativeExecutionId": "input_6fe60bc1-7a47-48f5-a65b-851f05311cfb",
+      "acceptedAt": 1790303393618,
+      "startedAt": 1790303393618,
+      "terminalAt": 1790303401469
+    },
+    {
+      "kind": "participant",
+      "id": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "nativeSessionId": "share-import-929acf3a-3577-46e3-9c06-2024c67e5963"
+    },
+    {
+      "kind": "task",
+      "id": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "status": "active"
+    }
+  ],
+  "nativeSessionInput": [
+    {
+      "id": "queue_input_6fe60bc1-7a47-48f5-a65b-851f05311cfb",
+      "kind": "sendText",
+      "sequence": 5,
+      "status": "promoted"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { Emitter } from "@zcode/rpc";
 import type {
   IPromptAttachmentTransferService,
@@ -23,16 +24,15 @@ export function createLocalPromptAttachmentTransferService(): IPromptAttachmentT
 
   return {
     async stage(params) {
-      const bytes =
-        typeof params.sizeBytes === "number" && params.sizeBytes > 0
-          ? params.sizeBytes
-          : await stat(params.localPath)
-              .then((value) => value.size)
-              .catch(() => 0);
+      if (!isAbsolute(params.localPath) || params.localPath.includes("\0"))
+        throw new Error("附件必须是 Host 可读取的本地绝对路径。");
+      const file = await stat(params.localPath);
+      if (!file.isFile()) throw new Error("所选附件必须是普通文件。");
       return {
         operationId: params.operationId,
         ref: params.localPath,
-        bytes,
+        // Renderer-provided size can be stale or forged; Host metadata comes from the file itself.
+        bytes: file.size,
         staged: false,
       };
     },

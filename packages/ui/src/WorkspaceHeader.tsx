@@ -8,7 +8,9 @@ import type {
   UserInfo,
 } from "@zcode/shared";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { TID_WORKSPACE_HEADER } from "@zcode/shared";
+import { Folder } from "lucide-react";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import { cn } from "@/components/lib/utils.js";
 import {
@@ -20,6 +22,8 @@ import type { WorkspaceHeaderVariant } from "@/WorkspaceHeaderSections/shared.js
 
 export function WorkspaceHeader({
   variant = "task",
+  externalTaskTitle,
+  externalAction,
 
   draftDropTargetController,
   readOnlyReason,
@@ -64,6 +68,9 @@ export function WorkspaceHeader({
   reloadSessionPending,
 }: {
   variant?: WorkspaceHeaderVariant;
+  /** Non-ZCode task title; keeps ZCode task menus and actions unbound. */
+  externalTaskTitle?: string;
+  externalAction?: ReactNode;
   draftDropTargetController?: ConversationDropTargetController | null;
   readOnlyReason?: string;
   workspaceAbsPath: string;
@@ -159,7 +166,14 @@ export function WorkspaceHeader({
           headerWindowControlsPaddingClass,
         )}
       >
-        {variant === "task" ? (
+        {externalTaskTitle !== undefined ? (
+          <div className="flex min-w-0 items-center gap-2 text-ui-base text-foreground">
+            <Folder className="size-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
+            <h1 className="max-w-100 truncate font-semibold" title={externalTaskTitle}>
+              {externalTaskTitle}
+            </h1>
+          </div>
+        ) : variant === "task" ? (
           <WorkspaceHeaderTitleSection
             variant={variant}
             readOnlyReason={readOnlyReason}
@@ -197,6 +211,7 @@ export function WorkspaceHeader({
         ) : (
           <div className="min-w-0 flex-1" aria-hidden="true" />
         )}
+        {externalAction}
         <WorkspaceHeaderActionSection
           variant={variant}
           activeTaskId={activeTaskId}

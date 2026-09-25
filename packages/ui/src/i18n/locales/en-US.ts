@@ -146,12 +146,26 @@ const enUS: Record<string, string> = {
   "chat.previewCards.openExternalFailed": "Could not open this file in the browser",
   "settings.modelProvider.connectionMode.switchToStartPlan": "Switch to Start Plan",
   "chat.composer.contextSearchHint": "Type to search plugins, files, and chats",
+  "chat.composer.contextSearchHint.files": "Type @ in the editor to search workspace files",
+  "chat.composer.contextSearchHint.fileAndShare":
+    "Type @ in the editor to search files; imported shares open as new tasks",
   "chat.composer.contextShortcut": "Add context",
   "chat.composer.capabilityShortcut": "Choose capabilities",
   "chat.composer.skillShortcut": "Choose skills",
   "chat.composer.addSection": "Add",
   "chat.composer.addWorkflow": "Workflow",
   "chat.composer.attachment": "Attachments",
+  "chat.composer.importSharedContext.menuItem": "Import shared conversation",
+  "chat.composer.importSharedContext.title": "Import shared conversation context",
+  "chat.composer.importSharedContext.description":
+    "Paste a share page link, an AnyAgent import link, or a share code. Import creates a new task and leaves the current task unchanged.",
+  "chat.composer.importSharedContext.label": "Share link or code",
+  "chat.composer.importSharedContext.placeholder": "https://zcode.z.ai/cn/share/…",
+  "chat.composer.importSharedContext.invalid": "Enter a valid share link or code.",
+  "chat.composer.importSharedContext.failed": "Import failed. Check the notification and retry.",
+  "chat.composer.importSharedContext.submitting": "Importing…",
+  "chat.composer.importSharedContext.submit": "Import and open",
+  "chat.composer.importSharedContext.cancel": "Cancel",
   "chat.permission.feedback.ariaLabel": "Optional feedback for the model when denying",
   "chat.permission.feedback.placeholder": "Tell the model what to do instead...",
   "offPeak.chatCreated.defaultTitle": "Idle-time task",
@@ -1549,6 +1563,10 @@ const enUS: Record<string, string> = {
   "taskList.renameFailed": "Could not rename task",
   "taskList.pinFailed": "Could not update pinned state",
   "taskList.markAsUnread": "Mark as unread",
+  "taskList.copyTaskId": "Copy Task ID",
+  "taskList.copyTaskIdFailed": "Could not copy Task ID",
+  "taskList.engineActionUnsupported": "This Engine task does not support this action yet",
+  "taskList.engineActionUnavailableShort": "Unavailable",
   "taskList.openInSplitPane": "Open in split view",
   "chat.toolCall.agent.openInSidePane": "Open in side pane",
   "v4Pane.splitRight": "Split right",
@@ -4262,6 +4280,8 @@ const enUS: Record<string, string> = {
   "chat.message.dislike": "Dislike",
   "chat.message.disliked": "Disliked",
   "chat.message.fork": "Fork",
+  "engine.message.feedbackUnsupported": "This Harness cannot save message feedback yet.",
+  "engine.message.forkUnsupported": "This Harness cannot fork from this message yet.",
   "chat.message.forking": "Forking...",
   "chat.message.fork.unavailable": "Fork after task finishes",
   "chat.message.fork.unsupported": "The current agent does not support forking yet",
@@ -4497,6 +4517,10 @@ const enUS: Record<string, string> = {
   "chat.toolbar.modelSwitch.lockedByRunningTask":
     "A task is running. Finish it before switching model providers.",
   "chat.toolbar.modelSwitch.lockedByRunningTask.short": "busy",
+  "chat.toolbar.harnessSwitch.lockedSession":
+    "This session cannot switch Harness. Start a new conversation to choose one.",
+  "chat.toolbar.harnessSwitch.unavailable":
+    "This Harness is unavailable. See the reason shown beside it.",
   "chat.goal.runningBlocked": "Set a goal after the current task finishes.",
   "chat.goal.planModeBlocked": "Goal is unavailable in Plan mode. Switch modes to continue.",
   "chat.plan.attachmentsBlocked":
@@ -4513,6 +4537,15 @@ const enUS: Record<string, string> = {
   "chat.modelSwitch.contextWindowGuard.stillTooLarge":
     "After compression, the context used by this conversation is still larger than the target model's available context after reserving maximum output. Model switching was canceled.",
   "chat.toolbar.mode.label": "Switch mode",
+  "engine.composer.unavailableValue": "Not mapped",
+  "engine.composer.textOnly":
+    "Use the + menu to reference workspace files or import a shared conversation.",
+  "engine.composer.attachmentLocalPathRequired":
+    "Harness attachments must be selected as local files that the Host can verify.",
+  "engine.composer.modeUnavailable":
+    "AnyAgent's current Harness integration has not mapped permission or execution mode settings, so this selector is unavailable.",
+  "engine.composer.thoughtUnavailable":
+    "AnyAgent's current Harness integration has not mapped reasoning effort settings, so this selector is unavailable.",
   // CUA composer entry button
   "chat.toolbar.computerUse.label": "Computer Use",
   "chat.toolbar.computerUse.tooltip.idle":

@@ -1,0 +1,67 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "rounds": [
+    {
+      "marker": "PR25_B0_PLAN_LOW",
+      "productInputId": "input_31bf8e1d-103e-499d-914b-7a77a3b74e0d",
+      "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "productSessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": true,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "low"
+          }
+        }
+      },
+      "nativeMessageId": "msg_mug2lj2e_7b8d01e4-dcec-4489-924a-10fad6b3a132",
+      "nativeSessionId": "sess_418b065d-7596-481c-982e-273f7ab1afc7",
+      "nativeInputIntent": {
+        "mode": "build",
+        "planEnabled": true,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "low"
+          }
+        }
+      }
+    },
+    {
+      "marker": "PR25_B0_BUILD_MAX",
+      "productInputId": "input_393f361d-983f-4c92-82c9-d949790fb3f4",
+      "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "productSessionId": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "status": "completed",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      },
+      "nativeMessageId": "msg_mug2n32y_ca044c71-4b2b-4ae2-9a0a-981c7b21de18",
+      "nativeSessionId": "sess_418b065d-7596-481c-982e-273f7ab1afc7",
+      "nativeInputIntent": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      }
+    }
+  ]
+}

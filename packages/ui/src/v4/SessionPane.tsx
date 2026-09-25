@@ -54,6 +54,7 @@ import type {
   ConversationShareAllowedArtifact,
   ConversationShareTurnPreflightResult,
   ImportedConversationShare,
+  IAnyAgentService,
 } from "@zcode/services";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -303,6 +304,7 @@ export interface SessionPaneProps {
   isDesktop?: boolean;
   provider?: ZCodeProvider;
   onSessionCreated?: (sessionId: string) => void;
+  onHarnessTaskCreated?: (taskId: string) => void;
   /** deleteSession：删除当前会话后回到 draft（shell 起新草稿）。 */
   onSessionDeleted?: () => void;
   /** 隐藏副屏的 child 已不存在时，由宿主移除对应 tab。 */
@@ -500,6 +502,7 @@ export function SessionPane({
   isDesktop = false,
   provider,
   onSessionCreated,
+  onHarnessTaskCreated,
   onSelectionSideChatUnavailable,
   focused = true,
   telemetryVisible = true,
@@ -558,6 +561,56 @@ export function SessionPane({
   const { intl, locale } = useZCodeIntl();
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
   const baseWorkspaceServices = useBaseWorkspaceServices();
+  const harnessService =
+    onHarnessTaskCreated && isDesktop && !workspaceIdentity && !remoteSessionId
+      ? baseWorkspaceServices.anyAgentService
+      : undefined;
+  const [selectedHarnessId, setSelectedHarnessId] = useState<string | null>(null);
+  const [currentHarnesses, setCurrentHarnesses] = useState<
+    Awaited<ReturnType<IAnyAgentService["listEngines"]>>
+  >([]);
+  const pendingHarnessTaskRef = useRef<Awaited<ReturnType<IAnyAgentService["createTask"]>> | null>(
+    null,
+  );
+  const harnessTaskToOpenRef = useRef<string | null>(null);
+  const harnessProbeVersionRef = useRef(0);
+  const refreshHarnesses = useCallback(async () => {
+    const version = ++harnessProbeVersionRef.current;
+    if (!harnessService) {
+      setCurrentHarnesses([]);
+      return;
+    }
+    setCurrentHarnesses((engines) =>
+      engines.map((engine) => ({
+        ...engine,
+        state: "unknown",
+        source: "unknown",
+        observedAt: null,
+        capabilities: Object.fromEntries(
+          Object.keys(engine.capabilities).map((capability) => [
+            capability,
+            { support: "unknown", availability: "unknown", reason: "当前状态尚未探测" },
+          ]),
+        ) as typeof engine.capabilities,
+      })),
+    );
+    try {
+      const engines = await harnessService.listEngines({ workspacePath, workspaceIdentity });
+      if (version === harnessProbeVersionRef.current) setCurrentHarnesses(engines);
+    } catch {
+      // The in-flight projection is already unknown; never restore stale availability.
+    }
+  }, [harnessService, workspacePath, workspaceIdentity]);
+  useEffect(() => {
+    void refreshHarnesses();
+    return () => {
+      harnessProbeVersionRef.current += 1;
+    };
+  }, [refreshHarnesses]);
+  useEffect(() => {
+    setSelectedHarnessId(null);
+    pendingHarnessTaskRef.current = null;
+  }, [sessionId, workspacePath, workspaceIdentity]);
   const workspaceHomePath = useWorkspaceHomePath({
     workspacePath,
     workspaceIdentity,
@@ -1260,6 +1313,34 @@ export function SessionPane({
   });
   const modelSelectionView =
     modelSelectionRead.state.status === "ready" ? modelSelectionRead.state.view : null;
+  const harnesses = useMemo(
+    () =>
+      currentHarnesses.map((engine) => {
+        const create = engine.capabilities["session.create"];
+        const run = engine.capabilities["execution.run"];
+        return {
+          engineId: engine.engineId,
+          label: engine.engineId,
+          selectable:
+            engine.state === "current" &&
+            create?.support === "supported" &&
+            create.availability === "available" &&
+            run?.support === "supported" &&
+            run.availability === "available",
+          reason: create?.reason ?? run?.reason ?? "当前不可用或尚未探测",
+        };
+      }),
+    [currentHarnesses],
+  );
+  const handleSelectHarness = useCallback(
+    (engineId: string | null) => {
+      if (sessionId !== null) return;
+      setSelectedHarnessId(engineId);
+      if (pendingHarnessTaskRef.current?.engine.engineId !== engineId)
+        pendingHarnessTaskRef.current = null;
+    },
+    [sessionId],
+  );
   const draftModelSelectionRevisionRef = useRef<number | null>(null);
   useEffect(() => {
     if (sessionId !== null) {
@@ -1289,8 +1370,15 @@ export function SessionPane({
     [draftConfigRef, modelSelectionView],
   );
   const composerSubmissionReady = useMemo(
-    () => createComposerSubmissionConfig(draftConfig, modelSelectionView) !== null,
-    [draftConfig, modelSelectionView],
+    () =>
+      selectedHarnessId
+        ? harnesses.some(
+            (harness) => harness.engineId === selectedHarnessId && harness.selectable,
+          ) &&
+          (selectedHarnessId !== "zcode" ||
+            createComposerSubmissionConfig(draftConfig, modelSelectionView) !== null)
+        : createComposerSubmissionConfig(draftConfig, modelSelectionView) !== null,
+    [draftConfig, harnesses, modelSelectionView, selectedHarnessId],
   );
   const codingPlanUpgradeDialog = useOptionalCodingPlanUpgradeDialog();
   const openSettingsTab = useOptionalTabStore((state) => state.openSettingsTab);
@@ -2959,6 +3047,82 @@ export function SessionPane({
     timelineScrollToBottomRef.current?.();
   }, []);
 
+  const submitHarnessInput = useCallback(
+    async (text: string, options?: ConversationComposerSendOptions) => {
+      if (!harnessService || !selectedHarnessId)
+        throw new Error("Harness 服务或选择已失效，请重新选择。");
+      if (
+        options?.contextAttachmentCount ||
+        options?.sharedContextRefs?.length ||
+        (options?.requestedDelivery && options.requestedDelivery !== "startNow")
+      ) {
+        throw new Error("M1 Harness 暂不接收工作区/网页上下文或排队输入。");
+      }
+      if (selectedHarnessId === "zcode" && !options?.submission)
+        throw new Error("请先选择当前可用的模型、模式和推理档位。");
+      const task =
+        pendingHarnessTaskRef.current?.engine.engineId === selectedHarnessId
+          ? pendingHarnessTaskRef.current
+          : await harnessService.createTask({
+              engineId: selectedHarnessId,
+              workspacePath,
+              workspaceIdentity,
+          });
+      pendingHarnessTaskRef.current = task;
+      const attachments = await Promise.all(
+        (options?.attachments ?? []).map((attachment) =>
+          harnessService.stageAttachment({
+            taskId: task.id,
+            participantId: task.participant.id,
+            sessionId: task.session.id,
+            authorizationId: task.authorizationId,
+            localPath: attachment.ref,
+            fileName: attachment.fileName,
+            mimeType: attachment.mime,
+            sizeBytes: attachment.bytes,
+          }),
+        ),
+      );
+      await harnessService.submitInput({
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: task.authorizationId,
+        text,
+        ...(attachments.length ? { attachments } : {}),
+        ...(selectedHarnessId === "zcode" && options?.submission
+          ? {
+              submissionConfig: {
+                mode: options.submission.mode,
+                planEnabled: options.submission.planEnabled,
+                modelSelection: {
+                  providerId: options.submission.modelSelection.providerId,
+                  modelId: options.submission.modelSelection.modelId,
+                  ...(options.submission.modelSelection.options?.reasoningLevel
+                    ? {
+                        options: {
+                          reasoningLevel: options.submission.modelSelection.options.reasoningLevel,
+                        },
+                      }
+                    : {}),
+                },
+              },
+            }
+          : {}),
+      });
+      harnessTaskToOpenRef.current = task.id;
+      return "sent" as const;
+    },
+    [harnessService, selectedHarnessId, workspacePath, workspaceIdentity],
+  );
+  const handleHarnessSendSuccess = useCallback(() => {
+    const taskId = harnessTaskToOpenRef.current;
+    if (!taskId) return;
+    harnessTaskToOpenRef.current = null;
+    pendingHarnessTaskRef.current = null;
+    onHarnessTaskCreated?.(taskId);
+  }, [onHarnessTaskCreated]);
+
   const handleSendText = useCallback(
     async (
       text: string,
@@ -2972,7 +3136,10 @@ export function SessionPane({
         heldQueueDisposition: options?.heldQueueDisposition,
       });
       try {
-        const sendResult = await dispatchSendText(text, options);
+        const sendResult =
+          selectedHarnessId && sessionId === null
+            ? await submitHarnessInput(text, options)
+            : await dispatchSendText(text, options);
         if (sendResult === "blocked" || sendResult === "confirmationRequired") {
           return sendResult;
         }
@@ -2999,7 +3166,14 @@ export function SessionPane({
         throw error;
       }
     },
-    [dispatchSendText, focusTimelineToLatest, intl, sessionId],
+    [
+      dispatchSendText,
+      focusTimelineToLatest,
+      intl,
+      selectedHarnessId,
+      sessionId,
+      submitHarnessInput,
+    ],
   );
 
   const handleComposerDraftStateChange = useCallback(
@@ -3954,10 +4128,11 @@ export function SessionPane({
     usageStatsService: baseWorkspaceServices.usageStatsService,
     mcpUnavailableNotice,
   });
-  const composerError =
-    draftModelReadinessError ??
-    sendSubmissionError ??
-    (quotaBanner.takesOverError ? null : projectedComposerError);
+  const composerError = selectedHarnessId
+    ? sendSubmissionError
+    : (draftModelReadinessError ??
+      sendSubmissionError ??
+      (quotaBanner.takesOverError ? null : projectedComposerError));
   useEffect(() => {
     setSendSubmissionError(null);
   }, [sessionId]);
@@ -4377,8 +4552,14 @@ export function SessionPane({
       composerDraft={composerDraft}
       replaceComposerDraft={replaceComposerDraft}
       submissionReady={composerSubmissionReady}
+      harnesses={harnesses}
+      selectedHarnessId={selectedHarnessId}
+      onSelectHarness={harnessService ? handleSelectHarness : undefined}
+      onRefreshHarnesses={harnessService ? refreshHarnesses : undefined}
       updateComposerContent={updateComposerContent}
-      createSubmissionFromComposer={createSubmissionFromComposer}
+      createSubmissionFromComposer={
+        selectedHarnessId === "fake" ? undefined : createSubmissionFromComposer
+      }
       contextHeader={isDraft ? draftComposerHeader : undefined}
       centered={isDraft}
       blockingRequestId={blockingInteractionId}
@@ -4390,7 +4571,7 @@ export function SessionPane({
         connecting ||
         draftRuntimeRebuilding ||
         queueEditActiveForCurrentComposer ||
-        quotaBanner.state.blocksSubmit
+        (!selectedHarnessId && quotaBanner.state.blocksSubmit)
       }
       workspacePath={workspacePath}
       workspaceIdentity={workspaceIdentity}
@@ -4407,6 +4588,7 @@ export function SessionPane({
       telemetryVisible={telemetryVisible && conversationTelemetryForegroundEnabled}
       readPlanIdentitySnapshot={readPlanIdentitySnapshot}
       onSendText={handleSendText}
+      onSendSuccess={handleHarnessSendSuccess}
       onDraftStateChange={handleComposerDraftStateChange}
       composerRestoreRequest={composerRestoreRequest}
       onComposerRestoreApplied={handleComposerRestoreApplied}
@@ -4492,7 +4674,8 @@ export function SessionPane({
     )
   ) : (
     <>
-      {quotaBanner.state.visible &&
+      {!selectedHarnessId &&
+      quotaBanner.state.visible &&
       !quotaBanner.dismissed &&
       (!projectedComposerError || quotaBanner.takesOverError || quotaBanner.state.blocksSubmit) ? (
         <ConversationQuotaBanner

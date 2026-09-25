@@ -1,0 +1,369 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "nativeCliVersion": "0.16.9",
+  "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+  "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+  "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+  "nativeSessionId": "sess_a7848fd5-e2be-4011-9cbf-cad873dcf377",
+  "inputCountAfterGoalReadOnlyQuery": 6,
+  "inputs": [
+    {
+      "productInputId": "input_42317248-d139-4793-9d1e-fe1c16e9562a",
+      "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+      "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+      "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+      "text": "PR25_432_R1: Reply exactly R1_432_OK.",
+      "status": "completed",
+      "requestedDelivery": "startNow",
+      "modelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "gpt-5.6-luna",
+        "options": {
+          "reasoningLevel": "max"
+        }
+      },
+      "nativeExecutionId": "input_42317248-d139-4793-9d1e-fe1c16e9562a",
+      "nativeInput": {
+        "id": "queue_input_42317248-d139-4793-9d1e-fe1c16e9562a",
+        "status": "promoted",
+        "admitted_sequence": 0,
+        "promoted_sequence": 0,
+        "promoted_message_id": "msg_mugempvs_4d7ff384-655b-41fc-9c42-6f4486c635bb",
+        "sourceCommandId": "input_42317248-d139-4793-9d1e-fe1c16e9562a",
+        "requestedDelivery": "startNow"
+      },
+      "nativeUserIntentModelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "gpt-5.6-luna",
+        "options": {
+          "reasoningLevel": "max"
+        }
+      },
+      "nativeAssistant": {
+        "messageId": "msg_mugempw2_ce280cbd-1a7c-41f0-9910-e09524e3812b",
+        "providerId": "opencode-go-responses",
+        "modelId": "gpt-5.6-luna",
+        "parentUserMessageId": "msg_mugempvs_4d7ff384-655b-41fc-9c42-6f4486c635bb"
+      }
+    },
+    {
+      "productInputId": "input_2e9d4660-2c8c-4740-ae0d-74519886d9c4",
+      "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+      "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+      "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+      "text": "PR25_432_R2: Reply exactly R2_GROK_432_OK.",
+      "status": "completed",
+      "requestedDelivery": "startNow",
+      "modelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "grok-4.6",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "nativeExecutionId": "input_2e9d4660-2c8c-4740-ae0d-74519886d9c4",
+      "nativeInput": {
+        "id": "queue_input_2e9d4660-2c8c-4740-ae0d-74519886d9c4",
+        "status": "promoted",
+        "admitted_sequence": 1,
+        "promoted_sequence": 1,
+        "promoted_message_id": "msg_mugen9ob_431c8a84-c4c3-4455-b515-239a19671373",
+        "sourceCommandId": "input_2e9d4660-2c8c-4740-ae0d-74519886d9c4",
+        "requestedDelivery": "startNow"
+      },
+      "nativeUserIntentModelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "grok-4.6",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "nativeAssistant": {
+        "messageId": "msg_mugen9of_f5fe2e19-59f7-433b-909a-423a892598d1",
+        "providerId": "opencode-go-responses",
+        "modelId": "grok-4.6",
+        "parentUserMessageId": "msg_mugen9ob_431c8a84-c4c3-4455-b515-239a19671373"
+      }
+    },
+    {
+      "productInputId": "input_67d3210e-db64-4231-aacf-9b721f056842",
+      "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+      "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+      "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+      "text": "PR25_432_QUEUE_SOURCE: Write 120 numbered Chinese sentences about TypeScript type narrowing, one sentence per line. Start with SOURCE_BEGIN_432 and end with SOURCE_END_432.",
+      "status": "stopped",
+      "requestedDelivery": "startNow",
+      "modelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "grok-4.6",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "nativeExecutionId": "input_67d3210e-db64-4231-aacf-9b721f056842",
+      "nativeInput": {
+        "id": "queue_input_67d3210e-db64-4231-aacf-9b721f056842",
+        "status": "promoted",
+        "admitted_sequence": 2,
+        "promoted_sequence": 2,
+        "promoted_message_id": "msg_mugenti2_34da60d0-d317-4ed0-88a0-0597ed1152e1",
+        "sourceCommandId": "input_67d3210e-db64-4231-aacf-9b721f056842",
+        "requestedDelivery": "startNow"
+      },
+      "productExecution": {
+        "id": "execution_6aaeb536-a4d1-42af-abfc-c8902593c37f",
+        "inputId": "input_67d3210e-db64-4231-aacf-9b721f056842",
+        "status": "stopped",
+        "nativeExecutionId": "input_67d3210e-db64-4231-aacf-9b721f056842"
+      }
+    },
+    {
+      "productInputId": "input_4d265602-dbc1-49c4-9b04-20433e85b8ee",
+      "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+      "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+      "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+      "text": "PR25_432_COLD_R3: Reply exactly COLD_432_OK.",
+      "status": "completed",
+      "requestedDelivery": "startNow",
+      "modelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "grok-4.6",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "nativeExecutionId": "input_4d265602-dbc1-49c4-9b04-20433e85b8ee",
+      "nativeInput": {
+        "id": "queue_input_4d265602-dbc1-49c4-9b04-20433e85b8ee",
+        "status": "promoted",
+        "admitted_sequence": 5,
+        "promoted_sequence": 5,
+        "promoted_message_id": "msg_mugeul6k_dc8ecab3-282e-42e8-b97f-1a93d1105435",
+        "sourceCommandId": "input_4d265602-dbc1-49c4-9b04-20433e85b8ee",
+        "requestedDelivery": "startNow"
+      }
+    },
+    {
+      "productInputId": "input_b78f0a2c-beed-447f-88d2-828a519f194a",
+      "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+      "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+      "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+      "text": "PR25_432_QUEUE_B: Reply exactly QUEUE_B_432_ONLY.",
+      "status": "completed",
+      "requestedDelivery": "queue",
+      "modelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "grok-4.6",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "nativeExecutionId": "input_b78f0a2c-beed-447f-88d2-828a519f194a",
+      "nativeInput": {
+        "id": "queue_input_b78f0a2c-beed-447f-88d2-828a519f194a",
+        "status": "promoted",
+        "admitted_sequence": 3,
+        "promoted_sequence": 3,
+        "promoted_message_id": "msg_mugeoesz_2df5dd84-ae23-4171-9af8-f5da6b66f87a",
+        "sourceCommandId": "input_b78f0a2c-beed-447f-88d2-828a519f194a",
+        "requestedDelivery": "startNow"
+      }
+    },
+    {
+      "productInputId": "input_42f46b32-446d-43a6-a461-b4b090bb1ab5",
+      "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+      "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+      "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+      "text": "PR25_432_QUEUE_A: Reply exactly QUEUE_A_432_ONLY.",
+      "status": "completed",
+      "requestedDelivery": "queue",
+      "modelSelection": {
+        "providerId": "opencode-go-responses",
+        "modelId": "grok-4.6",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      },
+      "nativeExecutionId": "input_42f46b32-446d-43a6-a461-b4b090bb1ab5",
+      "nativeInput": {
+        "id": "queue_input_42f46b32-446d-43a6-a461-b4b090bb1ab5",
+        "status": "promoted",
+        "admitted_sequence": 4,
+        "promoted_sequence": 4,
+        "promoted_message_id": "msg_mugeohkc_b812df95-f9e5-489e-a90e-ecc55d81f3c3",
+        "sourceCommandId": "input_42f46b32-446d-43a6-a461-b4b090bb1ab5",
+        "requestedDelivery": "startNow"
+      }
+    }
+  ],
+  "nativeTurnFacts": [
+    {
+      "type": "runtime/native_turn_started",
+      "inputId": "input_42317248-d139-4793-9d1e-fe1c16e9562a",
+      "turnId": "turn_48ba143f-6c38-4145-84c6-849c51a1b7aa",
+      "eventType": null,
+      "resultType": null,
+      "sequenceNumber": null
+    },
+    {
+      "type": "runtime/native_turn_terminal",
+      "inputId": "input_42317248-d139-4793-9d1e-fe1c16e9562a",
+      "turnId": "turn_48ba143f-6c38-4145-84c6-849c51a1b7aa",
+      "eventType": "turn_complete",
+      "resultType": "success",
+      "sequenceNumber": 20
+    },
+    {
+      "type": "runtime/native_turn_started",
+      "inputId": "input_2e9d4660-2c8c-4740-ae0d-74519886d9c4",
+      "turnId": "turn_0f1a9635-b8e2-456f-94a0-1c1d3e2d94d0",
+      "eventType": null,
+      "resultType": null,
+      "sequenceNumber": null
+    },
+    {
+      "type": "runtime/native_turn_terminal",
+      "inputId": "input_2e9d4660-2c8c-4740-ae0d-74519886d9c4",
+      "turnId": "turn_0f1a9635-b8e2-456f-94a0-1c1d3e2d94d0",
+      "eventType": "turn_complete",
+      "resultType": "success",
+      "sequenceNumber": 90
+    },
+    {
+      "type": "runtime/native_turn_started",
+      "inputId": "input_67d3210e-db64-4231-aacf-9b721f056842",
+      "turnId": "turn_edd81683-9d1b-4afb-8644-63b5a629d13a",
+      "eventType": null,
+      "resultType": null,
+      "sequenceNumber": null
+    },
+    {
+      "type": "runtime/native_turn_terminal",
+      "inputId": "input_67d3210e-db64-4231-aacf-9b721f056842",
+      "turnId": "turn_edd81683-9d1b-4afb-8644-63b5a629d13a",
+      "eventType": "turn_complete",
+      "resultType": "cancelled",
+      "sequenceNumber": 1239
+    },
+    {
+      "type": "runtime/native_turn_started",
+      "inputId": "input_b78f0a2c-beed-447f-88d2-828a519f194a",
+      "turnId": "turn_59114b36-f8c7-4e8e-b67b-507802aa277f",
+      "eventType": null,
+      "resultType": null,
+      "sequenceNumber": null
+    },
+    {
+      "type": "runtime/native_turn_terminal",
+      "inputId": "input_b78f0a2c-beed-447f-88d2-828a519f194a",
+      "turnId": "turn_59114b36-f8c7-4e8e-b67b-507802aa277f",
+      "eventType": "turn_complete",
+      "resultType": "success",
+      "sequenceNumber": 1284
+    },
+    {
+      "type": "runtime/native_turn_started",
+      "inputId": "input_42f46b32-446d-43a6-a461-b4b090bb1ab5",
+      "turnId": "turn_b043587c-00c1-4842-b98f-2952133340fb",
+      "eventType": null,
+      "resultType": null,
+      "sequenceNumber": null
+    },
+    {
+      "type": "runtime/native_turn_terminal",
+      "inputId": "input_42f46b32-446d-43a6-a461-b4b090bb1ab5",
+      "turnId": "turn_b043587c-00c1-4842-b98f-2952133340fb",
+      "eventType": "turn_complete",
+      "resultType": "success",
+      "sequenceNumber": 1325
+    },
+    {
+      "type": "runtime/native_turn_started",
+      "inputId": "input_4d265602-dbc1-49c4-9b04-20433e85b8ee",
+      "turnId": "turn_2ad72b34-af5d-4c3e-aaa3-2ac1efeedbbd",
+      "eventType": null,
+      "resultType": null,
+      "sequenceNumber": null
+    },
+    {
+      "type": "runtime/native_turn_terminal",
+      "inputId": "input_4d265602-dbc1-49c4-9b04-20433e85b8ee",
+      "turnId": "turn_2ad72b34-af5d-4c3e-aaa3-2ac1efeedbbd",
+      "eventType": "turn_complete",
+      "resultType": "success",
+      "sequenceNumber": 41
+    }
+  ],
+  "stopRequests": [
+    {
+      "id": "stop_8f3cb35e-a74c-4b9a-9081-bdc09902eef1",
+      "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+      "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+      "sessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+      "executionId": "execution_6aaeb536-a4d1-42af-abfc-c8902593c37f",
+      "requestedAt": 1790307192507,
+      "status": "confirmed",
+      "deliveryStatus": "delivered",
+      "deliveryEvidence": {
+        "source": "engine",
+        "evidenceId": "1b540a39-5d7d-4a36-b04c-8cad4e5d45e7"
+      },
+      "stopEvidence": {
+        "source": "engine",
+        "evidenceId": "599b0777-324b-4fd2-8949-0125afa53465"
+      },
+      "reason": "Engine confirmed execution stopped."
+    }
+  ],
+  "stoppedNativeUserMessage": {
+    "id": "msg_mugenti2_34da60d0-d317-4ed0-88a0-0597ed1152e1",
+    "turnId": "turn_edd81683-9d1b-4afb-8644-63b5a629d13a",
+    "providerHistoryDisposition": "withdrawn_after_stop",
+    "providerVisibility": "hidden",
+    "providerWithdrawalTurnId": "turn_edd81683-9d1b-4afb-8644-63b5a629d13a"
+  },
+  "nativeAnswers": [
+    {
+      "inputId": "input_42317248-d139-4793-9d1e-fe1c16e9562a",
+      "turnId": "turn_48ba143f-6c38-4145-84c6-849c51a1b7aa",
+      "nativeAssistantMessageId": "msg_mugempw2_ce280cbd-1a7c-41f0-9910-e09524e3812b",
+      "text": "R1_432_OK",
+      "textContainsSourceEnd": false
+    },
+    {
+      "inputId": "input_2e9d4660-2c8c-4740-ae0d-74519886d9c4",
+      "turnId": "turn_0f1a9635-b8e2-456f-94a0-1c1d3e2d94d0",
+      "nativeAssistantMessageId": "msg_mugen9of_f5fe2e19-59f7-433b-909a-423a892598d1",
+      "text": "R2_GROK_432_OK",
+      "textContainsSourceEnd": false
+    },
+    {
+      "inputId": "input_67d3210e-db64-4231-aacf-9b721f056842",
+      "turnId": "turn_edd81683-9d1b-4afb-8644-63b5a629d13a",
+      "nativeAssistantMessageId": "msg_mugenti9_0807ab4b-de0b-491b-8ee7-b95f60ba5418",
+      "text": "SOURCE_BEGIN_432\n1. TypeScript 的类型收窄会根据控制流把联合类型逐步收缩为更具体的成员。\n2. 使用 typeof 判断原始类型后，编译器会在对应分支中收窄变量类型。\n3…",
+      "textContainsSourceEnd": false
+    },
+    {
+      "inputId": "input_4d265602-dbc1-49c4-9b04-20433e85b8ee",
+      "turnId": "turn_2ad72b34-af5d-4c3e-aaa3-2ac1efeedbbd",
+      "nativeAssistantMessageId": "msg_mugeul6y_5e462c1b-6c03-46d8-bd12-8bc8123c0964",
+      "text": "COLD_432_OK",
+      "textContainsSourceEnd": false
+    },
+    {
+      "inputId": "input_b78f0a2c-beed-447f-88d2-828a519f194a",
+      "turnId": "turn_59114b36-f8c7-4e8e-b67b-507802aa277f",
+      "nativeAssistantMessageId": "msg_mugeoet2_fa938139-b654-4613-9c1f-501b551b85f1",
+      "text": "QUEUE_B_432_ONLY",
+      "textContainsSourceEnd": false
+    },
+    {
+      "inputId": "input_42f46b32-446d-43a6-a461-b4b090bb1ab5",
+      "turnId": "turn_b043587c-00c1-4842-b98f-2952133340fb",
+      "nativeAssistantMessageId": "msg_mugeohkh_64240db3-d783-4596-8895-3b81aca5ade3",
+      "text": "QUEUE_A_432_ONLY",
+      "textContainsSourceEnd": false
+    }
+  ]
+}

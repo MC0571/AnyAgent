@@ -15,7 +15,8 @@
   },
   "scripts": {
     "lint": "oxlint",
-    "lint:fix": "oxlint --fix"
+    "lint:fix": "oxlint --fix",
+    "test": "node --import tsx --import ./test/register-static-assets.mjs --test --test-concurrency=1 test/*.test.tsx"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "1.2.4",
@@ -87,6 +88,7 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
     "unified": "^11.0.5"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { IAnyAgentService } from "@zcode/services";
-import { WorkbenchCapabilityList } from "@/AnyAgentEngineWorkbenchParts.js";
+import { EngineCapabilityList } from "@/EngineUiParts.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 export function HarnessProviderPanel({
@@ -61,12 +61,15 @@ export function HarnessProviderPanel({
           <div className="mb-3 flex flex-wrap items-baseline gap-2">
             <h4 className="font-semibold text-foreground">{engine.engineId}</h4>
             <span className="text-ui-sm text-foreground-subtle">
-              Adapter {engine.adapterVersion} · Engine{" "}
+              Adapter{" "}
+              {engine.adapterVersion ??
+                intl.formatMessage({ id: "settings.modelProvider.harnessUnknownVersion" })}{" "}
+              · Engine{" "}
               {engine.engineVersion ??
                 intl.formatMessage({ id: "settings.modelProvider.harnessUnknownVersion" })}
             </span>
           </div>
-          <WorkbenchCapabilityList engine={engine} />
+          <EngineCapabilityList engine={engine} />
         </div>
       ))}
       {!engines?.length && !error ? (

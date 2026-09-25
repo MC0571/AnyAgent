@@ -1,0 +1,359 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "selected": [
+    {
+      "taskId": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "product": [
+        {
+          "kind": "execution",
+          "id": "execution_d5d568e7-c939-4ed6-88dd-5a9983fa9339",
+          "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+          "status": "completed",
+          "nativeExecutionId": "62256323-2857-4b4f-84f9-cdc496e33339"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_149264bb-c865-4643-b3d6-19adabff9886",
+          "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+          "status": "completed",
+          "nativeExecutionId": "eef28755-7009-43a1-bcc7-b41c676f0fc2"
+        },
+        {
+          "kind": "input",
+          "id": "input_abac9653-6718-481b-86e5-9274db322942",
+          "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+          "status": "completed",
+          "text": "PR25_M1_6F84500_R1：请先调用 Read 工具读取当前项目 README.md，随后逐行写出 40 条简短 TypeScript 类型收窄建议，末尾加 END_M1_6F84500。",
+          "requestedDelivery": "startNow",
+          "submissionConfig": {
+            "mode": "build",
+            "planEnabled": false,
+            "modelSelection": {
+              "providerId": "opencode-go-responses",
+              "modelId": "gpt-5.6-luna",
+              "options": {
+                "reasoningLevel": "max"
+              }
+            }
+          },
+          "nativeExecutionId": "62256323-2857-4b4f-84f9-cdc496e33339"
+        },
+        {
+          "kind": "input",
+          "id": "input_6ba7f02e-309a-4b13-901b-11ab76b02e60",
+          "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+          "status": "cancelled",
+          "text": "PR25_M1_6F84500_QUEUE_EDIT：请只回复 ORIGINAL_QUEUE。",
+          "requestedDelivery": "queue",
+          "submissionConfig": {
+            "mode": "build",
+            "planEnabled": false,
+            "modelSelection": {
+              "providerId": "opencode-go-responses",
+              "modelId": "gpt-5.6-luna",
+              "options": {
+                "reasoningLevel": "max"
+              }
+            }
+          },
+          "nativeExecutionId": null
+        },
+        {
+          "kind": "input",
+          "id": "input_ac8aecd9-7501-438b-a54e-8990116ad7e5",
+          "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+          "status": "completed",
+          "text": "PR25_B0_RECOVERED_R2：请只回复 B0_RECOVERED_R2。",
+          "requestedDelivery": "startNow",
+          "submissionConfig": {
+            "mode": "build",
+            "planEnabled": false,
+            "modelSelection": {
+              "providerId": "opencode-go-responses",
+              "modelId": "grok-4.6",
+              "options": {
+                "reasoningLevel": "xhigh"
+              }
+            }
+          },
+          "nativeExecutionId": "eef28755-7009-43a1-bcc7-b41c676f0fc2"
+        },
+        {
+          "kind": "participant",
+          "id": "participant_5ad5d55b-3205-4785-ad95-4a1e6864272f",
+          "session_id": null,
+          "status": "active"
+        },
+        {
+          "kind": "session",
+          "id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+          "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+          "status": "active",
+          "nativeSessionId": "sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a"
+        },
+        {
+          "kind": "task",
+          "id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+          "session_id": null,
+          "status": "active"
+        }
+      ],
+      "nativeSessionId": "sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a",
+      "nativeInputs": [
+        {
+          "id": "queue_62256323-2857-4b4f-84f9-cdc496e33339",
+          "session_id": "sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a",
+          "kind": "sendText",
+          "delivery": "startNow",
+          "admitted_sequence": 0,
+          "promoted_sequence": 0,
+          "status": "promoted"
+        },
+        {
+          "id": "queue_eef28755-7009-43a1-bcc7-b41c676f0fc2",
+          "session_id": "sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a",
+          "kind": "sendText",
+          "delivery": "startNow",
+          "admitted_sequence": 1,
+          "promoted_sequence": 1,
+          "status": "promoted"
+        }
+      ]
+    },
+    {
+      "taskId": "task_867ea3df-8434-4d23-b3a3-d9e55369cae1",
+      "product": [
+        {
+          "kind": "execution",
+          "id": "execution_4f169316-0cec-4be5-9188-f73fc500795f",
+          "session_id": "session_1ffc0a8b-d211-4563-9910-1878aa61ed3e",
+          "status": "completed",
+          "nativeExecutionId": "2ce0d3a8-cee0-45cc-835d-292ddaeab529"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_85d28212-b6c1-442b-b3cc-fe3a3d6c5563",
+          "session_id": "session_1ffc0a8b-d211-4563-9910-1878aa61ed3e",
+          "status": "completed",
+          "nativeExecutionId": "856f5d02-858b-43b0-8ae1-869b8c8ccdf7"
+        },
+        {
+          "kind": "input",
+          "id": "input_279b1ae6-f548-4822-920b-790f4d125c66",
+          "session_id": "session_1ffc0a8b-d211-4563-9910-1878aa61ed3e",
+          "status": "completed",
+          "text": "PR25_B0_QUEUE_SOURCE：先用 Read 工具读取当前项目 README.md，再输出 60 条中文 TypeScript 类型收窄建议，每条一整句并单独一行，最后输出 END_B0_QUEUE_SOURCE。",
+          "requestedDelivery": "startNow",
+          "submissionConfig": {
+            "mode": "build",
+            "planEnabled": false,
+            "modelSelection": {
+              "providerId": "opencode-go-responses",
+              "modelId": "gpt-5.6-luna",
+              "options": {
+                "reasoningLevel": "max"
+              }
+            }
+          },
+          "nativeExecutionId": "2ce0d3a8-cee0-45cc-835d-292ddaeab529"
+        },
+        {
+          "kind": "input",
+          "id": "input_09eb3e7a-0474-4ee3-bb99-166824922dea",
+          "session_id": "session_1ffc0a8b-d211-4563-9910-1878aa61ed3e",
+          "status": "cancelled",
+          "text": "PR25_B0_QUEUE_EDIT：请只回复 QUEUE_UNEDITED_B0。",
+          "requestedDelivery": "queue",
+          "submissionConfig": {
+            "mode": "build",
+            "planEnabled": false,
+            "modelSelection": {
+              "providerId": "opencode-go-responses",
+              "modelId": "gpt-5.6-luna",
+              "options": {
+                "reasoningLevel": "max"
+              }
+            }
+          },
+          "nativeExecutionId": null
+        },
+        {
+          "kind": "input",
+          "id": "input_068cbdd2-ae5c-45a4-bf30-db5b31501997",
+          "session_id": "session_1ffc0a8b-d211-4563-9910-1878aa61ed3e",
+          "status": "completed",
+          "text": "PR25_B0_QUEUE_EDITED：请只回复 QUEUE_EDITED_B0。",
+          "requestedDelivery": "startNow",
+          "submissionConfig": {
+            "mode": "build",
+            "planEnabled": false,
+            "modelSelection": {
+              "providerId": "opencode-go-responses",
+              "modelId": "gpt-5.6-luna",
+              "options": {
+                "reasoningLevel": "max"
+              }
+            }
+          },
+          "nativeExecutionId": "856f5d02-858b-43b0-8ae1-869b8c8ccdf7"
+        },
+        {
+          "kind": "participant",
+          "id": "participant_50a9e835-1055-4a16-b5fb-6fc82a1b2f70",
+          "session_id": null,
+          "status": "active"
+        },
+        {
+          "kind": "session",
+          "id": "session_1ffc0a8b-d211-4563-9910-1878aa61ed3e",
+          "session_id": "session_1ffc0a8b-d211-4563-9910-1878aa61ed3e",
+          "status": "active",
+          "nativeSessionId": "sess_1f10eac0-3f9a-4c46-aaa5-d9344ac59ed0"
+        },
+        {
+          "kind": "task",
+          "id": "task_867ea3df-8434-4d23-b3a3-d9e55369cae1",
+          "session_id": null,
+          "status": "active"
+        }
+      ],
+      "nativeSessionId": "sess_1f10eac0-3f9a-4c46-aaa5-d9344ac59ed0",
+      "nativeInputs": [
+        {
+          "id": "queue_2ce0d3a8-cee0-45cc-835d-292ddaeab529",
+          "session_id": "sess_1f10eac0-3f9a-4c46-aaa5-d9344ac59ed0",
+          "kind": "sendText",
+          "delivery": "startNow",
+          "admitted_sequence": 0,
+          "promoted_sequence": 0,
+          "status": "promoted"
+        },
+        {
+          "id": "queue_856f5d02-858b-43b0-8ae1-869b8c8ccdf7",
+          "session_id": "sess_1f10eac0-3f9a-4c46-aaa5-d9344ac59ed0",
+          "kind": "sendText",
+          "delivery": "startNow",
+          "admitted_sequence": 1,
+          "promoted_sequence": 1,
+          "status": "promoted"
+        }
+      ]
+    },
+    {
+      "taskId": "task_b79ff6f8-9527-487c-bcda-f7a8403b9d5d",
+      "product": [
+        {
+          "kind": "execution",
+          "id": "execution_1bad0c05-c349-453e-ae76-081b0e6baf5c",
+          "session_id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "status": "completed",
+          "nativeExecutionId": "fake-execution-1"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_f25d403d-aac6-4b24-8ea5-64b13fa3e9c1",
+          "session_id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "status": "completed",
+          "nativeExecutionId": "fake-execution-2"
+        },
+        {
+          "kind": "execution",
+          "id": "execution_f2ef382c-f0ec-4854-860a-a3c0b4f76796",
+          "session_id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "status": "completed",
+          "nativeExecutionId": "fake-execution-4"
+        },
+        {
+          "kind": "input",
+          "id": "input_27b87951-c6e9-4f64-ba1a-52c850ea8033",
+          "session_id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "status": "completed",
+          "text": "FAKE_B0_A_R1：第一轮，请返回分片和工具标记。",
+          "requestedDelivery": "startNow",
+          "nativeExecutionId": "fake-execution-1"
+        },
+        {
+          "kind": "input",
+          "id": "input_23eebaf4-a30e-4f61-887a-e0abcdb23fd6",
+          "session_id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "status": "completed",
+          "text": "FAKE_B0_A_R2：第二轮，保留 A Task。",
+          "requestedDelivery": "startNow",
+          "nativeExecutionId": "fake-execution-2"
+        },
+        {
+          "kind": "input",
+          "id": "input_43ca060d-9ae8-4b65-8012-7a9381ddfda1",
+          "session_id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "status": "completed",
+          "text": "FAKE_B0_A_R3：从 B 返回 A 后第三轮。",
+          "requestedDelivery": "startNow",
+          "nativeExecutionId": "fake-execution-4"
+        },
+        {
+          "kind": "participant",
+          "id": "participant_e3b5e28c-7e50-4e36-8ad0-fa25472ea0e3",
+          "session_id": null,
+          "status": "active"
+        },
+        {
+          "kind": "session",
+          "id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "session_id": "session_413e4a75-0a1d-4198-93e0-d4cad611622d",
+          "status": "active",
+          "nativeSessionId": "fake-session-1"
+        },
+        {
+          "kind": "task",
+          "id": "task_b79ff6f8-9527-487c-bcda-f7a8403b9d5d",
+          "session_id": null,
+          "status": "active"
+        }
+      ],
+      "nativeSessionId": "fake-session-1",
+      "nativeInputs": []
+    },
+    {
+      "taskId": "task_00f83a03-51d8-47b3-a55a-04132eb75cd8",
+      "product": [
+        {
+          "kind": "execution",
+          "id": "execution_eb8db52c-0475-4b85-9d12-0dbc7106778d",
+          "session_id": "session_1db76418-954c-48ab-adcb-088e150fca98",
+          "status": "completed",
+          "nativeExecutionId": "fake-execution-3"
+        },
+        {
+          "kind": "input",
+          "id": "input_3a0095a5-32c0-49f3-8dc5-7231ce019b14",
+          "session_id": "session_1db76418-954c-48ab-adcb-088e150fca98",
+          "status": "completed",
+          "text": "FAKE_B0_B_R1：独立 Task B。",
+          "requestedDelivery": "startNow",
+          "nativeExecutionId": "fake-execution-3"
+        },
+        {
+          "kind": "participant",
+          "id": "participant_afd5fdcf-8ca7-4498-aa4a-13f24477f4e8",
+          "session_id": null,
+          "status": "active"
+        },
+        {
+          "kind": "session",
+          "id": "session_1db76418-954c-48ab-adcb-088e150fca98",
+          "session_id": "session_1db76418-954c-48ab-adcb-088e150fca98",
+          "status": "active",
+          "nativeSessionId": "fake-session-2"
+        },
+        {
+          "kind": "task",
+          "id": "task_00f83a03-51d8-47b3-a55a-04132eb75cd8",
+          "session_id": null,
+          "status": "active"
+        }
+      ],
+      "nativeSessionId": "fake-session-2",
+      "nativeInputs": []
+    }
+  ]
+}

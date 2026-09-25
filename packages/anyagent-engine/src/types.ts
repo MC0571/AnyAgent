@@ -1,3 +1,19 @@
+import type {
+  EngineFileChanges,
+  EngineFileRewindPreview,
+  EngineFileRewindReceipt,
+} from "./file-workspace.js";
+import type {
+  EngineExecutionReconciliation,
+  EngineInputReconciliation,
+} from "./execution-reconciliation.js";
+export type * from "./execution-reconciliation.js";
+export type {
+  EngineFileChanges,
+  EngineFileRewindPreview,
+  EngineFileRewindReceipt,
+} from "./file-workspace.js";
+
 export type CapabilitySupport = "supported" | "unsupported" | "unknown";
 
 export type CapabilityAvailability =
@@ -14,15 +30,21 @@ export interface CapabilityStatus {
 
 export type EngineCapability =
   | "session.create"
+  | "session.resume"
+  | "session.fork"
+  | "session.compact"
   | "session.close"
   | "execution.run"
+  | "execution.revise"
   | "execution.interrupt"
   | "execution.reconcile"
   | "events.stream"
   | "events.tool"
   | "events.file"
+  | "workspace.file-rewind"
   | "approval.respond"
-  | "user-input.respond";
+  | "user-input.respond"
+  | "assistant.feedback";
 
 export interface EngineCapabilitySnapshot {
   /** Runtime adapter identifier; do not use as a persisted product identity. */
@@ -59,10 +81,17 @@ export interface EngineEvidence {
 
 export type EngineOperation =
   | "session.create"
+  | "session.resume"
+  | "session.fork"
+  | "session.compact"
   | "session.close"
   | "execution.run"
+  | "execution.revise"
   | "execution.interrupt"
-  | "approval.respond";
+  | "execution.reconcile"
+  | "approval.respond"
+  | "assistant.feedback"
+  | "workspace.file-rewind";
 
 export type EngineFailureKind =
   | "unsupported"
@@ -112,11 +141,50 @@ export interface EngineApprovalOption {
   readonly id: string;
   readonly label: string;
   readonly decision: "approve" | "reject" | "other";
+  /** This option requires a non-empty user feedback string to be meaningful. */
+  readonly requiresFeedback?: boolean;
+  /** Engine-owned option semantics needed by a richer approval renderer. */
+  readonly presentation?: EngineApprovalOptionPresentation;
+}
+
+/** JSON-only display details; command replies still use the Host-owned option ID. */
+export interface EngineApprovalOptionPresentation {
+  readonly kind: string;
+  readonly description?: string;
+  readonly response?: EngineJsonValue;
+}
+
+/** Generic preview metadata associated with the original approval request. */
+export interface EngineApprovalPresentation {
+  readonly toolCallId?: string;
+  readonly input?: EngineJsonValue;
+  readonly riskLevel?: "low" | "medium" | "high" | "critical";
+  readonly origin?: EngineJsonValue;
 }
 
 export interface EngineUserInputOption {
   readonly id: string;
   readonly label: string;
+}
+
+export type EngineUserInputAnswer = string | EngineJsonObject;
+
+/** A generic question form supplied by the Engine for a user-input request. */
+export interface EngineUserInputQuestion {
+  readonly question: string;
+  readonly header: string;
+  readonly options: readonly {
+    readonly value: string;
+    readonly label: string;
+    readonly description?: string;
+  }[];
+  readonly multiSelect?: boolean;
+}
+
+/** Display-only, JSON-safe user-input structure; native Engine SDK types stay in its Adapter. */
+export interface EngineUserInputPresentation {
+  readonly questions: readonly EngineUserInputQuestion[];
+  readonly origin?: EngineJsonValue;
 }
 
 export type EngineEventPayload =
@@ -131,6 +199,9 @@ export type EngineEventPayload =
   | {
       readonly type: "message.delta";
       readonly text: string;
+      /** Source identities, when the Engine exposes them; absent identities stay unknown. */
+      readonly messageId?: string;
+      readonly blockId?: string;
     }
   | {
       readonly type: "tool.started";
@@ -141,12 +212,16 @@ export type EngineEventPayload =
   | {
       readonly type: "tool.completed";
       readonly toolCallId: string;
+      readonly name?: string;
+      readonly input?: unknown;
       readonly result?: unknown;
       readonly sideEffects: SideEffectKnowledge;
     }
   | {
       readonly type: "tool.failed";
       readonly toolCallId: string;
+      readonly name?: string;
+      readonly input?: unknown;
       readonly failure: EngineFailure;
     }
   | {
@@ -161,6 +236,7 @@ export type EngineEventPayload =
       readonly operation: string;
       readonly scope?: string;
       readonly options: readonly EngineApprovalOption[];
+      readonly presentation?: EngineApprovalPresentation;
       readonly expiresAt: number | null;
     }
   | {
@@ -183,12 +259,21 @@ export type EngineEventPayload =
       readonly prompt: string;
       readonly inputKind: "text" | "choice" | "form";
       readonly options?: readonly EngineUserInputOption[];
+      readonly presentation?: EngineUserInputPresentation;
       readonly expiresAt: number | null;
     }
   | {
       readonly type: "user-input.response";
       readonly requestId: EngineUserInputRef;
-      readonly status: "forwarded" | "expired" | "already-answered" | "unsupported" | "unknown";
+      readonly status:
+        | "forwarded"
+        | "expired"
+        | "already-answered"
+        | "unsupported"
+        | "unknown"
+        | "rejected";
+      /** Native answer evidence, when the source includes the accepted response payload. */
+      readonly response?: EngineJsonObject;
       readonly evidence?: EngineEvidence;
     }
   | {
@@ -228,6 +313,28 @@ export interface EngineRun {
   readonly events: AsyncIterable<EngineEvent>;
 }
 
+/** JSON-only adapter input configuration; each Adapter owns its supported keys and semantics. */
+export type EngineJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly EngineJsonValue[]
+  | { readonly [key: string]: EngineJsonValue };
+
+export type EngineJsonObject = Readonly<Record<string, EngineJsonValue>>;
+
+/** A Host-resolved attachment locator. Renderer supplied paths are never valid here. */
+export interface EngineAttachment {
+  /** Opaque Host-issued attachment identity used to retain the input association. */
+  readonly id: string;
+  /** Adapter-consumable locator resolved by the Host for this exact Task and Session. */
+  readonly locator: string;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+}
+
 export interface EngineCommandReceipt {
   readonly status:
     | "requested"
@@ -250,22 +357,123 @@ export interface EngineUserInputReceipt {
   readonly evidence?: EngineEvidence;
 }
 
+export interface EngineAssistantFeedbackReceipt {
+  readonly status: "updated" | "unchanged" | "unsupported" | "temporarily-unavailable" | "unknown";
+  readonly evidence?: EngineEvidence;
+  readonly reason?: string;
+}
+
+export interface EngineCompactReceipt {
+  readonly status: "completed" | "skipped" | "failed" | "cancelled" | "unknown";
+  readonly evidence?: EngineEvidence;
+  readonly reason?: string;
+}
+
 export interface EngineAdapter {
   getCapabilities(): EngineCapabilitySnapshot;
   /** Recheck conditional availability when the adapter can actively probe it. */
   refreshCapabilities?(): Promise<EngineCapabilitySnapshot>;
   createSession(): Promise<EngineSessionRef>;
-  run(input: { readonly session: EngineSessionRef; readonly input: string }): Promise<EngineRun>;
+  /** Reattach to an existing native Session; this must never create or rebind a Session. */
+  resumeSession?(input: {
+    readonly session: EngineSessionRef;
+    /** Synchronous Host qualification immediately before native reattachment. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineSessionRef>;
+  /** Query native state for one persisted Execution without sending its Input again. */
+  reconcileExecution?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+    /** Synchronous Host qualification immediately before the native read. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineExecutionReconciliation>;
+  /** Query a possibly delivered Input by its persisted command ID without resending it. */
+  reconcileInput?(input: {
+    readonly session: EngineSessionRef;
+    /** The stable product command ID supplied to run for this Input. */
+    readonly commandId: string;
+    /** Synchronous Host qualification immediately before the native read. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineInputReconciliation>;
+  /** Create a distinct native child Session from a proven source Execution. */
+  forkSession?(input: {
+    readonly session: EngineSessionRef;
+    readonly sourceExecutionId: EngineExecutionRef;
+    /** Host-persisted idempotency key; retries must reuse this value. */
+    readonly commandId: string;
+    /** Synchronous Host eligibility check immediately before native dispatch. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineSessionRef>;
+  /** Compact the native Session without creating a product Input or Execution. */
+  compactSession?(input: {
+    readonly session: EngineSessionRef;
+    /** Product-owned, persisted idempotency key; retries must reuse this value. */
+    readonly commandId: string;
+    /** Optional native summary instructions; the Adapter maps them to its supported command path. */
+    readonly instructions?: string;
+    /** Synchronous Host eligibility check immediately before native dispatch. */
+    readonly beforeDispatch?: () => void;
+    /** Command acceptance is evidence, never compaction completion. */
+    readonly onAccepted?: (evidence: EngineEvidence) => void;
+  }): Promise<EngineCompactReceipt>;
+  run(input: {
+    readonly session: EngineSessionRef;
+    readonly input: string;
+    /** Stable product command identity for a persisted Input, including its first dispatch. */
+    readonly commandId?: string;
+    readonly submissionConfig?: EngineJsonObject;
+    readonly attachments?: readonly EngineAttachment[];
+    /** Synchronous Host eligibility check immediately before native dispatch. */
+    readonly beforeDispatch?: () => void;
+    /** One product-owned replacement turn; the Adapter resolves its native target. */
+    readonly revision?: {
+      readonly kind: "edit" | "retry";
+      readonly sourceExecutionId: EngineExecutionRef;
+      readonly commandId: string;
+      /** Source metadata is checked against native rows before selecting retained indices. */
+      readonly sourceAttachments?: readonly Omit<EngineAttachment, "locator" | "id">[];
+      readonly retainedAttachmentIndices?: readonly number[];
+    };
+  }): Promise<EngineRun>;
   replyToApproval(input: {
     readonly session: EngineSessionRef;
     readonly approvalId: EngineApprovalRef;
     readonly optionId: string;
+    readonly feedback?: string;
+    /** Recheck Host eligibility immediately before forwarding the native answer. */
+    readonly beforeDispatch?: () => void;
   }): Promise<EngineApprovalReceipt>;
   replyToUserInput(input: {
     readonly session: EngineSessionRef;
     readonly requestId: EngineUserInputRef;
-    readonly response: unknown;
+    readonly response: EngineUserInputAnswer;
+    /** Recheck Host eligibility immediately before forwarding the native answer. */
+    readonly beforeDispatch?: () => void;
   }): Promise<EngineUserInputReceipt>;
+  /** Set feedback on a source assistant message. Runtime must qualify its Execution first. */
+  setAssistantFeedback?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+    readonly messageId: string;
+    readonly feedback: "like" | "dislike" | null;
+    /** Revalidate Host ownership, authorization and current capability after Adapter I/O. */
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineAssistantFeedbackReceipt>;
+  getFileChanges?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+  }): Promise<EngineFileChanges | null>;
+  previewFileRewind?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+  }): Promise<EngineFileRewindPreview>;
+  applyFileRewind?(input: {
+    readonly session: EngineSessionRef;
+    readonly executionId: EngineExecutionRef;
+    readonly expectedPreview: EngineFileRewindPreview;
+    readonly commandId: string;
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineFileRewindReceipt>;
   interrupt(input: {
     readonly session: EngineSessionRef;
     readonly executionId: EngineExecutionRef;

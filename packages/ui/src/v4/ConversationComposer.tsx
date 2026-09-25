@@ -41,6 +41,9 @@ import {
   TID_V4_ATTACHMENT_UPLOAD_RETRY,
   TID_V4_STOP,
   testId,
+  getZCodeAgentModeSelectOptions,
+  ZCODE_AGENT_PROVIDER,
+  type ZCodeConfigOption,
   type PlanIdentitySnapshot,
   type ZCodeProvider,
 } from "@zcode/shared";
@@ -51,6 +54,7 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import {
   ArrowUpIcon,
+  BrainIcon,
   ClipboardPenLineIcon,
   InfoIcon,
   RotateCcwIcon,
@@ -87,6 +91,7 @@ import {
 } from "@/ChatMediaAttachmentPreviewDialog.js";
 import type { LexicalChatInputHandle } from "@/LexicalChatInput.js";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
+import { ConfigSelect } from "@/chat-input-toolbar/display.js";
 import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragState.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { advanceComposerDraftRevision } from "@/v4/composer/composerDraftRevision.js";
@@ -171,6 +176,29 @@ import { buildV4ConversationPromptTelemetryExtraDetail } from "@/v4/telemetry/co
 import { resolveAttachableShareContext } from "@/lib/conversationShareContext.js";
 
 const MODEL_SELECTION_LOADING_STATE: ModelSelectionState = { status: "loading" };
+const harnessModeOptions = getZCodeAgentModeSelectOptions();
+
+function harnessUnavailableModeOption(unavailableValue: string): ZCodeConfigOption {
+  return {
+    id: "mode",
+    name: "Mode",
+    category: "mode",
+    type: "select",
+    currentValue: unavailableValue,
+    options: harnessModeOptions,
+  };
+}
+
+function harnessUnavailableThoughtOption(unavailableValue: string): ZCodeConfigOption {
+  return {
+    id: "thought_level",
+    name: "Thought Level",
+    category: "thought_level",
+    type: "select",
+    currentValue: "harness-unmapped-thought-level",
+    options: [{ value: "harness-unmapped-thought-level", name: unavailableValue }],
+  };
+}
 
 export interface ConversationComposerSendOptions {
   /** 点击发送时复制的配置；null 表示未完成选择，Host 不得从 Session 补齐。 */
@@ -400,6 +428,15 @@ interface ConversationComposerProps {
   modelSelectionState?: ModelSelectionState;
   /** Model Selection 首次读取失败后的显式重试入口。 */
   modelSelectionReload?: () => void;
+  harnesses?: readonly {
+    engineId: string;
+    label: string;
+    selectable: boolean;
+    reason?: string;
+  }[];
+  selectedHarnessId?: string | null;
+  onSelectHarness?: (engineId: string | null) => void;
+  onRefreshHarnesses?: () => void;
   /** 草稿态使用预热 session 作附件 transaction 载体。 */
   attachmentSessionId?: string | null;
   attachmentPut: AttachmentPutFn;
@@ -415,6 +452,7 @@ interface ConversationComposerProps {
     text: string,
     options?: ConversationComposerSendOptions,
   ) => Promise<ConversationComposerSendResult | void>;
+  onSendSuccess?: () => void;
   /** 把当前输入文本上抛给父组件（editUserQuery 用 composer 文本作 newText）。 */
   onTextChange?: (text: string) => void;
   /** queue 撤回 admission 读取的完整 composer 占用态；附件包含上传中状态。 */
@@ -504,6 +542,10 @@ function ConversationComposerImpl({
   modelSelectionView = null,
   modelSelectionState = MODEL_SELECTION_LOADING_STATE,
   modelSelectionReload,
+  harnesses,
+  selectedHarnessId,
+  onSelectHarness,
+  onRefreshHarnesses,
   attachmentSessionId = null,
   attachmentPut,
   onRuntimeRestart,
@@ -512,6 +554,7 @@ function ConversationComposerImpl({
   telemetryVisible = true,
   readPlanIdentitySnapshot,
   onSendText,
+  onSendSuccess,
   onTextChange,
   onDraftStateChange,
   onStop,
@@ -629,13 +672,14 @@ function ConversationComposerImpl({
     onRuntimeRestart,
     onRuntimeLifecycle,
     disabled,
-    listenAddToChatEvents: listenAddToChatEvents && !disabled,
+    localPathOnly: Boolean(selectedHarnessId),
+    listenAddToChatEvents: listenAddToChatEvents && !disabled && !selectedHarnessId,
   });
   // 对齐旧版 useChatComposer：窗口级 dragover 会在指针进入 ChatView 前预先点亮
   // 整个聊天区与桌面草稿标题栏；workspace payload 的文案优先于系统附件。
   const { externalFileDragging, workspaceFileDragging } = usePromptEditorDragState({
     enableExternalFileDrop: true,
-    enableWorkspaceFileDrop: true,
+    enableWorkspaceFileDrop: !selectedHarnessId,
   });
   const handleConversationDragOver = useCallback(
     (event: DragEvent<HTMLElement>) => {
@@ -655,6 +699,7 @@ function ConversationComposerImpl({
       if (workspaceFilePayload) {
         // 文件树 payload 与 OS File[] 语义不同：只插入 mention，绝不能进入上传队列。
         event.preventDefault();
+        if (selectedHarnessId) return;
         attachmentsApi.handleDropComposer(event);
         appendWorkspaceFileMentionToComposer({
           inputApiRef,
@@ -668,7 +713,13 @@ function ConversationComposerImpl({
       }
       attachmentsApi.handleDropComposer(event);
     },
-    [attachmentsApi.handleDropComposer, updateText, workspaceIdentity, workspacePath],
+    [
+      attachmentsApi.handleDropComposer,
+      selectedHarnessId,
+      updateText,
+      workspaceIdentity,
+      workspacePath,
+    ],
   );
   const conversationDragKind = workspaceFileDragging
     ? "workspace"
@@ -717,7 +768,7 @@ function ConversationComposerImpl({
     workspaceIdentity,
     // queue 撤回等待 ACK 时 composer 处于 disabled；此时也要阻止全局 add-to-chat
     // 写入网页上下文，避免权威删除成功后撞上 ACK 窗口内的新草稿。
-    listenAddToChatEvents: listenAddToChatEvents && !disabled,
+    listenAddToChatEvents: listenAddToChatEvents && !disabled && !selectedHarnessId,
     scopeId: draftScopeId,
   });
   const {
@@ -729,7 +780,7 @@ function ConversationComposerImpl({
     workspacePath,
     workspaceIdentity,
     remoteSessionId,
-    listenAddToChatEvents: listenAddToChatEvents && !disabled,
+    listenAddToChatEvents: listenAddToChatEvents && !disabled && !selectedHarnessId,
     scopeId: draftScopeId,
   });
   const openPptxElementReference = useOpenPptxElementReference({
@@ -866,7 +917,7 @@ function ConversationComposerImpl({
     getContexts: getCodeCommentContexts,
   } = useCodeCommentContexts({
     // queue 撤回等待 ACK 时 composer 处于 disabled；与网页上下文保持同一写入门禁。
-    listenAddToChatEvents: listenAddToChatEvents && !disabled,
+    listenAddToChatEvents: listenAddToChatEvents && !disabled && !selectedHarnessId,
     onContextRemoved: handleCodeCommentRemoved,
     requestFocus: requestComposerFocus,
     scopeKey: `${workspaceKey}\0${draftScopeId}`,
@@ -1417,6 +1468,7 @@ function ConversationComposerImpl({
         // 避免首发 promote 丢失或误清 promotion 后的新 scope。
         finalizeSubmittedDraft();
         sendAction.complete({ resultSource: "authority_ack", admissionResult: "accepted" });
+        onSendSuccess?.();
       } catch (error) {
         rollbackPromptHistory();
         restoreSubmittedDraft();
@@ -1448,6 +1500,7 @@ function ConversationComposerImpl({
       telemetryDraftConfig,
       modelSelectionView,
       onSendText,
+      onSendSuccess,
       pendingShareContext,
       provider,
       readPlanIdentitySnapshot,
@@ -1572,7 +1625,7 @@ function ConversationComposerImpl({
 
   // ── 「加入对话」全局事件（workspace file tree 右键/按钮）→ mention 插入 ──
   useEffect(() => {
-    if (!listenAddToChatEvents || typeof window === "undefined") {
+    if (!listenAddToChatEvents || selectedHarnessId || typeof window === "undefined") {
       return;
     }
     const handleWorkspaceFileAddToChat = (event: Event) => {
@@ -1593,16 +1646,18 @@ function ConversationComposerImpl({
     return () => {
       window.removeEventListener(WORKSPACE_FILE_ADD_TO_CHAT_EVENT, handleWorkspaceFileAddToChat);
     };
-  }, [listenAddToChatEvents, updateText, workspaceIdentity, workspacePath]);
+  }, [listenAddToChatEvents, selectedHarnessId, updateText, workspaceIdentity, workspacePath]);
 
   // 动态 placeholder（旧 chatViewPlaceholder 语义）：无历史 → newTask；
   // 有历史空闲 → followUpAsk；有历史处理中 → followUpQueue。
   const placeholder = intl.formatMessage({
-    id: resolveChatPlaceholderKey({
-      hasHistoryMessages: (snapshot?.rows.totalCount ?? 0) > 0,
-      isTaskProcessing: canStop,
-      compactNewTask: false,
-    }),
+    id: selectedHarnessId
+      ? "chat.placeholder.newTaskMobile"
+      : resolveChatPlaceholderKey({
+          hasHistoryMessages: (snapshot?.rows.totalCount ?? 0) > 0,
+          isTaskProcessing: canStop,
+          compactNewTask: false,
+        }),
   });
   const sendTooltipTitle = intl.formatMessage({
     id: mode === "enqueue" ? "chat.queue.enqueue" : "chat.send",
@@ -2021,6 +2076,9 @@ function ConversationComposerImpl({
   // 避免每个 token 批次都重建 Tooltip/Select 子树。
   const composerUsage = snapshot?.usage ?? null;
   const composerPhase = snapshot?.control.phase ?? null;
+  const harnessUnavailableValue = intl.formatMessage({
+    id: "engine.composer.unavailableValue",
+  });
   const handleSelectModelTrace = useCallback(
     (nextProvider: string, nextModel: string, sourceModel: ModelSelectionSource | null) =>
       runUserAction({
@@ -2045,6 +2103,10 @@ function ConversationComposerImpl({
             modelSelectionView={modelSelectionView}
             modelSelectionState={modelSelectionState}
             modelSelectionReload={modelSelectionReload}
+            harnesses={harnesses}
+            selectedHarnessId={selectedHarnessId}
+            onSelectHarness={onSelectHarness}
+            onRefreshHarnesses={onRefreshHarnesses}
             sessionId={sessionId ?? null}
             phase={composerPhase}
             provider={provider}
@@ -2060,6 +2122,20 @@ function ConversationComposerImpl({
             onRecoverCustomModelSelection={onRecoverCustomModelSelection}
             onSendCompressionCommand={onSendCompressionCommand}
           />
+          {selectedHarnessId && selectedHarnessId !== "zcode" ? (
+            <ConfigSelect
+              option={harnessUnavailableThoughtOption(harnessUnavailableValue)}
+              onValueChange={() => {}}
+              disabled
+              tooltipTitle={intl.formatMessage({ id: "engine.composer.thoughtUnavailable" })}
+              triggerVariant="ghost"
+              triggerSize="default"
+              leadingIcon={BrainIcon}
+              triggerClassName="gap-1 rounded-lg px-1.5 py-1.5 text-ui-base"
+              labelVisibilityClassName="hidden @xl/composer:inline-flex"
+              restoreFocusSelector={null}
+            />
+          ) : null}
         </span>
         {showStopControl ? (
           <ControlHintTooltip title={stopTooltipTitle} shortcut="Esc">
@@ -2106,12 +2182,17 @@ function ConversationComposerImpl({
       disabled,
       draftConfig,
       draftMode,
+      intl,
       handleStopClick,
       handleSendButtonClick,
       handleConfigPickerOpenChange,
       mode,
       handleSelectModelTrace,
       modelSelectionReload,
+      harnesses,
+      selectedHarnessId,
+      onSelectHarness,
+      onRefreshHarnesses,
       modelSelectionState,
       modelSelectionView,
       onSelectThought,
@@ -2137,8 +2218,8 @@ function ConversationComposerImpl({
   // 左下：模式选择 + CUA 入口 + 当前 session 后台任务入口。followupMode 由 app 设置页同步到 CLI，
   // 不在 composer 暴露局部开关；后台入口只消费同一 snapshot，不维护第二份任务状态。
   const leadingActionsNode = useMemo(
-    () => (
-      <>
+    () =>
+      selectedHarnessId === "zcode" ? (
         <V4ComposerModeSwitch
           workspacePath={workspacePath}
           workspaceIdentity={workspaceIdentity}
@@ -2149,33 +2230,60 @@ function ConversationComposerImpl({
           onConfigPickerOpenChange={handleConfigPickerOpenChange}
           onSwitchMode={onSwitchMode}
         />
-        {/* 附件画廊重构曾整段覆盖 leadingActions，误删 CUA 常驻入口。
+      ) : selectedHarnessId ? (
+        <ConfigSelect
+          option={harnessUnavailableModeOption(harnessUnavailableValue)}
+          provider={ZCODE_AGENT_PROVIDER}
+          onValueChange={() => {}}
+          disabled
+          tooltipTitle={intl.formatMessage({ id: "engine.composer.modeUnavailable" })}
+          triggerVariant="ghost"
+          triggerSize="default"
+          triggerClassName="size-7 gap-1 rounded-lg p-0 text-ui-base @xl/composer:w-auto @xl/composer:px-2"
+          labelVisibilityClassName="hidden @xl/composer:inline-flex"
+          restoreFocusSelector={null}
+        />
+      ) : (
+        <>
+          <V4ComposerModeSwitch
+            workspacePath={workspacePath}
+            workspaceIdentity={workspaceIdentity}
+            provider={provider}
+            draftConfig={draftConfig}
+            disabled={disabled}
+            activeConfigPicker={activeConfigPicker}
+            onConfigPickerOpenChange={handleConfigPickerOpenChange}
+            onSwitchMode={onSwitchMode}
+          />
+          {/* 附件画廊重构曾整段覆盖 leadingActions，误删 CUA 常驻入口。
             入口自身继续负责平台、远程与设置可见性，不在 composer 重复判定。 */}
-        <V4ComposerCuaEntry
-          workspacePath={workspacePath}
-          workspaceIdentity={workspaceIdentity}
-          remoteSessionId={remoteSessionId}
-          currentSessionBusy={canStop}
-        />
-        <ConversationBackgroundWorkTrigger
-          backgroundWorks={snapshot?.backgroundWorks ?? []}
-          runningSubagentCount={runningSubagentCount}
-          onOpen={onOpenRunningBackgroundWorks}
-          openTarget={backgroundWorkOpenTarget}
-        />
-      </>
-    ),
+          <V4ComposerCuaEntry
+            workspacePath={workspacePath}
+            workspaceIdentity={workspaceIdentity}
+            remoteSessionId={remoteSessionId}
+            currentSessionBusy={canStop}
+          />
+          <ConversationBackgroundWorkTrigger
+            backgroundWorks={snapshot?.backgroundWorks ?? []}
+            runningSubagentCount={runningSubagentCount}
+            onOpen={onOpenRunningBackgroundWorks}
+            openTarget={backgroundWorkOpenTarget}
+          />
+        </>
+      ),
     [
       activeConfigPicker,
       canStop,
       disabled,
       draftConfig,
       handleConfigPickerOpenChange,
+      intl,
       backgroundWorkOpenTarget,
       onOpenRunningBackgroundWorks,
       onSwitchMode,
       provider,
       remoteSessionId,
+      selectedHarnessId,
       runningSubagentCount,
       snapshot?.backgroundWorks,
       workspaceIdentity,
@@ -2267,7 +2375,7 @@ function ConversationComposerImpl({
           enterSubmits={enterSubmits}
           onModifiedSubmit={modifiedEnterSubmits ? handleModifiedEditorSubmit : undefined}
           submitLabel={sendTooltipTitle}
-          showSlashButton
+          showSlashButton={!selectedHarnessId}
           // @ 是 Plugin / 文件 / 对话 / 画板主入口；# 会话与 $ / ¥ / ￥ Skills
           // 仍由 MentionPlugin 保留兼容触发，但不在 + 菜单重复展示。
           showMentionButton
@@ -2278,16 +2386,20 @@ function ConversationComposerImpl({
           promptHistory={promptHistory}
           // 命令目录必须完整来自 CLI workspace slash catalog；UI 只在
           // secondary pane 按产品能力隐藏 goal，不再追加任何内建命令或别名。
-          excludedSlashCommandNames={suppressGoalCommands ? ["goal"] : undefined}
+          excludedSlashCommandNames={
+            selectedHarnessId ? ["goal", "workflow"] : suppressGoalCommands ? ["goal"] : undefined
+          }
           appSlashCommands={appSlashCommands}
-          enableMentionPanel
+          enableMentionPanel={!selectedHarnessId}
           leadingActions={leadingActionsNode}
           submitControl={submitControlNode}
           className="p-0"
           onChange={handleEditorChange}
           onFocus={handleEditorFocus}
           onSubmit={handleEditorSubmit}
-          onWhiteboardMentionSelected={attachmentsApi.handleWhiteboardMentionSelected}
+          onWhiteboardMentionSelected={
+            selectedHarnessId ? undefined : attachmentsApi.handleWhiteboardMentionSelected
+          }
           onPaste={attachmentsApi.handlePaste}
         />
         {attachmentsApi.attachmentError ? (

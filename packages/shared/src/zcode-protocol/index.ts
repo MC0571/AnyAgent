@@ -1327,6 +1327,7 @@ export const zcodeToolUpdatedEventPayloadSchema = z.discriminatedUnion("kind", [
       assistantMessageId: nonEmptyString.optional(),
       toolName: nonEmptyString,
       input: z.unknown().optional(),
+      display: jsonObjectSchema.optional(),
       inputByteLength: z.number().int().nonnegative().optional(),
       inputOmitted: z.boolean().optional(),
       inputRef: z.literal("model_stream").optional(),
@@ -1340,6 +1341,11 @@ export const zcodeToolUpdatedEventPayloadSchema = z.discriminatedUnion("kind", [
     .extend({
       kind: z.literal("started"),
       startedAt: protocolInstantSchema,
+      display: jsonObjectSchema.optional(),
+      readOnly: z.boolean().optional(),
+      sideEffectScope: z
+        .enum(["none", "workspace", "git", "network", "system", "session", "userInteraction"])
+        .optional(),
     })
     .strict(),
   zcodeToolCallBasePayloadSchema

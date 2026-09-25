@@ -3,7 +3,6 @@ import {
   type CapabilityStatus,
   type EngineAdapter,
   type EngineApprovalReceipt,
-  type EngineApprovalRef,
   type EngineCapability,
   type EngineCapabilitySnapshot,
   type EngineCommandReceipt,
@@ -12,12 +11,12 @@ import {
   type EngineExecutionRef,
   type EngineSessionRef,
   type EngineUserInputReceipt,
-  type EngineUserInputRef,
 } from "./types.js";
 import {
   AsyncEventQueue,
   CAPABILITIES,
-  DEFAULT_SCRIPT,
+  defaultFakeCapability,
+  defaultScript,
   type EventOverrides,
   type ExecutionRecord,
   type FakeEngineOptions,
@@ -31,14 +30,16 @@ import {
   findFakeUserInput,
   requireFakeCapability,
   requireFakeExecution,
+  resumeFakeSession,
 } from "./fake-engine-events.js";
 
 export type { FakeEngineOptions, FakeEngineStep } from "./fake-engine-support.js";
 
 export class FakeEngine implements EngineAdapter {
   readonly #autoAdvance: boolean;
+  readonly #stepDelayMs: number;
   readonly #now: () => number;
-  readonly #script: readonly FakeEngineStep[];
+  readonly #script: readonly FakeEngineStep[] | undefined;
   readonly #sessions = new Set<EngineSessionRef>();
   readonly #executions = new Map<EngineExecutionRef, ExecutionRecord>();
   readonly #capabilities = new Map<EngineCapability, CapabilityStatus>();
@@ -48,8 +49,9 @@ export class FakeEngine implements EngineAdapter {
 
   constructor(options: FakeEngineOptions = {}) {
     this.#autoAdvance = options.autoAdvance ?? false;
+    this.#stepDelayMs = options.stepDelayMs ?? 0;
     this.#now = options.now ?? (() => 0);
-    this.#script = options.script ?? DEFAULT_SCRIPT;
+    this.#script = options.script;
     this.#snapshot = {
       engineId: options.engineId ?? "fake",
       adapterVersion: options.adapterVersion ?? "0.1.0",
@@ -61,13 +63,7 @@ export class FakeEngine implements EngineAdapter {
     for (const capability of CAPABILITIES) {
       this.#capabilities.set(
         capability,
-        options.capabilities?.[capability] ?? {
-          support: capability === "execution.reconcile" ? "unsupported" : "supported",
-          availability: capability === "execution.reconcile" ? "unknown" : "available",
-          ...(capability === "execution.reconcile"
-            ? { reason: "Fake Engine has no native reconciliation query." }
-            : {}),
-        },
+        options.capabilities?.[capability] ?? defaultFakeCapability(capability),
       );
     }
   }
@@ -91,15 +87,29 @@ export class FakeEngine implements EngineAdapter {
   }
 
   async createSession(): Promise<EngineSessionRef> {
-    this.#requireAvailable("session.create");
+    requireFakeCapability(this.#capabilities, "session.create");
     this.#sessionSequence += 1;
     const session = `fake-session-${this.#sessionSequence}` as EngineSessionRef;
     this.#sessions.add(session);
     return session;
   }
 
-  async run(input: { readonly session: EngineSessionRef; readonly input: string }) {
-    this.#requireAvailable("execution.run");
+  async resumeSession(input: {
+    readonly session: EngineSessionRef;
+    readonly beforeDispatch?: () => void;
+  }): Promise<EngineSessionRef> {
+    return resumeFakeSession(this.#sessions, this.#capabilities, input);
+  }
+
+  async run(input: Parameters<EngineAdapter["run"]>[0]) {
+    if (input.revision)
+      throw this.#error(
+        "unsupported",
+        "execution.revise",
+        "Fake Engine has no native conversation branch to revise.",
+        "none",
+      );
+    requireFakeCapability(this.#capabilities, "execution.run");
     if (!this.#sessions.has(input.session)) {
       throw this.#error(
         "temporarily-unavailable",
@@ -115,7 +125,7 @@ export class FakeEngine implements EngineAdapter {
       session: input.session,
       executionId,
       events: new AsyncEventQueue(),
-      script: this.#script,
+      script: this.#script ?? defaultScript(this.#executionSequence),
       emitted: [],
       approvals: new Map(),
       userInputs: new Map(),
@@ -139,11 +149,9 @@ export class FakeEngine implements EngineAdapter {
     return { executionId, events: record.events };
   }
 
-  async replyToApproval(input: {
-    readonly session: EngineSessionRef;
-    readonly approvalId: EngineApprovalRef;
-    readonly optionId: string;
-  }): Promise<EngineApprovalReceipt> {
+  async replyToApproval(
+    input: Parameters<EngineAdapter["replyToApproval"]>[0],
+  ): Promise<EngineApprovalReceipt> {
     const found = findFakeApproval(this.#executions.values(), input.session, input.approvalId);
     if (!found) return { status: "unknown" };
     const { record, pending } = found;
@@ -155,6 +163,7 @@ export class FakeEngine implements EngineAdapter {
 
     const option = pending.options.find((item) => item.id === input.optionId);
     if (!option) return { status: "unsupported" };
+    input.beforeDispatch?.();
     const expired = pending.expiresAt !== null && this.#now() >= pending.expiresAt;
     pending.status = expired ? "expired" : "forwarded";
     const evidence = this.#evidence(
@@ -173,11 +182,9 @@ export class FakeEngine implements EngineAdapter {
     return { status: expired ? "expired" : "forwarded", evidence };
   }
 
-  async replyToUserInput(input: {
-    readonly session: EngineSessionRef;
-    readonly requestId: EngineUserInputRef;
-    readonly response: unknown;
-  }): Promise<EngineUserInputReceipt> {
+  async replyToUserInput(
+    input: Parameters<EngineAdapter["replyToUserInput"]>[0],
+  ): Promise<EngineUserInputReceipt> {
     const record = findFakeUserInput(this.#executions.values(), input.session, input.requestId);
     if (!record) return { status: "unknown" };
     const pending = record.userInputs.get(input.requestId)!;
@@ -195,6 +202,7 @@ export class FakeEngine implements EngineAdapter {
       return { status: "unsupported" };
     }
 
+    input.beforeDispatch?.();
     const expired = pending.expiresAt !== null && this.#now() >= pending.expiresAt;
     pending.status = expired ? "expired" : "forwarded";
     const evidence = this.#evidence(
@@ -396,18 +404,16 @@ export class FakeEngine implements EngineAdapter {
   #scheduleAutoAdvance(record: ExecutionRecord): void {
     if (!this.#autoAdvance || record.autoAdvanceQueued || record.closed || record.terminal) return;
     record.autoAdvanceQueued = true;
-    queueMicrotask(() => {
+    const advance = () => {
       record.autoAdvanceQueued = false;
       if (this.advance(record.executionId)) this.#scheduleAutoAdvance(record);
-    });
+    };
+    if (this.#stepDelayMs > 0) setTimeout(advance, this.#stepDelayMs);
+    else queueMicrotask(advance);
   }
 
   #record(executionId: EngineExecutionRef): ExecutionRecord {
     return requireFakeExecution(this.#executions, executionId);
-  }
-
-  #requireAvailable(operation: "session.create" | "execution.run"): void {
-    requireFakeCapability(this.#capabilities, operation);
   }
 
   #error(

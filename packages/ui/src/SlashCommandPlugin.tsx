@@ -62,6 +62,7 @@ export function SlashCommandPlugin({
   workspacePath,
   workspaceIdentity,
   sessionId,
+  taskCatalogRequest,
   provider,
   container,
   disabled = false,
@@ -81,6 +82,7 @@ export function SlashCommandPlugin({
   } = useSubagents(workspacePath, provider, workspaceIdentity);
   const {
     skills,
+    hostTaskScoped,
     loading: skillsLoading,
     error: skillsError,
   } = useSkills({
@@ -88,6 +90,7 @@ export function SlashCommandPlugin({
     workspaceIdentity,
     sessionId: sessionId ?? null,
     enabled: !disabled && activeTrigger?.trigger === "/",
+    taskCatalogRequest,
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dismissedSignatureRef = useRef<string | null>(null);
@@ -106,14 +109,23 @@ export function SlashCommandPlugin({
     return [...cliSuggestions, ...appSuggestions];
   }, [appCommands, commands, excludedCommandNames]);
   const subagentSuggestions = useMemo(() => buildSubagentSuggestions(agents), [agents]);
-  const skillSuggestions = useMemo(
-    () =>
-      buildSkillSuggestions(
-        filterSkillsForProvider(skills, provider).filter((skill) => skill.enabled),
-        locale,
-      ),
-    [locale, provider, skills],
-  );
+  const skillSuggestions = useMemo(() => {
+    const availableSkills = (
+      hostTaskScoped ? skills : filterSkillsForProvider(skills, provider)
+    ).filter((skill) => skill.enabled);
+    if (hostTaskScoped) {
+      return availableSkills.map((skill) => ({
+        id: `task-skill:${skill.name}`,
+        trigger: "/" as const,
+        value: `skill ${skill.name}`,
+        label: `/skill ${skill.name}`,
+        description: skill.description,
+        keywords: [...new Set([skill.name, skill.description, "skill", "skills"])],
+        data: { scope: skill.scope },
+      }));
+    }
+    return buildSkillSuggestions(availableSkills, locale);
+  }, [hostTaskScoped, locale, provider, skills]);
   const filteredCommandSuggestions = useMemo(
     () => filterPromptInputSuggestions(commandSuggestions, activeTrigger?.query ?? null),
     [commandSuggestions, activeTrigger?.query],

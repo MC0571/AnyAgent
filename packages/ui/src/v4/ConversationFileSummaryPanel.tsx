@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRightIcon, Loader2Icon, Undo2Icon } from "lucide-react";
 import type {
-  CommandAck,
   ConversationRowTarget,
   TurnHeaderRow,
   V4ConversationFileChangesResult,
@@ -29,8 +28,20 @@ import type {
 type FileChangeItem = V4ConversationFileChangesResult["items"][number];
 
 interface ConversationFileSummaryPanelProps {
-  header: TurnHeaderRow;
-  context: ConversationRowRenderContext;
+  header: Pick<
+    TurnHeaderRow,
+    "rowId" | "entityId" | "turnId" | "state" | "fileChanges" | "actions"
+  >;
+  context: Pick<
+    ConversationRowRenderContext,
+    | "workspacePath"
+    | "workspaceIdentity"
+    | "workspaceRemoteSessionId"
+    | "onOpenCodeViewer"
+    | "fetchFileChanges"
+    | "previewFileRewind"
+    | "applyFileRewind"
+  >;
 }
 
 function formatPatch(path: string, patches: FileChangeItem["patches"]): string {
@@ -158,7 +169,7 @@ export function ConversationFileSummaryPanel({
     setApplying(true);
     setError(null);
     try {
-      const ack: CommandAck = await context.applyFileRewind(target);
+      const ack = await context.applyFileRewind(target, preview);
       if (ack.status === "accepted" || ack.status === "duplicate") {
         setDialogOpen(false);
       } else {

@@ -42,6 +42,7 @@ interface V4ChatPaneProps {
   openTrigger?: SessionOpenTrigger;
   provider?: ZCodeProvider;
   onSessionCreated?: (sessionId: string) => void;
+  onHarnessTaskCreated?: (taskId: string) => void;
   /** deleteSession：删除当前会话后回到 draft。 */
   onSessionDeleted?: () => void;
   /** 草稿态 composer contextHeader（m5，壳层构造下发）。 */
@@ -91,6 +92,7 @@ export function V4ChatPane({
   openTrigger = "sidebar",
   provider,
   onSessionCreated,
+  onHarnessTaskCreated,
   onSessionDeleted,
   draftComposerHeader,
   gitSummary,
@@ -136,6 +138,7 @@ export function V4ChatPane({
         isDesktop={isDesktop}
         provider={provider}
         onSessionCreated={onSessionCreated}
+        onHarnessTaskCreated={onHarnessTaskCreated}
         onSessionDeleted={onSessionDeleted}
         draftComposerHeader={draftComposerHeader}
         gitSummary={gitSummary}

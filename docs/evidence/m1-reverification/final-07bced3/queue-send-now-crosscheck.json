@@ -1,0 +1,116 @@
+{
+  "productCodeCommit": "07bced37c5e82e1a9413b305dc2f0fa0c2358d85",
+  "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+  "nativeSessionId": "share-import-929acf3a-3577-46e3-9c06-2024c67e5963",
+  "productRecords": [
+    {
+      "id": "input_c47358be-aad0-4c85-a880-b2fee6b62468",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "status": "stopped",
+      "text": "PR25_FINAL_QUEUE_SOURCE: Write 120 numbered Chinese sentences about TypeScript type narrowing, one sentence per line. Start with QUEUE_SOURCE_BEGIN_925 and end with QUEUE_SOURCE_END_925.",
+      "receivedAt": 1790303065779,
+      "acceptedAt": 1790303065794,
+      "startedAt": 1790303065794,
+      "terminalAt": 1790303082261,
+      "nativeCommandId": "input_c47358be-aad0-4c85-a880-b2fee6b62468",
+      "nativeExecutionId": "input_c47358be-aad0-4c85-a880-b2fee6b62468"
+    },
+    {
+      "id": "execution_f4344344-87d2-4f8a-b310-bebeee4dee83",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "inputId": "input_c47358be-aad0-4c85-a880-b2fee6b62468",
+      "status": "stopped",
+      "acceptedAt": 1790303065794,
+      "startedAt": 1790303065794,
+      "terminalAt": 1790303082261,
+      "nativeExecutionId": "input_c47358be-aad0-4c85-a880-b2fee6b62468"
+    },
+    {
+      "id": "input_d8e2452d-689e-4ea5-b70c-b54b19a9f946",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "status": "completed",
+      "text": "PR25_FINAL_QUEUE_A: Reply exactly QUEUE_A_925.",
+      "receivedAt": 1790303071139,
+      "acceptedAt": 1790303197980,
+      "startedAt": 1790303197980,
+      "terminalAt": 1790303201831,
+      "nativeCommandId": "input_d8e2452d-689e-4ea5-b70c-b54b19a9f946",
+      "nativeExecutionId": "input_d8e2452d-689e-4ea5-b70c-b54b19a9f946"
+    },
+    {
+      "id": "input_7d48ea86-9036-4ed1-afcd-513140b48fd0",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "status": "completed",
+      "text": "PR25_FINAL_QUEUE_B: Reply exactly QUEUE_B_925.",
+      "receivedAt": 1790303077656,
+      "acceptedAt": 1790303082310,
+      "startedAt": 1790303082310,
+      "terminalAt": 1790303197875,
+      "nativeCommandId": "input_7d48ea86-9036-4ed1-afcd-513140b48fd0",
+      "nativeExecutionId": "input_7d48ea86-9036-4ed1-afcd-513140b48fd0"
+    },
+    {
+      "id": "execution_531c4822-fd2a-4829-a712-bad409993ea8",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "inputId": "input_7d48ea86-9036-4ed1-afcd-513140b48fd0",
+      "status": "completed",
+      "acceptedAt": 1790303082310,
+      "startedAt": 1790303082310,
+      "terminalAt": 1790303197875,
+      "nativeExecutionId": "input_7d48ea86-9036-4ed1-afcd-513140b48fd0",
+      "resultTail": "eScript 静态安全与表达力平衡的核心特性之一。\n120. 熟练掌握控制流分析、判别联合与类型谓词三者即可覆盖绝大多数收窄需求。\nQUEUE_SOURCE_END_925\n\nQUEUE_B_925",
+      "resultChars": 5427
+    },
+    {
+      "id": "execution_29f51067-9a05-4539-8ced-ded50de8ee7d",
+      "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+      "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+      "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+      "inputId": "input_d8e2452d-689e-4ea5-b70c-b54b19a9f946",
+      "status": "completed",
+      "acceptedAt": 1790303197980,
+      "startedAt": 1790303197980,
+      "terminalAt": 1790303201831,
+      "nativeExecutionId": "input_d8e2452d-689e-4ea5-b70c-b54b19a9f946",
+      "resultTail": "QUEUE_A_925",
+      "resultChars": 11
+    }
+  ],
+  "nativeSessionInputs": [
+    {
+      "id": "queue_input_c47358be-aad0-4c85-a880-b2fee6b62468",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 2,
+      "promotedSequence": 2,
+      "payloadText": "PR25_FINAL_QUEUE_SOURCE: Write 120 numbered Chinese sentences about TypeScript type narrowing, one sentence per line. Start with QUEUE_SOURCE_BEGIN_925 and end with QUEUE_SOURCE_END_925."
+    },
+    {
+      "id": "queue_input_7d48ea86-9036-4ed1-afcd-513140b48fd0",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 3,
+      "promotedSequence": 3,
+      "payloadText": "PR25_FINAL_QUEUE_B: Reply exactly QUEUE_B_925."
+    },
+    {
+      "id": "queue_input_d8e2452d-689e-4ea5-b70c-b54b19a9f946",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 4,
+      "promotedSequence": 4,
+      "payloadText": "PR25_FINAL_QUEUE_A: Reply exactly QUEUE_A_925."
+    }
+  ],
+  "observation": "B native result includes prior stopped source text plus QUEUE_B_925; A result QUEUE_A_925. Preserve as queue/interruption semantic caveat; not evidence of clean B-only response."
+}

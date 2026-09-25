@@ -47,6 +47,7 @@ import { createTaskWorkbenchDragPreview } from "@/lib/taskWorkbenchDragPreview.j
 import { runUserAction } from "@/lib/userActionTelemetry.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { TaskWorkflowRunLines } from "@/components/workflow-run-line/TaskWorkflowRunLines.js";
+import { TaskListRowShell } from "@/TaskListRowShell.js";
 
 type TaskListItemIntl = {
   formatMessage: (desc: { id: string }, values?: Record<string, string>) => string;
@@ -510,13 +511,65 @@ export const MemoTaskItem = memo(function TaskListItem({
   const shouldRenderPinAction =
     showPinAction && (showPinnedState || shouldSuppressWorkspaceTaskMetadata);
   return (
-    <li
+    <TaskListRowShell
       ref={itemRef}
+      taskId={task.taskId}
+      isActive={isActive}
+      onActivate={handleSelect}
+      leading={
+        <>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "flex size-4 items-center justify-center transition-opacity",
+              shouldRenderPinAction && "hidden",
+              isMobileActive && "invisible",
+            )}
+          >
+            {leadingIndicator === "error" ? (
+              <span
+                data-error-indicator="true"
+                className="h-1.5 w-1.5 rounded-full bg-destructive"
+              />
+            ) : leadingIndicator === "unread" ? (
+              <span
+                data-unread-indicator="true"
+                className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-sky-400"
+              />
+            ) : leadingIndicator === "loading" ? (
+              <LoaderIcon className="size-4 animate-spin text-foreground-subtle" />
+            ) : showTimelineIdleIndicator ? (
+              <span data-idle-indicator="true" className="h-1.5 w-1.5 rounded-full bg-border" />
+            ) : null}
+          </span>
+          {shouldRenderPinAction ? (
+            <ControlHintTooltip
+              title={
+                workspaceActionsDisabledReason ??
+                intl.formatMessage({ id: isPinned ? "taskList.unpin" : "taskList.pin" })
+              }
+              side="top"
+              align="center"
+            >
+              {pinActionButton}
+            </ControlHintTooltip>
+          ) : null}
+        </>
+      }
+      leadingClassName={
+        variant === "timeline" ? "mt-0.5" : hasWorkflowRunLines ? "mt-1" : undefined
+      }
+      className={cn(
+        variant === "timeline"
+          ? "items-start py-1.5"
+          : hasWorkflowRunLines
+            ? "items-start"
+            : "items-center",
+      )}
       data-testid={testId(TID_TASK_ITEM, task.taskId)}
-      data-task-item-key={taskItemKey}
+      dataTaskItemKey={taskItemKey}
       data-mobile-active-task={isMobileActive ? "true" : undefined}
       data-archive-confirming-task-id={isArchiveConfirming ? task.taskId : undefined}
-      onClick={handleSelect}
       onContextMenu={handleContextMenu}
       draggable={canDragToWorkbench}
       onDragStart={handleDragStart}
@@ -529,74 +582,10 @@ export const MemoTaskItem = memo(function TaskListItem({
           setFocusActionsVisible(false);
         }
       }}
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) {
-          return;
-        }
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          handleSelect();
-        }
-      }}
-      className={cn(
-        "group/task-item flex cursor-pointer gap-2 rounded-lg pl-2.5 pr-1 py-1 transition-[background-color,border-color,box-shadow]",
-        // 默认行 32px 时前置槽整行居中；长出工作流运行行后行体是两行的纵向列，槽改为对齐首行。
-        variant === "timeline"
-          ? "items-start py-1.5"
-          : hasWorkflowRunLines
-            ? "items-start"
-            : "items-center",
-        isActive ? "bg-selected" : "hover:bg-surface-hover",
-      )}
     >
       {/* 之前任务列表依赖 divide-y 画分隔线，深色侧栏里每个 item 上下都会出现明显黑线，
               视觉上像被两条边框夹住。这里改成“列表留白 + item 自己带圆角态”，
               让 hover/active 的层级由卡片背景承担，不再依赖分隔线。 */}
-
-      <div
-        className={cn(
-          "relative flex size-4 shrink-0 items-center justify-center",
-          // 行体是纵向列（标题行 + 运行行）时前置槽对齐首行而不是整行：默认 24px 首行居中 = 上留 4px。
-          variant === "timeline" ? "mt-0.5" : hasWorkflowRunLines ? "mt-1" : undefined,
-        )}
-      >
-        <span
-          aria-hidden="true"
-          className={cn(
-            "flex size-4 items-center justify-center transition-opacity",
-            shouldRenderPinAction && "hidden",
-            isMobileActive && "invisible",
-          )}
-        >
-          {leadingIndicator === "error" ? (
-            <span data-error-indicator="true" className="h-1.5 w-1.5 rounded-full bg-destructive" />
-          ) : leadingIndicator === "unread" ? (
-            <span
-              data-unread-indicator="true"
-              className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-sky-400"
-            />
-          ) : leadingIndicator === "loading" ? (
-            <LoaderIcon className="size-4 animate-spin text-foreground-subtle" />
-          ) : showTimelineIdleIndicator ? (
-            <span data-idle-indicator="true" className="h-1.5 w-1.5 rounded-full bg-border" />
-          ) : null}
-        </span>
-        {shouldRenderPinAction ? (
-          <ControlHintTooltip
-            title={
-              workspaceActionsDisabledReason ??
-              intl.formatMessage({
-                id: isPinned ? "taskList.unpin" : "taskList.pin",
-              })
-            }
-            side="top"
-            align="center"
-          >
-            {pinActionButton}
-          </ControlHintTooltip>
-        ) : null}
-      </div>
 
       {variant === "timeline" ? (
         <div className="relative flex min-w-0 flex-1 flex-col gap-0.5">
@@ -777,7 +766,7 @@ export const MemoTaskItem = memo(function TaskListItem({
           {workflowRunLinesNode}
         </div>
       )}
-    </li>
+    </TaskListRowShell>
   );
 }, areTaskListItemPropsEqual);
 

@@ -40,6 +40,7 @@ import {
   restoreWorkspaceFileRewindEntries,
 } from "./workspace-checkpoint-persistence.js";
 import { mainTurnCacheHitAggregateFromMessages } from "./turn-model-step-usage.js";
+import { assertNoUnresolvedAnyAgentInputs } from "../../agent/stopped-turn-history.js";
 
 export function toScheduleState(
   this: AgentRuntimeInternal,
@@ -76,6 +77,10 @@ export async function resumeFromStore(
       recoverable: true,
     });
   }
+  // The V4 input ledger and terminal provenance are both stored in native SQLite.
+  // Unlike the live eventStore, they survive a process restart. A promoted
+  // AnyAgent-promoted Input without a terminal must never be rehydrated for a new turn.
+  await assertNoUnresolvedAnyAgentInputs(this.sessionStore, this.sessionId);
   const session = await repairPersistedRemoteSessionPaths(this.sessionStore, persistedSession, {
     onPersistenceFailure: (error) => {
       this.logger?.warn("Session path repair persistence failed; using in-memory repair", {

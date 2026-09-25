@@ -1,0 +1,24 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+  "nativeSessionId": "sess_a7848fd5-e2be-4011-9cbf-cad873dcf377",
+  "productInputId": "input_febeda56-ab9b-4245-97df-feb308a8bb4d",
+  "status": "completed",
+  "productTextContainsMarker": true,
+  "nativeInputId": "queue_input_febeda56-ab9b-4245-97df-feb308a8bb4d",
+  "nativeSourceCommandId": "input_febeda56-ab9b-4245-97df-feb308a8bb4d",
+  "nativeInputContainsMarker": true,
+  "nativePromotedUserMessageId": "msg_mugfayrq_1f53780e-87db-45c7-951b-9e03eb12d63f",
+  "nativeUserMessageContainsMarker": true,
+  "nativeTurnId": "turn_6cf13d91-de0e-48ec-af1c-e6ac5ca34f94",
+  "nativeAssistantMessageId": "msg_mugfays2_5103a13d-21f6-41c3-a58b-758713b55704",
+  "nativeAnswer": "PR25_WEB_ELEMENT_MARKER_925",
+  "nativeWebElementPayload": {
+    "delivery": "expanded_text",
+    "url": "http://127.0.0.1:43128/",
+    "title": "PR25 Web Element Fixture",
+    "selector": "#pr25-web-marker",
+    "accessibleName": "PR25_WEB_ELEMENT_MARKER_925",
+    "structuredAttachmentRefs": []
+  }
+}

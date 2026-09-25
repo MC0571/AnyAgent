@@ -1,0 +1,37 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+  "nativeSessionId": "sess_a7848fd5-e2be-4011-9cbf-cad873dcf377",
+  "inputCount": 9,
+  "compact": {
+    "id": "compact_dc8048b4-eac2-4547-a274-09ce69dab4d3",
+    "status": "completed",
+    "acceptedEvidence": {
+      "source": "engine",
+      "evidenceId": "compact_dc8048b4-eac2-4547-a274-09ce69dab4d3",
+      "detail": "v4 compact accepted ACK"
+    },
+    "terminalEvidence": {
+      "source": "engine",
+      "evidenceId": "compact_dc8048b4-eac2-4547-a274-09ce69dab4d3",
+      "detail": "Native compaction lifecycle is success."
+    },
+    "reason": null
+  },
+  "postCompactInput": {
+    "id": "input_444f021d-7fd9-4332-a897-9f3a1b7bec22",
+    "text": "PR25_432_POST_COMPACT: Reply exactly COMPACT_CONTINUE_432.",
+    "status": "completed",
+    "nativeExecutionId": "input_444f021d-7fd9-4332-a897-9f3a1b7bec22"
+  },
+  "nativeCompactCommandFacts": [
+    {
+      "commandId": null,
+      "commandName": null,
+      "lifecycleStatus": null,
+      "status": null,
+      "sourceCommandId": null,
+      "eventType": null
+    }
+  ]
+}

@@ -2,6 +2,12 @@
 export { type ServiceDescriptor, createServiceDescriptor } from "./descriptors.js";
 export { ServiceCollection } from "./collection.js";
 export { IAnyAgentService } from "./anyagent/anyAgentService.js";
+export type {
+  TaskSkillReference,
+  TaskSkillReferenceCatalog,
+  TaskSkillReferenceCatalogRequest,
+  TaskPluginCatalog,
+} from "./anyagent/anyAgentService.js";
 export {
   IModelSelectionService,
   IProviderSettingsService,

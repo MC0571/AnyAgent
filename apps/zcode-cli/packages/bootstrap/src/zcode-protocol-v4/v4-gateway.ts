@@ -23,13 +23,18 @@ import type {
   DynamicWorkflowRunEvent,
   DynamicWorkflowRunSessionSummary,
   MessageWithParts,
+  SessionEntryInfo,
   SessionEvent,
   TargetChangedPayload,
   TurnId,
   FileSystemErrorCode,
 } from "@zcode/contracts";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
-import { SessionEventType, isFileSystemPortError } from "@zcode/contracts";
+import {
+  SESSION_ENTRY_NATIVE_TURN_TERMINAL,
+  SessionEventType,
+  isFileSystemPortError,
+} from "@zcode/contracts";
 import type { ZCodeWorkspaceRef } from "@zcode/shared";
 import { extractMarkdownArtifactImageRefs } from "@zcode/shared";
 import type {
@@ -66,6 +71,8 @@ import type {
   V4ConversationWorkflowRunEventsResult,
   V4ConversationWorkflowRunsResult,
   V4ConversationRowsRangeResult,
+  NativeTerminalEvidence,
+  TurnHeaderRow,
   WorkspaceConfigState,
   WorkspaceConfigTopicFrame,
   ConversationTelemetryFact,
@@ -426,6 +433,8 @@ export interface V4GatewayHost {
     sessionId: string,
     persistedMessages?: MessageWithParts[],
   ): Promise<PersistedEventsLoadResult>;
+  /** Durable live-native TurnComplete/TurnError facts for read-only Execution reconciliation. */
+  loadNativeTurnTerminalEntries?(sessionId: string): Promise<SessionEntryInfo[]>;
   /** 仅用于低频生命周期和恢复裁决；高频 event/stream trace 禁止走生产日志。 */
   onDebug?(message: string): void;
   onError?(scope: string, error: unknown, context?: V4GatewayErrorContext): void;
@@ -531,6 +540,83 @@ function defaultLogEpoch(): string {
 
 function artifactRefBelongsToSession(ref: string, sessionId: string): boolean {
   return ref.startsWith(`zcode-artifact://${encodeURIComponent(sessionId)}/`);
+}
+
+function terminalEvidenceForRow(
+  sessionId: string,
+  sourceCommandId: string,
+  row: TurnHeaderRow,
+  entries: SessionEntryInfo[],
+): NativeTerminalEvidence | undefined {
+  if (row.state === "running" || !row.sourceCommandId || row.sourceCommandId !== sourceCommandId) {
+    return undefined;
+  }
+  const matchingEntries = entries.filter((entry) => {
+    if (
+      entry.sessionID !== sessionId ||
+      entry.type !== SESSION_ENTRY_NATIVE_TURN_TERMINAL ||
+      !entry.data ||
+      typeof entry.data !== "object" ||
+      Array.isArray(entry.data)
+    ) {
+      return false;
+    }
+    const data = entry.data as Record<string, unknown>;
+    return data.inputId === sourceCommandId;
+  });
+  if (matchingEntries.length !== 1) return undefined;
+
+  const entry = matchingEntries[0]!;
+  const data = entry.data as Record<string, unknown>;
+  const eventId = typeof data.eventId === "string" ? data.eventId : "";
+  const eventType = data.eventType;
+  const resultType = data.resultType;
+  const nativeTurnId = typeof data.turnId === "string" ? data.turnId : "";
+  if (
+    !eventId.trim() ||
+    !nativeTurnId.trim() ||
+    entry.id !== `native-turn-terminal:${eventId}` ||
+    (eventType !== SessionEventType.TurnComplete && eventType !== SessionEventType.TurnError) ||
+    typeof resultType !== "string"
+  ) {
+    return undefined;
+  }
+
+  const eventState =
+    eventType === SessionEventType.TurnError ||
+    (eventType === SessionEventType.TurnComplete &&
+      resultType !== "success" &&
+      resultType !== "cancelled")
+      ? "failed"
+      : eventType === SessionEventType.TurnComplete && resultType === "success"
+        ? "completedSuccess"
+        : eventType === SessionEventType.TurnComplete && resultType === "cancelled"
+          ? "completedInterrupted"
+          : undefined;
+  if (eventState !== row.state) return undefined;
+  if (
+    (eventType === SessionEventType.TurnError && resultType !== "failed") ||
+    (eventType === SessionEventType.TurnComplete &&
+      ![
+        "success",
+        "cancelled",
+        "error_max_turns",
+        "error_max_budget",
+        "error_during_execution",
+        "error_max_tool_calls",
+      ].includes(resultType))
+  ) {
+    return undefined;
+  }
+  return {
+    eventId,
+    eventType,
+    sourceCommandId,
+    // Transcript hydration assigns a display/projection turn ID (`hydrate-turn-N`).
+    // Preserve the original native turn ID as provenance; these identities need not match.
+    turnId: nativeTurnId,
+    resultType: resultType as NativeTerminalEvidence["resultType"],
+  };
 }
 
 /** 附件在文件系统层「确定不存在」的错误码集合。 */
@@ -1559,7 +1645,7 @@ export class ConversationV4Gateway {
       : !this.hasLiveConversation(params.sessionId)
         ? await this.ensureColdReadyPublisher(params.sessionId)
         : await this.hydratePublisher(params.sessionId);
-    return publisher.getRowsRange(
+    const result = publisher.getRowsRange(
       {
         ...(params.beforeRowId !== undefined ? { beforeRowId: params.beforeRowId } : {}),
         limit: params.limit,
@@ -1567,6 +1653,38 @@ export class ConversationV4Gateway {
       // clientMode 决定行可见性过滤档位：桌面 continuous（默认）/ 断线恢复 replayable。
       params.clientMode === "desktop-continuous" ? "continuous" : "replayable",
     );
+    const sourceCommandId = params.nativeTerminalSourceCommandId?.trim();
+    if (!sourceCommandId || !this.host.loadNativeTurnTerminalEntries) return result;
+    const entries = await this.host.loadNativeTurnTerminalEntries(params.sessionId);
+    const sourceHeaders = publisher
+      .getSnapshot()
+      .rows.window.filter(
+        (row) => row.kind === "turnHeader" && row.sourceCommandId === sourceCommandId,
+      );
+    if (sourceHeaders.length !== 1) {
+      return {
+        ...result,
+        rows: result.rows.map((row) => {
+          if (row.kind !== "turnHeader") return row;
+          const { nativeTerminalEvidence: _discarded, ...baseRow } = row;
+          return baseRow;
+        }),
+      };
+    }
+    return {
+      ...result,
+      rows: result.rows.map((row) => {
+        if (row.kind !== "turnHeader") return row;
+        const { nativeTerminalEvidence: _discarded, ...baseRow } = row;
+        const nativeTerminalEvidence = terminalEvidenceForRow(
+          params.sessionId,
+          sourceCommandId,
+          row,
+          entries,
+        );
+        return nativeTerminalEvidence ? { ...baseRow, nativeTerminalEvidence } : baseRow;
+      }),
+    };
   }
 
   /** 完整有效 projection 的终态计划目录；冷会话复用订阅 hydration。 */

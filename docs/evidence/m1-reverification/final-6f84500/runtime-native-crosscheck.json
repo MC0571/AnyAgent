@@ -1,0 +1,105 @@
+{
+  "productCommit": "6f84500c0b0c8969c21294e102ee33291444e820",
+  "taskId": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+  "nativeSessionId": "sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a",
+  "productRecords": [
+    {
+      "kind": "execution",
+      "id": "execution_d5d568e7-c939-4ed6-88dd-5a9983fa9339",
+      "task_id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+      "input_id": "input_abac9653-6718-481b-86e5-9274db322942",
+      "execution_id": "execution_d5d568e7-c939-4ed6-88dd-5a9983fa9339",
+      "native_key": "62256323-2857-4b4f-84f9-cdc496e33339",
+      "status": "completed"
+    },
+    {
+      "kind": "input",
+      "id": "input_abac9653-6718-481b-86e5-9274db322942",
+      "task_id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+      "input_id": "input_abac9653-6718-481b-86e5-9274db322942",
+      "execution_id": null,
+      "native_key": null,
+      "status": "completed",
+      "text": "PR25_M1_6F84500_R1：请先调用 Read 工具读取当前项目 README.md，随后逐行写出 40 条简短 TypeScript 类型收窄建议，末尾加 END_M1_6F84500。",
+      "requestedDelivery": "startNow",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      }
+    },
+    {
+      "kind": "input",
+      "id": "input_6ba7f02e-309a-4b13-901b-11ab76b02e60",
+      "task_id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+      "input_id": "input_6ba7f02e-309a-4b13-901b-11ab76b02e60",
+      "execution_id": null,
+      "native_key": "c96dd41a-8e8a-45a6-b390-6784c7aa3344",
+      "status": "cancelled",
+      "text": "PR25_M1_6F84500_QUEUE_EDIT：请只回复 ORIGINAL_QUEUE。",
+      "requestedDelivery": "queue",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-responses",
+          "modelId": "gpt-5.6-luna",
+          "options": {
+            "reasoningLevel": "max"
+          }
+        }
+      }
+    },
+    {
+      "kind": "participant",
+      "id": "participant_5ad5d55b-3205-4785-ad95-4a1e6864272f",
+      "task_id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "session_id": null,
+      "input_id": null,
+      "execution_id": null,
+      "native_key": null,
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+      "task_id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "session_id": "session_bc9dfaf2-fac4-4e50-a694-309a5c7f3a76",
+      "input_id": null,
+      "execution_id": null,
+      "native_key": null,
+      "status": "active",
+      "nativeSessionId": "sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a"
+    },
+    {
+      "kind": "task",
+      "id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "task_id": "task_6b939111-1648-428c-802c-dd1ab0afe7e9",
+      "session_id": null,
+      "input_id": null,
+      "execution_id": null,
+      "native_key": null,
+      "status": "active"
+    }
+  ],
+  "nativeInputs": [
+    {
+      "id": "queue_62256323-2857-4b4f-84f9-cdc496e33339",
+      "session_id": "sess_b7159530-16fb-4ec5-8ff1-fd6cef59324a",
+      "kind": "sendText",
+      "delivery": "startNow",
+      "admitted_sequence": 0,
+      "promoted_sequence": 0,
+      "status": "promoted"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "productCommit": "b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34",
+  "taskId": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+  "expectedFileAbsent": true,
+  "rows": [
+    {
+      "kind": "participant",
+      "id": "participant_50247828-17bc-4d0f-9d37-d254e960b213",
+      "session_id": null,
+      "input_id": null,
+      "execution_id": null,
+      "status": "active"
+    },
+    {
+      "kind": "session",
+      "id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": null,
+      "execution_id": null,
+      "status": "active",
+      "nativeSessionId": "sess_418b065d-7596-481c-982e-273f7ab1afc7"
+    },
+    {
+      "kind": "task",
+      "id": "task_ba6c9166-e938-45bf-a7ed-fef8a41e2ac0",
+      "session_id": null,
+      "input_id": null,
+      "execution_id": null,
+      "status": "active"
+    },
+    {
+      "kind": "input",
+      "id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+      "execution_id": null,
+      "status": "completed",
+      "text": "PR25_B0_DENY：请调用 Write 工具在当前项目目录创建 m1-b0-deny.txt，内容严格为 SHOULD_NOT_EXIST_B0。先执行工具再回答。",
+      "nativeExecutionId": "35c27963-88d7-4b3e-b2dd-6076ce4e56c4"
+    },
+    {
+      "kind": "execution",
+      "id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "input_7b900581-eaa9-4a5f-8370-d149fac8b54e",
+      "execution_id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+      "status": "completed"
+    },
+    {
+      "kind": "approval",
+      "id": "approval_fc0a55a6-727d-4e18-ba80-83b252ad0ed9",
+      "session_id": "session_895f0384-e92c-4a6a-86ec-eebc8fb0e628",
+      "input_id": "execution_08cfab03-4f24-46a3-9b86-8fdad72132c7",
+      "execution_id": null,
+      "status": "rejected",
+      "requestEventId": "event_f7bc1504-e70c-44fc-a108-f655b1f96118",
+      "nativeApprovalId": "perm_eccd0786-56b8-4d6a-b80c-2aef05840d60",
+      "operation": "Write",
+      "repliedOptionId": "deny",
+      "toolCallId": "call_vzATMkW5CE1Om2SWy7det2iU",
+      "filePath": "/private/tmp/anyagent-opencode-go.aBEA0z/project/m1-b0-deny.txt"
+    }
+  ]
+}

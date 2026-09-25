@@ -28,8 +28,18 @@ import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { runUserAction, runUserActionAsync } from "@/lib/userActionTelemetry.js";
 
+type QueueDisplayItem = Pick<QueueState["items"][number], "queueItemId" | "kind" | "text"> & {
+  dispatch: { state: "queued" | "reserved" | "promoting" };
+};
+
+type QueueDisplayState = {
+  items: readonly QueueDisplayItem[];
+  autoDrain: boolean;
+  pauseReason?: QueueState["pauseReason"];
+};
+
 interface ConversationQueuePanelProps {
-  queue: QueueState;
+  queue: QueueDisplayState;
   /** 删除队列项（deleteQueueItem command）。 */
   onDeleteItem?: (queueItemId: string) => void;
   /** 撤回队列项到发起端 composer；权威删除成功后才恢复草稿。 */
@@ -44,7 +54,7 @@ interface ConversationQueuePanelProps {
   onResume?: () => Promise<void> | void;
 }
 
-type QueueItem = QueueState["items"][number];
+type QueueItem = QueueDisplayItem;
 
 interface V4QueueReorderAnchor {
   beforeQueueItemId: string | null;
@@ -180,23 +190,25 @@ const QueueRow = memo(function QueueRow({
       )}
       style={style}
     >
-      <ControlHintTooltip title={intl.formatMessage({ id: "chat.queue.drag" })}>
-        <Button
-          ref={setActivatorNodeRef}
-          type="button"
-          variant="ghost"
-          size="icon-md"
-          data-v4-queue-drag-handle="true"
-          data-queue-item-id={item.queueItemId}
-          aria-label={intl.formatMessage({ id: "chat.queue.drag" })}
-          className="shrink-0 cursor-grab touch-none text-foreground-subtlest active:cursor-grabbing"
-          disabled={rowLocked}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-4" />
-        </Button>
-      </ControlHintTooltip>
+      {sortable ? (
+        <ControlHintTooltip title={intl.formatMessage({ id: "chat.queue.drag" })}>
+          <Button
+            ref={setActivatorNodeRef}
+            type="button"
+            variant="ghost"
+            size="icon-md"
+            data-v4-queue-drag-handle="true"
+            data-queue-item-id={item.queueItemId}
+            aria-label={intl.formatMessage({ id: "chat.queue.drag" })}
+            className="shrink-0 cursor-grab touch-none text-foreground-subtlest active:cursor-grabbing"
+            disabled={rowLocked}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-4" />
+          </Button>
+        </ControlHintTooltip>
+      ) : null}
       <span
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 truncate text-ui-base text-foreground",

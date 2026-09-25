@@ -1,11 +1,81 @@
-import type { CapabilityStatus, EngineCapability, EngineEvent } from "@anyagent/engine-contract";
+import type {
+  CapabilityStatus,
+  EngineCapability,
+  EngineApprovalOption,
+  EngineApprovalPresentation,
+  EngineUserInputAnswer,
+  EngineEvent,
+  EngineEvidence,
+  EngineJsonObject,
+  EngineUserInputPresentation,
+} from "@anyagent/engine-contract";
+import type {
+  RuntimeAttachmentStageRequest,
+  RuntimeCompactOperation,
+  RuntimeFileRewindOperation,
+  SetAssistantFeedback,
+  RuntimeAssistantFeedbackResult,
+} from "./runtime-operation-types.js";
+
+export type {
+  CompactSession,
+  RuntimeAttachmentStageRequest,
+  RuntimeCompactOperation,
+  RuntimeFileRewindOperation,
+  ExecutionFileTarget,
+  ApplyFileRewind,
+  RuntimeExecutionFileChanges,
+  RuntimeFileRewindPreview,
+  SetAssistantFeedback,
+  RuntimeAssistantFeedbackResult,
+  ReconcileExecution,
+  ReconcileInput,
+  TaskLifecycleRequest,
+  SubmitInput,
+} from "./runtime-operation-types.js";
+
+export type RuntimeSubmissionConfig = EngineJsonObject;
+
+/** Safe input metadata plus an opaque ID minted by a Host attachment staging path. */
+export interface RuntimeAttachmentReference {
+  readonly id: string;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+}
+
+/** Renderer-selected source passed directly to the Host stager and never persisted. */
+export interface StageRuntimeAttachmentInput {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly authorizationId: string;
+  readonly localPath: string;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+}
+
+export interface RuntimeAttachmentStageResult {
+  readonly locator: string;
+  readonly sizeBytes: number;
+}
+
+export type RuntimeAttachmentStager = (
+  request: RuntimeAttachmentStageRequest,
+) => Promise<RuntimeAttachmentStageResult | undefined>;
 
 export type RuntimeIdKind =
   | "task"
+  | "fork"
+  | "revision"
   | "participant"
   | "session"
   | "authorization"
   | "input"
+  | "attachment"
+  | "compact"
+  | "file-rewind"
   | "execution"
   | "event"
   | "approval"
@@ -21,6 +91,7 @@ export type RuntimeTaskStatus =
   | "abandoned";
 export type RuntimeSessionStatus = "creating" | "active" | "unknown" | "failed" | "closed";
 export type RuntimeInputStatus =
+  | "queued"
   | "received"
   | "native-accepted"
   | "started"
@@ -28,7 +99,8 @@ export type RuntimeInputStatus =
   | "failed"
   | "stopped"
   | "unknown"
-  | "rejected";
+  | "rejected"
+  | "cancelled";
 export type RuntimeExecutionStatus =
   | "accepted"
   | "started"
@@ -38,7 +110,12 @@ export type RuntimeExecutionStatus =
   | "unknown";
 export type RuntimeAuthorizationScope =
   | "session.create"
+  | "session.fork"
+  | "session.compact"
   | "execution.run"
+  | "execution.revise"
+  | "assistant.feedback"
+  | "workspace.file-rewind"
   | "approval.respond"
   | "user-input.respond"
   | "execution.interrupt"
@@ -79,6 +156,21 @@ export interface RuntimeEngineProjection {
   readonly capabilities: Readonly<Record<EngineCapability, CapabilityStatus>>;
 }
 
+export type RuntimeSharedContext = Readonly<Record<"contextId" | "title" | "shareUrl", string>>;
+
+/** Latest in-memory observation; never persisted over a Task's historical snapshot. */
+export interface RuntimeCurrentEngineProjection {
+  readonly engineId: string;
+  readonly adapterVersion: string | null;
+  readonly engineVersion: string | null;
+  readonly configurationVersion: string | null;
+  readonly environment: string | null;
+  readonly capabilities: Readonly<Record<EngineCapability, CapabilityStatus>>;
+  readonly state: "current" | "unknown";
+  readonly observedAt: number | null;
+  readonly source: "active-probe" | "unknown";
+}
+
 export interface RuntimeParticipant {
   readonly id: string;
   readonly status: "active" | "closed";
@@ -87,7 +179,11 @@ export interface RuntimeParticipant {
 
 export interface RuntimeSession {
   readonly id: string;
+  /** Native handle for diagnostics and hiding a duplicate adapter-owned sidebar row. */
+  readonly nativeSessionId?: string | null;
   readonly status: RuntimeSessionStatus;
+  /** Persisted dispatch hold after Host restart; queued text is never replayed automatically. */
+  readonly queuePaused?: boolean;
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly environmentId: string;
@@ -102,7 +198,14 @@ export interface RuntimeTask {
   readonly updatedAt: number;
   readonly closedAt: number | null;
   readonly closeReason: string | null;
+  /** Read-only source link; inherited rows keep their original Task ownership. */
+  readonly forkedFrom?: Readonly<Record<"taskId" | "inputId" | "executionId", string>>;
+  /** Imported material provenance belongs to this Task; native context stays Engine-owned. */
+  readonly sharedContext?: RuntimeSharedContext;
+  /** Immutable Engine/configuration/capability evidence captured when this Task was created. */
   readonly engine: RuntimeEngineProjection;
+  /** Latest Host probe for this Engine; unknown until the current Host has checked it. */
+  readonly currentEngine: RuntimeCurrentEngineProjection;
   readonly environment: RuntimeEnvironment;
   readonly credentialSource: RuntimeCredentialSource;
   readonly participant: RuntimeParticipant;
@@ -115,6 +218,16 @@ export interface RuntimeInput {
   readonly participantId: string;
   readonly sessionId: string;
   readonly text: string;
+  /** Order among Inputs still waiting for native dispatch. */
+  readonly queuePosition?: number;
+  /** A replacement turn preserves, rather than rewrites, the original product records. */
+  readonly revisionOf?: {
+    readonly kind: "edit" | "retry";
+    readonly inputId: string;
+    readonly executionId: string;
+  };
+  readonly submissionConfig?: RuntimeSubmissionConfig;
+  readonly attachments?: readonly RuntimeAttachmentReference[];
   readonly status: RuntimeInputStatus;
   readonly receivedAt: number;
   readonly acceptedAt: number | null;
@@ -129,12 +242,17 @@ export interface RuntimeExecution {
   readonly participantId: string;
   readonly sessionId: string;
   readonly inputId: string;
+  readonly revisionOf?: RuntimeInput["revisionOf"];
   readonly status: RuntimeExecutionStatus;
   readonly acceptedAt: number;
   readonly startedAt: number | null;
   readonly terminalAt: number | null;
   readonly result: string | null;
   readonly error: string | null;
+  /** Last native state query; unknown remains explicit until native evidence resolves it. */
+  readonly reconciledAt?: number;
+  readonly reconciliationEvidence?: EngineEvidence;
+  readonly reconciliationReason?: string;
 }
 
 /** Event delivery history keeps original ownership and native provenance. */
@@ -158,17 +276,16 @@ export interface RuntimeEvent {
 
 export interface RuntimeApproval {
   readonly id: string;
+  /** Product event that first requested this approval; absent for older records. */
+  readonly requestEventId?: string;
   readonly taskId: string;
   readonly participantId: string;
   readonly sessionId: string;
   readonly executionId: string;
   readonly operation: string;
   readonly scope: string | null;
-  readonly options: readonly {
-    readonly id: string;
-    readonly label: string;
-    readonly decision: "approve" | "reject" | "other";
-  }[];
+  readonly options: readonly EngineApprovalOption[];
+  readonly presentation?: EngineApprovalPresentation;
   readonly expiresAt: number | null;
   readonly status:
     | "pending"
@@ -183,6 +300,8 @@ export interface RuntimeApproval {
 
 export interface RuntimeUserInput {
   readonly id: string;
+  /** Product event that first requested this input; absent for older records. */
+  readonly requestEventId?: string;
   readonly taskId: string;
   readonly participantId: string;
   readonly sessionId: string;
@@ -190,6 +309,7 @@ export interface RuntimeUserInput {
   readonly prompt: string;
   readonly inputKind: "text" | "choice" | "form";
   readonly options: readonly { readonly id: string; readonly label: string }[];
+  readonly presentation?: EngineUserInputPresentation;
   readonly expiresAt: number | null;
   readonly status:
     | "pending"
@@ -199,8 +319,11 @@ export interface RuntimeUserInput {
     | "already-answered"
     | "unsupported"
     | "rejected";
-  readonly response: unknown;
+  readonly response: EngineUserInputAnswer | null;
 }
+
+type StopUnavailable = "unsupported" | "temporarily-unavailable" | "authorization-required";
+type StopStatus = "requested" | StopUnavailable | "unknown" | "confirmed";
 
 export interface RuntimeStopRequest {
   readonly id: string;
@@ -209,13 +332,12 @@ export interface RuntimeStopRequest {
   readonly sessionId: string;
   readonly executionId: string;
   readonly requestedAt: number;
-  readonly status:
-    | "requested"
-    | "unsupported"
-    | "temporarily-unavailable"
-    | "authorization-required"
-    | "unknown"
-    | "confirmed";
+  readonly status: StopStatus;
+  /** Whether the native Engine confirmed delivery of this interrupt request. */
+  readonly deliveryStatus: "pending" | "delivered" | "not-delivered" | "unknown" | "not-requested";
+  readonly deliveryEvidence: EngineEvidence | null;
+  /** Native evidence that the Execution stopped; a request ACK alone never fills this field. */
+  readonly stopEvidence: EngineEvidence | null;
   readonly reason: string | null;
 }
 
@@ -246,6 +368,8 @@ export interface TaskHistory {
   readonly approvals: readonly RuntimeApproval[];
   readonly userInputs: readonly RuntimeUserInput[];
   readonly stopRequests: readonly RuntimeStopRequest[];
+  readonly compactOperations: readonly RuntimeCompactOperation[];
+  readonly fileRewindOperations?: readonly RuntimeFileRewindOperation[];
   readonly integrityIssues: readonly RuntimeIntegrityIssue[];
 }
 
@@ -257,6 +381,8 @@ export type RuntimeChangeKind =
   | "approval"
   | "user-input"
   | "stop-request"
+  | "compact-operation"
+  | "file-rewind-operation"
   | "integrity-issue";
 export interface RuntimeChange {
   readonly kind: RuntimeChangeKind;
@@ -274,13 +400,36 @@ export interface CreateTaskInput {
   readonly credentialSource?: RuntimeCredentialSource;
 }
 
-export interface SubmitInput {
+/** Host-verified imported Session identity; the Renderer cannot supply its native handle. */
+export type AdoptImportedSessionInput = CreateTaskInput &
+  Required<Pick<RuntimeTask, "sharedContext">> & { readonly nativeSessionId: string };
+
+export interface ForkTaskInput {
   readonly taskId: string;
   readonly participantId: string;
   readonly sessionId: string;
   readonly authorizationId: string;
-  readonly text: string;
+  readonly executionId: string;
+  /** Fresh Host-issued grant for the child Task. */
+  readonly authorization: RuntimeAuthorization;
 }
+
+export interface ReviseTurn {
+  readonly taskId: string;
+  readonly participantId: string;
+  readonly sessionId: string;
+  readonly authorizationId: string;
+  readonly sourceExecutionId: string;
+  readonly kind: "edit" | "retry";
+  /** Required for edit; retry reuses the canonical original input. */
+  readonly text?: string;
+  /** Exact source attachments retained by an edit; omitted keeps all for older callers. */
+  readonly retainedAttachmentIds?: readonly string[];
+  /** Newly staged attachments to append to the retained source list. */
+  readonly attachments?: readonly RuntimeAttachmentReference[];
+}
+
+export type StageAttachment = StageRuntimeAttachmentInput;
 
 export interface ReplyToApproval {
   readonly taskId: string;
@@ -289,6 +438,7 @@ export interface ReplyToApproval {
   readonly authorizationId: string;
   readonly approvalId: string;
   readonly optionId: string;
+  readonly feedback?: string;
 }
 
 export interface ReplyToUserInput {
@@ -297,7 +447,7 @@ export interface ReplyToUserInput {
   readonly sessionId: string;
   readonly authorizationId: string;
   readonly requestId: string;
-  readonly response: unknown;
+  readonly response: EngineUserInputAnswer;
 }
 
 export interface RequestStop {
@@ -306,11 +456,4 @@ export interface RequestStop {
   readonly sessionId: string;
   readonly authorizationId: string;
   readonly executionId: string;
-}
-
-export interface TaskLifecycleRequest {
-  readonly taskId: string;
-  readonly participantId: string;
-  readonly sessionId: string;
-  readonly authorizationId: string;
 }

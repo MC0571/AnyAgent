@@ -15,6 +15,16 @@ export interface ShareImportIntent {
   targetWorkspaceKind?: "local" | "remote";
 }
 
+export type ShareImportRoute = "engine-task" | "native-session" | "unavailable";
+
+export function resolveShareImportRoute(
+  anyAgentServiceEnabled: boolean,
+  anyAgentServiceAvailable: boolean,
+): ShareImportRoute {
+  if (!anyAgentServiceEnabled) return "native-session";
+  return anyAgentServiceAvailable ? "engine-task" : "unavailable";
+}
+
 export function createShareImportIntent(
   shareCode: string,
   requestIdFactory: () => string = () =>

@@ -5,6 +5,7 @@ import { WorkspaceSidebarItem, type SortableBindings } from "./WorkspaceSidebarI
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { EngineTask } from "@/EngineTaskSidebar.js";
 
 export type { SortableBindings };
 
@@ -13,6 +14,7 @@ export { restrictVerticalDragWithinContainer } from "@/lib/restrictVerticalDragW
 
 export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSidebarItem({
   tab,
+  taskSortBy,
   isActiveWorkspace,
   isExpanded,
   activateTab,
@@ -21,6 +23,11 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
   onSelectTask,
   onStartDraftInWorkspace,
   taskItems,
+  engineTasks,
+  engineRunningByTask,
+  engineTitles,
+  engineSelectedTaskId,
+  onSelectEngineTask,
   taskListLoading,
   taskListHasMore,
   taskListHasUnread = false,
@@ -34,6 +41,7 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
   onOpenFileTree,
 }: {
   tab: WorkspaceTabState;
+  taskSortBy: "created" | "updated";
   isActiveWorkspace: boolean;
   isExpanded: boolean;
   activateTab: (tabId: string) => void;
@@ -46,6 +54,11 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
   ) => void;
   onStartDraftInWorkspace: (targetWorkspacePath: string, targetWorkspaceIdentity?: string) => void;
   taskItems: ZCodeTaskMeta[];
+  engineTasks?: readonly EngineTask[];
+  engineRunningByTask?: Readonly<Record<string, boolean>>;
+  engineTitles?: Readonly<Record<string, string>>;
+  engineSelectedTaskId?: string | null;
+  onSelectEngineTask?: (taskId: string) => void;
   taskListLoading: boolean;
   taskListHasMore: boolean;
   taskListHasUnread?: boolean;
@@ -107,6 +120,7 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
   return (
     <WorkspaceSidebarItem
       tab={tab}
+      taskSortBy={taskSortBy}
       isActiveWorkspace={isActiveWorkspace}
       isExpanded={isExpanded}
       activateTab={activateTab}
@@ -115,6 +129,11 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
       onSelectTask={onSelectTask}
       onStartDraftInWorkspace={onStartDraftInWorkspace}
       taskItems={taskItems}
+      engineTasks={engineTasks}
+      engineRunningByTask={engineRunningByTask}
+      engineTitles={engineTitles}
+      engineSelectedTaskId={engineSelectedTaskId}
+      onSelectEngineTask={onSelectEngineTask}
       taskListLoading={taskListLoading}
       taskListHasMore={taskListHasMore}
       taskListHasUnread={taskListHasUnread}

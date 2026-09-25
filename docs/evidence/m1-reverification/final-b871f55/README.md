@@ -1,0 +1,13 @@
+# `b871f55` 增量原生桌面回归
+
+被测产品提交：`b871f559a540524bd60af4731ce08b04c7154ab7`。这是本轮文件引用、有参 compact、历史 Retry 接线后的**增量候选**，不是最终合并验收。环境为隔离 macOS Darwin arm64、Node 24.14.0、pnpm 10.33.2、Electron 41.0.3、真实 `zcode-cli 0.16.9`、本分支 ZCode Adapter `m1.2`；使用隔离 App 已配置的 OpenCode Go (Responses) `gpt-5.6-luna`。启动为 `ANYAGENT_M1_WORKBENCH=1 pnpm dev:desktop:prod`，数据和项目均在 `/tmp/anyagent-opencode-go.aBEA0z/`，没有复制凭据。
+
+从原“新建任务”入口选 ZCode Harness，在正式 Composer 发 `PR25_B871_CONTEXT_R1: Reply exactly CONTEXT_READY_B871.`，真实模型返回 `CONTEXT_READY_B871`。Task `task_29d5323a-b2cf-4c9c-9479-90eba9cee65a`、产品 Session `session_5f83cc49-ab6a-4eb5-a285-b27d4b874c42`、原生 Session `sess_4b6d5588-0d59-481e-9be9-77043415d707` 未变化。首轮产品 Input `input_65b34709-144c-4da8-b050-73f5b11120af` / Execution `execution_435f3b13-ec2e-4926-be32-d91b6bac5c39` completed。
+
+在同一原 Composer 的“添加上下文”菜单看到工作区**文件**组且没有 Plugin 组；[菜单截图](native-file-mention-menu.png)。选 `README.md` 后 UI 显示文件引用，发送第二轮 `PR25_B871_MENTION_R2`，产品 Input `input_30791798-11a7-4728-ade7-a5daffe34015` 的原文为 `[README.md](./README.md)  PR25_B871_MENTION_R2: Read the referenced README.md and reply exactly MENTION_SEEN_B871.`；原生 `session_input` 同样持有该原文并 promoted。真实 CLI 调用 Read 读取隔离项目 `README.md`，返回 `MENTION_SEEN_B871`，Execution `execution_aec3d30f-a48a-4e27-8f7e-e819d86c749b` completed。[两轮及文件工具截图](native-file-mention-two-rounds.png)。菜单底部仍有泛称“搜索插件、文件和对话”的提示，后续候选需修正或核实。
+
+原 Composer 发送 `/compact Keep the two PR25 markers in the summary.`，没有新增产品 Input / Execution；Runtime `compact-operation` `compact_c044f837-231b-4f13-bdb6-fa936da224cb` completed。隔离日志记录同一 ID 的真实 `session/compact` 请求与 ACK；原生 `message` 表产生 `Compact summary`。这是本次有参路径的真实 CLI 操作证据，但未单独证明 summary 对指令中每个词的遵循程度，也不代替异常/重启路径验收。
+
+第三轮 `PR25_B871_RETRY_SOURCE_R3` 无工具，产品 Input `input_ec2608dc-ff52-4e74-9fc9-04e5a633df12` / Execution `execution_79b80bed-086a-421c-a1c2-81892ace73b6` completed。点击正式回答操作条“重试”后，原轮仍为 completed；新 Input `input_0a10d7b5-9373-45c4-a6fc-01fa7289ba0f` / Execution `execution_f22c86c5-f1fb-494f-adf7-b628f6455ced` completed，`revisionOf` 明确指回上述来源 Input / Execution。两轮均返回 `RETRY_SOURCE_B871`，原生 `session_input` 的重试命令以 `revision_3141c9b0-49f4-40f4-9fc5-2840fda7d1a2` 关联并 promoted；[来源与新尝试截图](native-retry-preserves-source.png)。本场景没有工具副作用，不能代替失败轮次及有副作用重试的验证。
+
+同候选本机检查：Contract 9/9、Runtime 48/48、Service / Adapter / attachment 63/63、CLI mapper 2/2、UI 挂载 / DOM 28/28；`pnpm typecheck`、`pnpm lint`（0 error / 65 warning）、`pnpm architecture:check -- --changed`（0 violation）、`pnpm build:bootstrap`、ADR 索引、修改文件 `oxfmt --check` 与 `git diff --check` 通过。UI 测试仍有既有 React `act` 告警。独立复审发现冷 transcript 合成的 `completedSuccess` 仍可能被误认成实际执行完成；该技术阻塞不因本目录的成功场景而关闭。证据与状态以[唯一收口矩阵](../README.md#m0-单参与者能力收口矩阵)为准。
