@@ -1,0 +1,28 @@
+{
+  "productCommit": "6bc55e2eeab63bc495a9c2c954feb15549969e52",
+  "scenario": "Fifth real CLI turn in the restored original Task, visible streaming before completion",
+  "productTaskId": "task_4723d353-0d3e-4118-9050-6a8512028266",
+  "productSessionId": "session_72546d91-dba5-4f0f-b999-9e52ee129376",
+  "productInputId": "input_1f6299f0-f17a-40c1-b48a-a11ab168a5dc",
+  "productExecutionId": "execution_ee1f92ea-9112-413b-8f0b-7b06f427dcdd",
+  "nativeSessionId": "sess_9d44aa52-029e-43dd-9d66-cff20dc86a9a",
+  "nativeInputId": "queue_input_1f6299f0-f17a-40c1-b48a-a11ab168a5dc",
+  "uiObservation": "Original message displayed STREAM_START_6BC and numbered tips 1-22 while the composer still showed Stop; after completion it displayed through STREAM_END_6BC and the composer returned to Send. CUA observation is in the task trace; no screenshot file was saved.",
+  "productEventSummary": [
+    { "type": "execution.started", "count": 1, "firstMs": 1790322921167 },
+    { "type": "input.accepted", "count": 1, "firstMs": 1790322921167 },
+    { "type": "message.delta", "count": 79, "firstMs": 1790322925509, "lastMs": 1790322946722 },
+    { "type": "execution.completed", "count": 1, "firstMs": 1790322946918 }
+  ],
+  "nativeEvidence": {
+    "inputSequence": 4,
+    "inputStatus": "promoted",
+    "assistantMessageId": "msg_mugo1j2r_0ee85e92-46f4-434d-9f59-147d0d9acbe1",
+    "textPartId": "part_mugo22xq_0092b163-93f5-4ae8-b6c0-9c3bfdfbc8c9",
+    "textLength": 5293,
+    "startsWith": "STREAM_START_6BC",
+    "endsWith": "STREAM_END_6BC",
+    "textPartUpdatedMs": 1790322946910
+  },
+  "conditions": "macOS arm64; Electron 41.0.3; zcode-cli/0.16.9; Adapter m1.2; OpenCode Go (Responses)/grok-4.6; xhigh; isolated project and user data under /tmp/anyagent-opencode-go.aBEA0z"
+}

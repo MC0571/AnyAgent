@@ -25,6 +25,10 @@
 
 第一轮原生 `AskUserQuestion` 以原提问对话框询问能否创建隔离文件，选 Allow 后原 Write 权限对话框选仅本次允许。界面显示提问、工具、文件变化摘要和 `M2_6BC_WRITE_DONE`；实际 `m2-6bc-allow.txt` 内容为 `M2_6BC_ALLOW`。第二轮同原生 Session 请求另一次 Write，在原权限对话框选拒绝；界面报告 Write 被拒，`m2-6bc-deny.txt` 实际不存在。产品 Task／Participant／Session、两轮 Input／Execution、提问／审批归属和状态，与原生 Session、`session_input` 顺序、模型及工具状态在[同场景选取字段](question-approval-crosscheck.json)核对。桌面启动日志为 `/tmp/pr25-6bc-desktop.log`。
 
+随后以同一代码重新打开 M1，从原侧栏进入这条旧 Task：历史先只读，点击“恢复原会话”后才继续。第三轮用原 Composer `@` 选择 `m2-6bc-allow.txt`，产品与原生输入都含同一文件 markdown 引用；真实 CLI Read 后答 `M2_6BC_ALLOW`。第四轮在原聚合选择器内将同一 OpenCode Go (Responses) Provider 的模型从 `gpt-5.6-luna` 换成 `grok-4.6`，UI、产品逐轮配置和原生 user message 的 model 分别一致，真实答 `GROK_6BC_OK`。[同 Session 四轮、mention 与模型核对](mention-model-crosscheck.json)。
+
+第五轮继续用原 Composer、真实 `grok-4.6` 请求长回答。正式窗口在仍显示 Stop 时已呈现 `STREAM_START_6BC` 及第 1–22 条，完成后显示末尾 `STREAM_END_6BC` 并恢复发送按钮；产品同一 Execution 记录 79 个 `message.delta`，首条在 `execution.completed` 前约 21 秒。原生第 5 个 Input、assistant text part 和产品 Input／Execution 相互对应，详见[流式同场景核对](stream-crosscheck.json)。
+
 同一产品提交下关闭 M1 flag 重启隔离 App，窗口 URL 不含 `anyAgentServiceEnabled`，原选择器仅列 Provider；原 Composer 用 Return 提交 `M0_6BC_SMOKE`，真实 CLI `opencode-go-messages/qwen3.8-flash` 返回 `M0_6BC_OK`，原侧栏、自动化与 Provider 设置入口可达。[原生 Input／消息核对](m0-flag-off-crosscheck.json)。这只证明 M0 基础回归，不外推全部产品能力。
 
 本轮 CUA 对原窗口的提问、审批和最终画面作了截图观察，图片随本任务工具记录显示，但当前工具未提供获准的仓库截图保存路径，因此这里没有可交付的截图文件。这个正向真实 CLI 场景也不能代替过期竞态的真实 CLI 重现；竞态由定向故障注入测试证明。`6bc55e2` 的最终全量视觉／导航及 #21 其余 RC 场景尚待复验；先前 `f47e6b7` 的 M0 对照保留其原提交归属。
