@@ -225,8 +225,13 @@ function excludedNativeSlashCommandNames(
     ...nativePromptBuiltinSlashCommands,
   ]);
   return commands
-    .map((command) => normalizeSlashCommandValue(command.name).toLowerCase())
-    .filter((name) => !isZCodeHarness || !visibleBuiltinNames.has(name));
+    .filter(
+      (command) =>
+        !isZCodeHarness ||
+        (command.source !== "custom" &&
+          !visibleBuiltinNames.has(normalizeSlashCommandValue(command.name).toLowerCase())),
+    )
+    .map((command) => normalizeSlashCommandValue(command.name).toLowerCase());
 }
 
 function formatEngineSlashHelp(
@@ -287,7 +292,7 @@ function formatEngineSlashHelp(
       return [
         catalogCommand.inputHint?.trim() || `/${catalogCommand.name}`,
         catalogCommand.description,
-        "M1 Engine 对话暂不执行 ZCode CLI 自定义命令；输入会保留。",
+        "M1 Engine 经 Host 核对当前 CLI 命令目录后，在本 Task 的原生 Session 执行。",
       ].join("\n");
     }
     if (catalogCommand) {
@@ -315,9 +320,7 @@ function formatEngineSlashHelp(
     `M1 Engine 对话支持：${supportedCommands.join("、")}。`,
     "其中 /plugins 仅支持 list/status 只读查询。",
     `固定 CLI 命令暂不支持：${unsupportedBuiltins.join("、")}。`,
-    ...(customNames.length > 0
-      ? [`ZCode CLI 自定义命令暂不支持：${customNames.join("、")}。`]
-      : []),
+    ...(customNames.length > 0 ? [`当前 CLI 自定义命令：${customNames.join("、")}。`] : []),
     "输入 /help <命令> 查看说明。",
   ].join("\n");
 }
@@ -1885,19 +1888,29 @@ export function EngineConversation({
         const catalogCommand = nativeSlashCommands.find(
           (command) => normalizeSlashCommandValue(command.name).toLowerCase() === slashCommand.name,
         );
-        const unsupportedReason = nativeBuiltin
-          ? unsupportedNativeSlashReasons[
-              slashCommand.name as keyof typeof unsupportedNativeSlashReasons
-            ]?.[locale === "zh-CN" ? "zh" : "en"]
-          : null;
-        const message = nativeBuiltin
-          ? locale === "zh-CN"
-            ? `/${slashCommand.name} 暂不映射：${unsupportedReason ?? "当前 M1 Engine 对话没有对应的 Task 级 Host 操作。"} 输入已保留。`
-            : `/${slashCommand.name} is not mapped: ${unsupportedReason ?? "M1 Engine conversations have no matching Task-scoped Host action."} Your draft is preserved.`
-          : catalogCommand?.source === "custom"
+        if (!nativeBuiltin && catalogCommand?.source === "custom") {
+          if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
+            setNotice({
+              kind: "info",
+              message: `/${slashCommand.name} 当前只接受文本参数；输入已保留。`,
+            });
+            return false;
+          }
+          submitActionId = `custom:${slashCommand.name}`;
+          submitSuccessMessage = () =>
+            shouldQueue
+              ? `/${slashCommand.name} 已加入输入队列。`
+              : `/${slashCommand.name} 已提交。`;
+        } else {
+          const unsupportedReason = nativeBuiltin
+            ? unsupportedNativeSlashReasons[
+                slashCommand.name as keyof typeof unsupportedNativeSlashReasons
+              ]?.[locale === "zh-CN" ? "zh" : "en"]
+            : null;
+          const message = nativeBuiltin
             ? locale === "zh-CN"
-              ? `/${slashCommand.name} 是 ZCode CLI 自定义命令；当前 M1 Engine 对话不执行此类命令，输入已保留。`
-              : `/${slashCommand.name} is a ZCode CLI custom command; M1 Engine conversations do not run these commands. Your draft is preserved.`
+              ? `/${slashCommand.name} 暂不映射：${unsupportedReason ?? "当前 M1 Engine 对话没有对应的 Task 级 Host 操作。"} 输入已保留。`
+              : `/${slashCommand.name} is not mapped: ${unsupportedReason ?? "M1 Engine conversations have no matching Task-scoped Host action."} Your draft is preserved.`
             : catalogCommand
               ? locale === "zh-CN"
                 ? `/${slashCommand.name} 不在固定 ZCode v0.16.9 支持范围内；输入已保留。`
@@ -1905,8 +1918,9 @@ export function EngineConversation({
               : locale === "zh-CN"
                 ? `未知斜杠命令 /${slashCommand.name}；输入已保留。`
                 : `Unknown slash command /${slashCommand.name}. Your draft is preserved.`;
-        setNotice({ kind: "info", message });
-        return false;
+          setNotice({ kind: "info", message });
+          return false;
+        }
       }
     }
 

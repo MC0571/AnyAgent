@@ -3501,10 +3501,8 @@ test("an active ZCode Harness task switches models within its Session and submit
     await submitCurrentDraft();
     await waitFor(
       () =>
-        assert.ok(
-          document.body.textContent?.includes("M1 Engine 对话暂不执行 ZCode CLI 自定义命令"),
-        ),
-      "/help should explain that discovered CLI custom commands are not executed by M1",
+        assert.ok(document.body.textContent?.includes("M1 Engine 经 Host 核对当前 CLI 命令目录后")),
+      "/help should explain the Task-scoped custom command dispatch path",
     );
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/help"));
     await submitCurrentDraft();
@@ -3642,15 +3640,6 @@ test("an active ZCode Harness task switches models within its Session and submit
         `${command} should preserve its draft and explain the semantic/ownership boundary`,
       );
     }
-
-    await act(async () => input.__zcodeLexicalInputE2E!.setText("/custom-note take notes"));
-    await submitCurrentDraft();
-    assert.equal(submissions.length, 0, "a CLI custom command must not be sent as ordinary input");
-    assert.equal(input.__zcodeLexicalInputE2E!.getText(), "/custom-note take notes");
-    await waitFor(
-      () => assert.ok(document.body.textContent?.includes("不执行此类命令，输入已保留")),
-      "a custom CLI command should explain that M1 does not execute it",
-    );
 
     await act(async () => input.__zcodeLexicalInputE2E!.setText("/future-native arg"));
     await submitCurrentDraft();
@@ -4288,6 +4277,42 @@ test("an active ZCode Harness task switches models within its Session and submit
         ?.disabled,
       false,
     );
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(() =>
+      assert.ok(container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]')),
+    );
+    const customInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    )! as HTMLElement & {
+      __zcodeLexicalInputE2E?: { setText: (text: string) => void; getText: () => string };
+    };
+    await act(async () => customInput.__zcodeLexicalInputE2E!.setText("/custom"));
+    await waitFor(
+      () => assert.ok(container.querySelector('[data-option-id="slash:custom-note"]')),
+      "current CLI custom commands should appear in the original Composer picker",
+    );
+    const submissionsBeforeCustom = submissions.length;
+    await act(async () => customInput.__zcodeLexicalInputE2E!.setText("/custom-note take notes"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforeCustom + 1));
+    assert.deepEqual(
+      {
+        taskId: submissions.at(-1)?.taskId,
+        participantId: submissions.at(-1)?.participantId,
+        sessionId: submissions.at(-1)?.sessionId,
+        authorizationId: submissions.at(-1)?.authorizationId,
+        text: submissions.at(-1)?.text,
+      },
+      {
+        taskId,
+        participantId,
+        sessionId,
+        authorizationId: "authorization-engine-ui",
+        text: "/custom-note take notes",
+      },
+      "custom slash must submit through the original Task/Session Host request",
+    );
+    await waitFor(() => assert.equal(customInput.__zcodeLexicalInputE2E!.getText(), ""));
   } finally {
     await act(async () => root.unmount());
     container.remove();

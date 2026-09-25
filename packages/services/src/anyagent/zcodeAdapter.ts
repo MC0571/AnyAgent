@@ -53,8 +53,17 @@ type AgentPort = Pick<
       | "queryConversationCommandsV4"
       | "conversationFileChangesV4"
       | "conversationFileRewindPreviewV4"
+      | "readWorkspacePresentation"
     >
   >;
+
+/** Only /init is a fixed CLI builtin that intentionally runs as a prompt. */
+const PROMPT_BUILTIN_SLASH_COMMANDS = new Set(["init"]);
+
+function leadingSlashName(input: string): string | null {
+  const match = /^\/([^\s]+)(?:\s|$)/u.exec(input.trim());
+  return match?.[1]?.toLowerCase() ?? null;
+}
 
 function compactTerminalFromRows(
   rows: Awaited<ReturnType<AgentPort["conversationRowsRangeV4"]>>["rows"],
@@ -1643,6 +1652,50 @@ export function createZCodeAdapter(options: {
           "temporarily-unavailable",
           "none",
         );
+      const slashName = revision ? null : leadingSlashName(input);
+      if (slashName && !PROMPT_BUILTIN_SLASH_COMMANDS.has(slashName)) {
+        if (!options.agent.readWorkspacePresentation)
+          throw operationError(
+            operation,
+            "The current CLI slash command catalog is unavailable.",
+            "temporarily-unavailable",
+            "none",
+          );
+        let presentation: Awaited<ReturnType<NonNullable<AgentPort["readWorkspacePresentation"]>>>;
+        try {
+          presentation = await options.agent.readWorkspacePresentation(workspace);
+        } catch (error) {
+          throw operationError(
+            operation,
+            `The current CLI slash command catalog could not be read: ${error instanceof Error ? error.message : String(error)}`,
+            "temporarily-unavailable",
+            "none",
+          );
+        }
+        if (
+          presentation.workspace.workspacePath !== workspace.workspacePath ||
+          (workspace.workspaceIdentity &&
+            presentation.workspace.workspaceIdentity !== workspace.workspaceIdentity)
+        )
+          throw operationError(
+            operation,
+            "The CLI slash command catalog belongs to another workspace.",
+            "protocol-error",
+            "none",
+          );
+        if (
+          !presentation.slashCommands.some(
+            (candidate) =>
+              candidate.source === "custom" && candidate.name.toLowerCase() === slashName,
+          )
+        )
+          throw operationError(
+            operation,
+            `CLI custom command /${slashName} is unavailable in the current workspace.`,
+            "unsupported",
+            "none",
+          );
+      }
       const envelope =
         revision && nativeRevisionTarget
           ? {
