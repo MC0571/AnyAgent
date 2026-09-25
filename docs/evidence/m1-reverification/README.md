@@ -4,9 +4,9 @@
 
 ## PR #28 合并后的当前增量：授权撤销
 
-PR #28 已合并至 main `480d92dd5c02ca84628fab1c09ea4ebe7ab304e5`。授权撤销分支的被测产品提交为 `308ce0a492a50b58f17a300d73340f24aa1f9f14`（功能提交 `3ee852d`，随后合并该 main）。Host 在现有产品 SQLite 中持久化每个授权的当前状态，并在创建 Session、恢复、派发及相关异步等待后的原生发送点重新核验；Renderer 只读展示，不取得撤销写权。迁移时只为有明确既有授权的 Task 一次性回填；缺失记录关闭派发资格。撤销后既有历史仍可读，旧能力快照不被改写。
+PR #28 已合并至 main `480d92dd5c02ca84628fab1c09ea4ebe7ab304e5`。授权撤销分支的被测产品提交为 `576a382522e63627d2e586f5664a6f0b0b2ca3b8`（功能提交 `3ee852d` 与导入恢复补修 `576a382`，中间合并了该 main）。Host 在现有产品 SQLite 中持久化每个授权的当前状态，并在创建 Session、恢复、派发及相关异步等待后的原生发送点重新核验；Renderer 只读展示，不取得撤销写权。迁移时只为有明确既有授权的 Task 一次性回填；缺失记录关闭派发资格。撤销后既有历史仍可读，旧能力快照不被改写。
 
-本机 macOS arm64、Node 24.14.0、pnpm 10.33.2 上，`pnpm --dir packages/anyagent-engine test` 9/9、`pnpm --dir packages/anyagent-runtime test` 66/66、Service/Adapter/附件服务测试 83/83、UI 组件测试 33/33、原生映射测试 5/5 通过；`pnpm typecheck`、bootstrap typecheck、`pnpm lint`（65 条既有 warning、0 error）、`pnpm architecture:check -- --changed`、`pnpm build:bootstrap`、ADR 索引、受改文件格式和差异检查通过。原生映射测试须先构建固定 CLI 工作区依赖。本机结果，无适用远端 CI。Runtime 与 Adapter 定向用例注入撤销发生于能力刷新和原生建会话命令之间，断言原生命令零派发；Host 测试核对状态写权边界。这是 M1 Contract 的自动化证据，尚未作为最终 RC 的真实 CLI 桌面授权失效组合路径或视觉证据。真实断线后的副作用对账、运行中 compact 和最终 RC 桌面组合路径仍需单独收口。
+本机 macOS arm64、Node 24.14.0、pnpm 10.33.2 上，`pnpm --dir packages/anyagent-engine test` 9/9、`pnpm --dir packages/anyagent-runtime test` 67/67、Service/Adapter/附件服务测试 83/83、UI 组件测试 33/33、原生映射测试 5/5 通过；`pnpm typecheck`、bootstrap typecheck、`pnpm lint`（65 条既有 warning、0 error）、`pnpm architecture:check -- --changed`、`pnpm build:bootstrap`、ADR 索引、受改文件格式和差异检查通过。原生映射测试须先构建固定 CLI 工作区依赖。本机结果，无适用远端 CI。Runtime 与 Adapter 定向用例注入撤销发生于能力刷新和原生建会话命令之间，断言原生命令零派发；导入 Session 的延迟恢复也验证零派发与失败态，Host 测试核对状态写权边界。独立 reviewer 曾发现导入恢复漏传派发前 guard 的 P2，`576a382` 修复后补审确认关闭，无剩余 P1/P2/P3 合并阻断。这是 M1 Contract 的自动化证据，尚未作为最终 RC 的真实 CLI 桌面授权失效组合路径或视觉证据。真实断线后的副作用对账、运行中 compact 和最终 RC 桌面组合路径仍需单独收口。
 
 ## PR #27 合并后当前增量：Goal 冷恢复
 
