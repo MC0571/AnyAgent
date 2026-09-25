@@ -2891,6 +2891,9 @@ test("an active ZCode Harness task switches models within its Session and submit
   const selectedTaskIds: string[] = [];
   let createTaskError: Error | null = null;
   const skillCatalogLookups: Array<Record<string, unknown>> = [];
+  const goalStatusLookups: Array<Record<string, unknown>> = [];
+  let rejectNextGoalStatusRead: ((error: Error) => void) | null = null;
+  let delayNextGoalStatusRead = false;
   const nativeSkillCatalogLookups: Array<Record<string, unknown>> = [];
   let delayNextSkillCatalogRead = false;
   let releaseSkillCatalogRead: (() => void) | null = null;
@@ -2985,6 +2988,21 @@ test("an active ZCode Harness task switches models within its Session and submit
             scope: "workspace" as const,
           },
         ],
+      };
+    },
+    getTaskGoalStatus: async (input: Record<string, unknown>) => {
+      goalStatusLookups.push(input);
+      if (delayNextGoalStatusRead) {
+        delayNextGoalStatusRead = false;
+        return await new Promise<never>((_resolve, reject) => {
+          rejectNextGoalStatusRead = reject;
+        });
+      }
+      return {
+        objective: "Review the current workspace",
+        status: "active" as const,
+        tokensUsed: 24,
+        tokenBudget: 100,
       };
     },
     setAssistantFeedback: async (input: Record<string, unknown>) => {
@@ -3470,11 +3488,28 @@ test("an active ZCode Harness task switches models within its Session and submit
       () =>
         assert.ok(
           document.body.textContent?.includes(
-            "M0 保存 Session 目标并可触发目标续跑；M1 没有对应的 Task 级 Host/Runtime 操作。",
+            "M1 当前仅支持只读 /goal 查询；目标变更和续跑尚无安全的 Task 级派发路径。",
           ),
         ),
       "a fixed but unmapped M0 command should explain the missing Task-scoped operation",
     );
+    await act(async () => input.__zcodeLexicalInputE2E!.setText("/goal"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(goalStatusLookups.length, 1));
+    assert.deepEqual(goalStatusLookups[0], {
+      taskId,
+      participantId,
+      sessionId,
+      authorizationId: "authorization-engine-ui",
+    });
+    assert.equal(submissions.length, 0, "read-only /goal must not create a product Input");
+    await waitFor(() =>
+      assert.match(
+        document.body.textContent ?? "",
+        /当前目标（active）：Review the current workspace/,
+      ),
+    );
+    await waitFor(() => assert.equal(input.__zcodeLexicalInputE2E!.getText(), ""));
 
     const unsupportedNativeCommands = [
       ["/login setup", "M0 登录会启动共享账号与凭据流程"],
@@ -3486,7 +3521,7 @@ test("an active ZCode Harness task switches models within its Session and submit
       ["/plugin list", "M0 修改后续 CLI Session 使用的插件配置"],
       ["/continue", "M0 CLI Session ID 不能安全地映射并授权"],
       ["/rewind latest", "M0 恢复工作区检查点；M1 只支持绑定到指定产品 Execution"],
-      ["/target pause", "M0 保存 Session 目标并可触发目标续跑"],
+      ["/target pause", "M1 当前仅支持只读 /goal 查询"],
     ] as const;
     for (const [command, reason] of unsupportedNativeCommands) {
       await act(async () => input.__zcodeLexicalInputE2E!.setText(command));
@@ -4106,6 +4141,44 @@ test("an active ZCode Harness task switches models within its Session and submit
       forkInput.blur();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+    await act(async () => root.render(appFor(taskId)));
+    await waitFor(() =>
+      assert.ok(container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]')),
+    );
+    const sourceInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    )! as HTMLElement & {
+      __zcodeLexicalInputE2E?: { setText: (text: string) => void; getText: () => string };
+    };
+    delayNextGoalStatusRead = true;
+    await act(async () => sourceInput.__zcodeLexicalInputE2E!.setText("/goal"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(typeof rejectNextGoalStatusRead, "function"));
+    await act(async () => root.render(appFor(zcodeTaskB.id)));
+    await waitFor(() =>
+      assert.ok(container.querySelector<HTMLElement>('[data-testid="engine-composer-input"]')),
+    );
+    const targetInput = container.querySelector<HTMLElement>(
+      '[data-testid="engine-composer-input"]',
+    )! as HTMLElement & {
+      __zcodeLexicalInputE2E?: { setText: (text: string) => void; getText: () => string };
+    };
+    await act(async () => targetInput.__zcodeLexicalInputE2E!.setText("B remains actionable"));
+    await waitFor(() =>
+      assert.equal(
+        container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+          ?.disabled,
+        false,
+      ),
+    );
+    await act(async () => rejectNextGoalStatusRead?.(new Error("Source Task goal read failed")));
+    assert.doesNotMatch(container.textContent ?? "", /Source Task goal read failed/);
+    assert.equal(targetInput.__zcodeLexicalInputE2E!.getText(), "B remains actionable");
+    assert.equal(
+      container.querySelector<HTMLButtonElement>('[data-testid="engine-composer-submit"]')
+        ?.disabled,
+      false,
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();

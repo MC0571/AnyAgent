@@ -158,8 +158,8 @@ const unsupportedNativeSlashReasons = {
     zh: "M0 恢复工作区检查点；M1 只支持绑定到指定产品 Execution 的文件撤销。",
   },
   goal: {
-    en: "M0 stores Session goal state and can trigger goal continuation; M1 has no matching Task-scoped Host/Runtime operation.",
-    zh: "M0 保存 Session 目标并可触发目标续跑；M1 没有对应的 Task 级 Host/Runtime 操作。",
+    en: "M1 currently supports only read-only /goal status; goal changes and continuation have no safe Task-scoped dispatch path yet.",
+    zh: "M1 当前仅支持只读 /goal 查询；目标变更和续跑尚无安全的 Task 级派发路径。",
   },
 } as const;
 
@@ -615,6 +615,14 @@ export function EngineConversation({
       requestVersionRef.current += 1;
     };
   }, [refresh, refreshVersion, revision]);
+
+  useEffect(() => {
+    setBusyAction((current) =>
+      current?.startsWith("goal-show:") && !current.startsWith(`goal-show:${selectedTaskId}:`)
+        ? null
+        : current,
+    );
+  }, [selectedTaskId]);
 
   useEffect(() => {
     const subscription = service.onDidChange((change) => {
@@ -1364,7 +1372,51 @@ export function EngineConversation({
     let submitSuccessMessage: (() => string | null) | null = null;
 
     if (isZCodeHarness && slashCommand) {
-      if (slashCommand.name === "compact") {
+      if (slashCommand.name === "goal" && !slashCommand.args) {
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
+          setNotice({ kind: "info", message: "/goal 查询不接受附件或网页上下文；输入已保留。" });
+          return false;
+        }
+        if (busyAction) return false;
+        const target = visibleTask;
+        const editor = inputApiRef.current;
+        const requestVersion = requestVersionRef.current;
+        const actionId = `goal-show:${target.id}:${requestVersion}`;
+        setBusyAction(actionId);
+        setNotice(null);
+        void (async () => {
+          try {
+            const goal = await service.getTaskGoalStatus({
+              taskId: target.id,
+              participantId: target.participant.id,
+              sessionId: target.session.id,
+              authorizationId: target.authorizationId,
+            });
+            if (
+              requestVersion !== requestVersionRef.current ||
+              selectedTaskIdRef.current !== target.id
+            )
+              return;
+            setNotice({
+              kind: "info",
+              message: goal
+                ? `当前目标（${goal.status}）：${goal.objective}。Token：${goal.tokensUsed}/${goal.tokenBudget ?? "不限"}。`
+                : "当前 Session 尚未设置目标。",
+            });
+            if (inputApiRef.current === editor && editor?.getText().trim() === cleanText)
+              editor.clear();
+          } catch (error) {
+            if (
+              requestVersion === requestVersionRef.current &&
+              selectedTaskIdRef.current === target.id
+            )
+              setNotice({ kind: "error", message: errorText(error) });
+          } finally {
+            setBusyAction((current) => (current === actionId ? null : current));
+          }
+        })();
+        return false;
+      } else if (slashCommand.name === "compact") {
         if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
           setNotice({
             kind: "info",

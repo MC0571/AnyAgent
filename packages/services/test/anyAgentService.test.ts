@@ -797,6 +797,7 @@ test("Host Skill catalog reads require the matching active Task Session", async 
   await mkdir(project);
   setDataBaseDir(directory);
   const nativeCatalogReads: Array<Record<string, unknown>> = [];
+  const nativeGoalReads: Array<Record<string, unknown>> = [];
   let nativeSessionSequence = 0;
   let catalogAuthority: "session" | "workspace" = "session";
   const host = createAnyAgentService({
@@ -824,6 +825,21 @@ test("Host Skill catalog reads require the matching active Task Session", async 
             enabled: true as const,
           },
         ],
+      };
+    },
+    readSession: async (params: Record<string, unknown>) => {
+      nativeGoalReads.push(params);
+      return {
+        session: {
+          sessionId: params.sessionId,
+          target: {
+            sessionId: params.sessionId,
+            objective: "Review the current workspace",
+            status: "active",
+            tokensUsed: 24,
+            tokenBudget: 100,
+          },
+        },
       };
     },
     sendConversationCommandV4: async ({
@@ -871,6 +887,22 @@ test("Host Skill catalog reads require the matching active Task Session", async 
     assert.deepEqual(nativeCatalogReads[0], {
       workspacePath: project,
       sessionId: first.session.nativeSessionId,
+    });
+    await assert.rejects(
+      host.service.getTaskGoalStatus({ ...identity, sessionId: second.session.id }),
+      /ownership do not match/i,
+    );
+    assert.equal(nativeGoalReads.length, 0);
+    assert.deepEqual(await host.service.getTaskGoalStatus(identity), {
+      objective: "Review the current workspace",
+      status: "active",
+      tokensUsed: 24,
+      tokenBudget: 100,
+    });
+    assert.deepEqual(nativeGoalReads[0], {
+      workspacePath: project,
+      sessionId: first.session.nativeSessionId,
+      runtimePolicy: "existing-only",
     });
 
     catalogAuthority = "workspace";

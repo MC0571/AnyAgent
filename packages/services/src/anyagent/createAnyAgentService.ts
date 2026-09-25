@@ -232,6 +232,16 @@ export function createAnyAgentService(
         })),
       };
     },
+    async getTaskGoalStatus(input) {
+      return runtime.readQualifiedTaskSession(input, async (target) => {
+        if (target.engineId !== "zcode")
+          throw new RuntimeEligibilityError(
+            "Session goals are available only for ZCode Tasks.",
+            "unsupported",
+          );
+        return enginesFor(target.environment).zcode.readSessionGoal(target.nativeSessionId);
+      });
+    },
     async restoreTaskSession(input) {
       return runtime.restoreTaskSession(input);
     },

@@ -351,6 +351,12 @@ export function createZCodeAdapter(options: {
     | { state: "current"; values: Record<string, "like" | "dislike" | null> }
     | { state: "unknown"; reason: string }
   >;
+  readSessionGoal(session: string): Promise<{
+    objective: string;
+    status: "active" | "paused" | "budget_limited" | "complete";
+    tokensUsed: number;
+    tokenBudget: number | null;
+  } | null>;
   /** ZCode-private first-turn reference; the Runtime and Engine contract stay protocol-neutral. */
   registerPendingSharedContext(session: string, contextId: string): void;
 } {
@@ -2437,6 +2443,26 @@ export function createZCodeAdapter(options: {
           reason: error instanceof Error ? error.message : String(error),
         };
       }
+    },
+    async readSessionGoal(session) {
+      if (!sessions.has(session)) throw new Error("The native Session is not attached.");
+      const snapshot = await options.agent.readSession({
+        ...workspace,
+        sessionId: session,
+        runtimePolicy: "existing-only",
+      });
+      if (snapshot.session.sessionId !== session)
+        throw new Error("The native goal snapshot belongs to a different Session.");
+      const goal = snapshot.session.target;
+      if (!goal) return null;
+      if (goal.sessionId !== session)
+        throw new Error("The native goal belongs to a different Session.");
+      return {
+        objective: goal.objective,
+        status: goal.status,
+        tokensUsed: goal.tokensUsed,
+        tokenBudget: goal.tokenBudget,
+      };
     },
     async closeSession(): Promise<EngineCommandReceipt> {
       return { status: "unsupported", reason: "未核实固定版本的原生关闭语义" };

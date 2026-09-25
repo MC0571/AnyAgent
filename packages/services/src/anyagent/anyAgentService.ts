@@ -53,6 +53,8 @@ export interface IAnyAgentService {
   getTaskSkillReferenceCatalog(
     input: TaskSkillReferenceCatalogRequest,
   ): Promise<TaskSkillReferenceCatalog>;
+  /** Read-only ZCode Session goal projection; native storage remains authoritative. */
+  getTaskGoalStatus(input: TaskLifecycleRequest): Promise<TaskGoalStatus | null>;
   restoreTaskSession(input: TaskLifecycleRequest): Promise<RuntimeTask>;
   reconcileExecution(input: ReconcileExecution): Promise<RuntimeExecution>;
   reconcileInput(input: ReconcileInput): Promise<RuntimeInput>;
@@ -117,6 +119,13 @@ export interface IAnyAgentService {
 
 export interface TaskSkillReferenceCatalog {
   readonly skills: readonly TaskSkillReference[];
+}
+
+export interface TaskGoalStatus {
+  readonly objective: string;
+  readonly status: "active" | "paused" | "budget_limited" | "complete";
+  readonly tokensUsed: number;
+  readonly tokenBudget: number | null;
 }
 
 export type TaskSkillReferenceCatalogRequest = Pick<
