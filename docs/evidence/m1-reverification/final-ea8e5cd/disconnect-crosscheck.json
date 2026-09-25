@@ -1,0 +1,207 @@
+{
+  "testedProductCommit": "ea8e5cdd31a549a87934e5b7759eea9c428d82be",
+  "environment": {
+    "system": "Darwin arm64",
+    "electron": "41.0.3",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "zcodeCli": "zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521",
+    "adapter": "m1.2",
+    "testRoot": "/tmp/anyagent-opencode-go.aBEA0z",
+    "workspace": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project",
+    "model": "OpenCode Go (Anthropic) / qwen3.8-flash",
+    "realCliAndProvider": true
+  },
+  "product": {
+    "task": {
+      "status": "active",
+      "participantId": "participant_93ed9df4-5bcd-4ebd-b5fe-48f6e545e86b",
+      "sessionId": "session_38820f5a-f931-4ff5-8f27-03fe51fcc3b8",
+      "id": "task_bbdc630b-0999-44f9-9e3f-b6b993d86b72"
+    },
+    "participantId": "participant_93ed9df4-5bcd-4ebd-b5fe-48f6e545e86b",
+    "session": {
+      "nativeSessionId": "sess_4b6cc5d1-c734-4e80-88de-1c74d6165eed",
+      "id": "session_38820f5a-f931-4ff5-8f27-03fe51fcc3b8"
+    },
+    "originalInput": {
+      "id": "input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+      "taskId": "task_bbdc630b-0999-44f9-9e3f-b6b993d86b72",
+      "participantId": "participant_93ed9df4-5bcd-4ebd-b5fe-48f6e545e86b",
+      "sessionId": "session_38820f5a-f931-4ff5-8f27-03fe51fcc3b8",
+      "status": "completed",
+      "nativeExecutionId": "input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    "originalExecution": {
+      "id": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab",
+      "inputId": "input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+      "taskId": "task_bbdc630b-0999-44f9-9e3f-b6b993d86b72",
+      "participantId": "participant_93ed9df4-5bcd-4ebd-b5fe-48f6e545e86b",
+      "sessionId": "session_38820f5a-f931-4ff5-8f27-03fe51fcc3b8",
+      "nativeExecutionId": "input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+      "status": "completed",
+      "terminalAt": 1790337294161,
+      "reconciledAt": 1790337294161,
+      "reconciliationReason": "Native terminal outcome is confirmed, but events missed before reconciliation, including tool and file-change effects, were not reconstructed. Inspect the native Session and workspace before retrying or treating side effects as audited.",
+      "error": null
+    },
+    "approval": {
+      "id": "approval_c229d8ad-7dd9-4aa3-808e-6bf8fcdb913a",
+      "requestEventId": "event_24c17ea1-80a3-4b0d-bf13-13283e39bfc3",
+      "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab",
+      "nativeApprovalId": "perm_c2be7fc9-0800-4ac4-add3-15be35326487",
+      "operation": "Write",
+      "status": "forwarded",
+      "repliedOptionId": "allow_once"
+    },
+    "eventTypeCounts": {
+      "approval.requested": 1,
+      "approval.response": 1,
+      "execution.started": 1,
+      "execution.unknown": 1,
+      "input.accepted": 1,
+      "message.delta": 42,
+      "tool.completed": 1,
+      "tool.started": 1
+    },
+    "nonTextEvents": [
+      {
+        "id": "event_655ad1e1-3229-4984-858e-e37cff402260",
+        "type": "input.accepted",
+        "deliverySequence": 0,
+        "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab"
+      },
+      {
+        "id": "event_280b5a85-7d6d-48a8-9d41-59079aa0bd57",
+        "type": "execution.started",
+        "deliverySequence": 1,
+        "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab"
+      },
+      {
+        "id": "event_24c17ea1-80a3-4b0d-bf13-13283e39bfc3",
+        "type": "approval.requested",
+        "deliverySequence": 2,
+        "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab"
+      },
+      {
+        "id": "event_94ccc131-c9d2-415b-beee-95f79eb12506",
+        "type": "approval.response",
+        "deliverySequence": 3,
+        "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab"
+      },
+      {
+        "id": "event_792d1a59-304e-448c-97a4-d3b97ecf5532",
+        "type": "tool.started",
+        "deliverySequence": 4,
+        "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab"
+      },
+      {
+        "id": "event_b14ea031-e3ad-4065-9eb5-48faddeb44f1",
+        "type": "tool.completed",
+        "deliverySequence": 5,
+        "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab"
+      },
+      {
+        "id": "event_190c3899-e6b7-4868-ac88-6e1cf1d0a8be",
+        "type": "execution.unknown",
+        "deliverySequence": 48,
+        "executionId": "execution_d50ff9bc-7bcb-49c4-9f9e-72b4e3669cab"
+      }
+    ],
+    "followupInput": {
+      "id": "input_4a4afcbe-e6a3-460b-b01b-8a1a5644575f",
+      "taskId": "task_bbdc630b-0999-44f9-9e3f-b6b993d86b72",
+      "participantId": "participant_93ed9df4-5bcd-4ebd-b5fe-48f6e545e86b",
+      "sessionId": "session_38820f5a-f931-4ff5-8f27-03fe51fcc3b8",
+      "status": "completed",
+      "nativeExecutionId": "input_4a4afcbe-e6a3-460b-b01b-8a1a5644575f",
+      "submissionConfig": {
+        "mode": "build",
+        "planEnabled": false,
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    },
+    "followupExecution": {
+      "id": "execution_b4f7853f-caac-4ddc-bef9-085132a3d025",
+      "inputId": "input_4a4afcbe-e6a3-460b-b01b-8a1a5644575f",
+      "sessionId": "session_38820f5a-f931-4ff5-8f27-03fe51fcc3b8",
+      "nativeExecutionId": "input_4a4afcbe-e6a3-460b-b01b-8a1a5644575f",
+      "status": "completed",
+      "result": "FINAL_AFTER_RECONCILE_OK_925"
+    }
+  },
+  "native": {
+    "sessionId": "sess_4b6cc5d1-c734-4e80-88de-1c74d6165eed",
+    "entriesForOriginalInput": [
+      {
+        "id": "native-turn-started:turn_4d107111-bc78-4242-ba9c-5f9c78a7e772",
+        "type": "runtime/native_turn_started",
+        "inputId": "input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+        "messageId": "msg_mugwk4cz_7667ada3-f174-40b1-acda-0aca2e43b661",
+        "timeCreated": 1790337225496
+      },
+      {
+        "id": "native-turn-terminal:e792a9ac-3196-46dd-bfd8-5eed1c377063",
+        "type": "runtime/native_turn_terminal",
+        "inputId": "input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+        "eventType": "turn_complete",
+        "resultType": "success",
+        "timeCreated": 1790337255496
+      }
+    ],
+    "sessionInputsForOriginalAndFollowup": [
+      {
+        "id": "queue_input_4a4afcbe-e6a3-460b-b01b-8a1a5644575f",
+        "kind": "sendText",
+        "status": "promoted",
+        "promotedMessageId": "msg_mugwm4p1_98fe3084-bc10-4c17-a5fb-90508a2e93d1"
+      },
+      {
+        "id": "queue_input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+        "kind": "sendText",
+        "status": "promoted",
+        "promotedMessageId": "msg_mugwk4cz_7667ada3-f174-40b1-acda-0aca2e43b661"
+      }
+    ],
+    "matchingWriteToolParts": [
+      {
+        "id": "part_mugwk91d_924ba030-2b7e-4de6-8a2f-45f07f0911ad",
+        "tool": "Write",
+        "status": "completed",
+        "inputPath": "/private/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project/m2-disconnect-final.txt"
+      }
+    ]
+  },
+  "file": {
+    "path": "/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project/m2-disconnect-final.txt",
+    "sizeBytes": 21,
+    "sha256": "954233c536c401b512fd0aefd7b28475c1d6eeddbfdb9b21b28a069d8ec76d5d",
+    "contentUtf8": "FINAL_DISCONNECT_925\n"
+  },
+  "failpoint": {
+    "schemaVersion": 1,
+    "enabled": false,
+    "workspaceKey": "/private/tmp/anyagent-opencode-go.aBEA0z/m2-disconnect-project",
+    "sessionId": "sess_4b6cc5d1-c734-4e80-88de-1c74d6165eed",
+    "commandId": "input_c535504b-ffe2-4954-bf3e-ff150e160a04",
+    "consumedAt": "2026-09-25T11:54:15.499Z",
+    "consumedEventType": "turn.completed"
+  }
+}
