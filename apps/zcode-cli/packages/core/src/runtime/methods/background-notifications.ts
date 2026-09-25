@@ -175,7 +175,10 @@ export async function persistBackgroundTaskNotificationBatch(
   await this.ensureContextInitialized(firstCommand.traceContext);
   const messageID = createMessageId();
   const inputPresentation = midTurn ? "task_notification_steer" : "task_notification";
-  this.messageHistory.addUser(text, runtimeInputMetadata(inputPresentation));
+  this.messageHistory.addUser(text, {
+    ...runtimeInputMetadata(inputPresentation)!,
+    nativeMessageId: String(messageID),
+  });
   await this.persistSyntheticUserNoticeForSession({
     messageID,
     metadata: {

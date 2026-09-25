@@ -82,7 +82,10 @@ export async function persistSubagentMessageCommand(
   await this.ensureContextInitialized(command.traceContext);
   const messageID = createMessageId();
   const inputPresentation = midTurn ? "subagent_reply_steer" : "subagent_reply";
-  this.messageHistory.addUser(command.text, runtimeInputMetadata(inputPresentation));
+  this.messageHistory.addUser(command.text, {
+    ...runtimeInputMetadata(inputPresentation)!,
+    nativeMessageId: String(messageID),
+  });
   await this.persistSyntheticUserNoticeForSession({
     messageID,
     sessionId: this.sessionId,

@@ -269,6 +269,7 @@ async function runRuntimeCommand(
       });
       const messageId = await persistSubagentMessageCommand.call(this, command);
       await this.executeTurnCommand(command.text, undefined, {
+        inputId: String(command.id),
         abortSignal: foregroundExecution.controller.signal,
         inputSource: "subagent_message",
         inputVisibility: "model-only",

@@ -270,10 +270,7 @@ async function persistDurableSessionEvent(
 ): Promise<void> {
   if (!this.sessionStore) return;
 
-  if (
-    event.type === SessionEventType.TurnComplete ||
-    event.type === SessionEventType.TurnError
-  ) {
+  if (event.type === SessionEventType.TurnComplete || event.type === SessionEventType.TurnError) {
     await persistNativeTurnTerminalEntry.call(this, event, traceContext);
     return;
   }
@@ -511,7 +508,7 @@ async function persistNativeTurnTerminalEntry(
   const inputId = payload.inputId?.trim();
   const turnId = event.turnId ? String(event.turnId).trim() : "";
   const eventId = String(event.id).trim();
-  if (!inputId || !turnId || !eventId || !this.sessionStore?.saveSessionEntry) return;
+  if (!turnId || !eventId || !this.sessionStore?.saveSessionEntry) return;
 
   try {
     await this.sessionStore.saveSessionEntry({
@@ -526,7 +523,7 @@ async function persistNativeTurnTerminalEntry(
       data: {
         eventId,
         eventType: event.type,
-        inputId,
+        ...(inputId ? { inputId } : {}),
         resultType:
           event.type === SessionEventType.TurnComplete
             ? (event.payload as TurnCompletePayload).resultType

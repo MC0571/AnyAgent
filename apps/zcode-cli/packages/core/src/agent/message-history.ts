@@ -44,6 +44,10 @@ export type RuntimeMessageSource =
 export interface RuntimeMessageMetadata {
   source: RuntimeMessageSource;
   inputPresentation?: RuntimeInputPresentation;
+  /** Native turn identity survives context-prefix and microcompact replacements. */
+  turnId?: string;
+  /** Message ID for a synthetic Input persisted before executeTurnCommand starts. */
+  nativeMessageId?: string;
 }
 
 export interface RuntimeMessageMessageEntry {
