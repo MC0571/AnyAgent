@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { EngineContractError } from "@anyagent/engine-contract";
 import { createTaskRuntime } from "@anyagent/runtime";
 import { WORKFLOW_REFINE_PERMISSION_OPTION_ID, zcodeSessionEventSchema } from "@zcode/shared";
 import { parseCommandEnvelope } from "@zcode/shared/zcode-protocol-v4";
+import { setDataBaseDir } from "../src/paths.js";
 import { createZCodeAdapter } from "../src/anyagent/zcodeAdapter.js";
+import { getZCodeAdapterObservationFailpointPath } from "../src/anyagent/zcodeAdapterObservationFailpoint.js";
 
 type AgentPort = Parameters<typeof createZCodeAdapter>[0]["agent"];
 const DEFAULT_MODEL_SELECTION = { providerId: "provider-a", modelId: "model-a" };
@@ -456,6 +458,9 @@ function harness({
   return {
     adapter,
     commands,
+    get activeSessionListeners() {
+      return listeners.size;
+    },
     nativeCompactCalls,
     rowQueries,
     resumeCalls,
@@ -3161,6 +3166,125 @@ test("ZCode tool cards retain native name and input without inventing a start", 
   assert.equal(started?.type === "tool.started" && started.name, "Bash");
   assert.deepEqual(started?.type === "tool.started" && started.input, { command: "pwd" });
   assert.equal(completed?.type === "tool.completed" && completed.name, "Bash");
+});
+
+test("development observation failpoint ends only the exact acknowledged Adapter run", async () => {
+  const dataBaseDir = await mkdtemp(join(tmpdir(), "anyagent-zcode-observation-drop-"));
+  const previousEnvironment = {
+    ANYAGENT_M0: process.env.ANYAGENT_M0,
+    ZCODE_RUNTIME_ENV: process.env.ZCODE_RUNTIME_ENV,
+    ZCODE_DATA_BASE_DIR: process.env.ZCODE_DATA_BASE_DIR,
+  };
+  const restoreEnvironment = () => {
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    setDataBaseDir(null);
+  };
+  process.env.ANYAGENT_M0 = "1";
+  process.env.ZCODE_RUNTIME_ENV = "development";
+  process.env.ZCODE_DATA_BASE_DIR = dataBaseDir;
+  setDataBaseDir(dataBaseDir);
+  const failpointPath = getZCodeAdapterObservationFailpointPath();
+  assert.ok(failpointPath);
+  await mkdir(dirname(failpointPath), { recursive: true });
+  await writeFile(
+    failpointPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        enabled: true,
+        workspaceKey: "/tmp/workspace",
+        sessionId: "native-session",
+        inputId: "native-input",
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+
+  const fixture = harness({ delayedAck: true });
+  try {
+    const session = await fixture.adapter.createSession();
+    const runPromise = fixture.adapter.run({
+      session,
+      input: "write one file, then continue reasoning",
+      commandId: "observation-drop-execution",
+    });
+    await waitUntil(() => fixture.commands.some((entry) => entry.type === "sendText"));
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "observation-drop-turn-started",
+        seq: 1,
+        sessionId: "native-session",
+        turnId: "observation-drop-turn",
+        timestamp: 1,
+        type: "turn.started",
+        payload: { inputId: "native-input", foregroundExecutionId: "native-work" },
+      },
+    });
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "observation-drop-write-result",
+        seq: 2,
+        sessionId: "native-session",
+        turnId: "observation-drop-turn",
+        timestamp: 2,
+        type: "tool.updated",
+        payload: {
+          kind: "result",
+          toolCallId: "observation-drop-write",
+          toolName: "Write",
+          result: { success: true },
+        },
+      },
+    });
+    assert.equal(
+      JSON.parse(await readFile(failpointPath, "utf8")).consumedAt,
+      undefined,
+      "events received before the native input ACK remain buffered",
+    );
+    assert.equal(fixture.activeSessionListeners, 1);
+
+    fixture.releaseSendText();
+    const run = await runPromise;
+    const events = [];
+    for await (const event of run.events) events.push(event);
+
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ["input.accepted", "execution.started", "tool.completed", "execution.unknown"],
+    );
+    assert.equal(fixture.activeSessionListeners, 0, "only the run event subscription is removed");
+    const consumed = JSON.parse(await readFile(failpointPath, "utf8"));
+    assert.equal(consumed.enabled, false);
+    assert.equal(typeof consumed.consumedAt, "string");
+
+    fixture.emit({
+      type: "session.event",
+      event: {
+        eventId: "observation-drop-late-terminal",
+        seq: 3,
+        sessionId: "native-session",
+        turnId: "observation-drop-turn",
+        timestamp: 3,
+        type: "turn.completed",
+        payload: { inputId: "native-input", resultType: "success" },
+      },
+    });
+    assert.equal(
+      events.some((event) => event.type === "execution.completed"),
+      false,
+    );
+  } finally {
+    fixture.adapter.dispose();
+    restoreEnvironment();
+    await rm(dataBaseDir, { recursive: true, force: true });
+  }
 });
 
 test("late native event stays with its completed run until CLI loss", async () => {

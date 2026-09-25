@@ -35,6 +35,7 @@ import { EngineContractError } from "@anyagent/engine-contract";
 import { WORKFLOW_REFINE_PERMISSION_OPTION_ID, type ZCodeSessionEvent } from "@zcode/shared";
 import type { CommandEnvelope } from "@zcode/shared/zcode-protocol-v4";
 import type { IZCodeAgentService, ZCodeAgentServiceEvent } from "../zcode-agent/zcodeAgent.js";
+import { consumeZCodeAdapterObservationFailpoint } from "./zcodeAdapterObservationFailpoint.js";
 
 type AgentPort = Pick<
   IZCodeAgentService,
@@ -1070,6 +1071,26 @@ export function createZCodeAdapter(options: {
             },
             event,
           );
+        if (
+          data.kind === "result" &&
+          consumeZCodeAdapterObservationFailpoint({
+            workspaceKey: nativeWorkspaceId,
+            sessionId: run.session,
+            inputId: run.inputId,
+          })
+        ) {
+          publish(run, {
+            type: "execution.unknown",
+            reason:
+              "Development failpoint stopped Adapter event observation after a native tool result.",
+          });
+          run.finished = true;
+          if (runs.get(run.session) === run) runs.delete(run.session);
+          // Dispose only this run's event listener; the native Session and CLI transport stay live.
+          run.dispose();
+          run.wake?.();
+          run.wake = undefined;
+        }
         if (data.kind === "error")
           publish(
             run,
