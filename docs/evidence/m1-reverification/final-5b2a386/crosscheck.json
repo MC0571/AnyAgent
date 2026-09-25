@@ -44,6 +44,22 @@
           "first": 1790360879603,
           "n": 1
         }
+      ],
+      "terminalMarkerEvidence": [
+        {
+          "eventId": "event_b04cb0e3-9504-4735-b04c-295dfba7454d",
+          "nativeEventId": "f5581e02-3efa-4b53-88af-530891032306",
+          "type": "message.delta",
+          "createdAt": 1790360879579,
+          "containsEndMarker": true
+        },
+        {
+          "eventId": "event_0f024146-c4ef-4fe0-876c-da4c9c9ecdb9",
+          "nativeEventId": "e3e16323-482d-4fbf-8439-3acf63ae8658",
+          "type": "execution.completed",
+          "createdAt": 1790360879603,
+          "containsEndMarker": true
+        }
       ]
     },
     {

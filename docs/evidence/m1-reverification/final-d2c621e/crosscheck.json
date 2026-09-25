@@ -1,0 +1,61 @@
+{
+  "testedProductCommit": "d2c621e09693660a89e1fd290357ce5fa804c3f4",
+  "environment": {
+    "platform": "macOS arm64",
+    "electron": "41.0.3",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "home": "/tmp/anyagent-opencode-go.aBEA0z/home",
+    "project": "/tmp/anyagent-opencode-go.aBEA0z/m2-final-project",
+    "cli": "zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521",
+    "adapter": "m1.2"
+  },
+  "fakeTaskA": {
+    "taskId": "task_8ce0c2ff-1f40-4ed2-8b8d-9c847667e003",
+    "participantId": "participant_51c957e9-b0fa-4315-bb4c-5ab842fb8164",
+    "sessionId": "session_77c1790b-7f4d-4651-ae0e-4d6086ffb9e3",
+    "firstInputId": "input_5783cba8-e4f4-45bb-aaff-77796b3b893f",
+    "firstExecutionId": "execution_a565c5be-388e-4cab-9c18-7b51d253a7d2",
+    "restoredDraftText": "DRAFT_A_UNSENT_D2_926",
+    "restoredDraftInputId": "input_c2becac5-8cf2-4641-b6d1-034ce034727a",
+    "restoredDraftExecutionId": "execution_a8b7127d-b79c-43e0-93d6-2bd2747f5f8c",
+    "restoredDraftInputCount": 1,
+    "bothExecutionsCompleted": true,
+    "coldRestartDraft": "DRAFT_A_COLD_D2_926",
+    "coldRestartDraftInputCount": 0,
+    "coldRestartState": "history readable; draft retained; sending disabled while native Fake Session unknown; explicit reattach rejected"
+  },
+  "zcodeTaskB": {
+    "taskId": "task_da128efe-ac23-4d02-82de-f72aee558285",
+    "participantId": "participant_15d3a79f-ad2d-400b-a788-cdd46552c9bb",
+    "sessionId": "session_0f21ac0b-77a2-48de-8aed-22d2c220fbf8",
+    "nativeSessionId": "sess_7add0d96-d4b1-44d1-a180-f0882a7f0e9a",
+    "restoredOriginalSession": true,
+    "draftText": "M2_RC_D2_ZCODE_DRAFT_926: Reply exactly ZCODE_D2_OK_926. Do not call tools.",
+    "inputId": "input_4af737bb-ed1a-469e-aa2b-c643320d68b5",
+    "executionId": "execution_39deddc7-c92f-4b15-a65d-864d240cd7f0",
+    "inputAndExecutionStatus": "completed",
+    "nativeInputId": "queue_input_4af737bb-ed1a-469e-aa2b-c643320d68b5",
+    "nativeInputCount": 1,
+    "nativeInputStatus": "promoted",
+    "nativeUserMessageId": "msg_muhdtmf6_60a6d07c-83af-4f0a-a7e9-0e7db696e2dd",
+    "nativeAssistantMessageId": "msg_muhdtmfo_0638d758-1b2b-4c2f-be7b-3b55c3bfdc18",
+    "nativeAssistantTextPartId": "part_muhdtp4w_b8b70939-2644-4856-919f-bc541a8a9687",
+    "nativeAssistantText": "ZCODE_D2_OK_926",
+    "model": "OpenCode Go (Anthropic)/deepseek-v4.1-flash",
+    "reasoning": "max",
+    "planEnabledInNativeAssistantMessage": true
+  },
+  "m0FlagOff": {
+    "flag": "ANYAGENT_M1_WORKBENCH=0",
+    "marker": "M2_RC_D2_M0_FLAG_OFF_926",
+    "nativeSessionId": "sess_2284c6ca-6c48-4cf6-aba0-741edfa54b44",
+    "nativeInputId": "queue_01a0da27-0191-7400-9b0b-8821c218f2c4",
+    "nativeInputCount": 1,
+    "nativeInputStatus": "promoted",
+    "nativeUserMessageId": "msg_muhdx3nz_e9787581-abf2-4c9d-a2dd-c6361349d3aa",
+    "nativeAssistantMessageId": "msg_muhdx3oa_aa24bec6-6659-4efa-a162-48fd6e4f164a",
+    "nativeAssistantTextPartId": "part_muhdx739_aec38c9c-b4aa-4cb7-a58a-f3f081ed9e9e",
+    "nativeAssistantText": "M0_D2_OK_926"
+  }
+}

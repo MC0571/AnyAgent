@@ -1,6 +1,6 @@
 # `3ca6872` 最终 RC 增量复验
 
-被测产品代码：`3ca6872e3a5464f2149e5c5c4c25eb35e8397589`。比较基线：`origin/main` `8732e7117666352e6252df3992a2cf25a2ccf478`。证据提交晚于产品代码；截至本记录，证据制作期间没有再改产品行为、依赖或装配。系统为 macOS arm64；Node 24.14.0、pnpm 10.33.2、Electron 41.0.3、ZCode Adapter m1.2、固定真实 `zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521`。隔离 HOME `/tmp/anyagent-opencode-go.aBEA0z/home`，项目 `/tmp/anyagent-opencode-go.aBEA0z/m2-final-project`，Electron profile 另隔离；沿用隔离 App 内已配置且可用的 OpenCode Go，没有读取或导出凭据。
+被测产品代码：`3ca6872e3a5464f2149e5c5c4c25eb35e8397589`。比较基线：`origin/main` `8732e7117666352e6252df3992a2cf25a2ccf478`。本目录场景执行期间的产品代码固定为 `3ca6872`；之后的 grouped 未读修复是 `5b2a386`，其复验另见[后一候选](../final-5b2a386/README.md)。系统为 macOS arm64；Node 24.14.0、pnpm 10.33.2、Electron 41.0.3、ZCode Adapter m1.2、固定真实 `zcode-cli/0.16.9@872ad960de7ec172591f7e1952f7849229f94521`。隔离 HOME `/tmp/anyagent-opencode-go.aBEA0z/home`，项目 `/tmp/anyagent-opencode-go.aBEA0z/m2-final-project`，Electron profile 另隔离；沿用隔离 App 内已配置且可用的 OpenCode Go，没有读取或导出凭据。
 
 ## 本机检查
 
