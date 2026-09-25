@@ -1,0 +1,62 @@
+{
+  "testedProductCommit": "a314e828e378cdc85bebe480aad2dfea14c7a7cf",
+  "scenario": "M2_PR35_AUTO_QUESTION_R4_925",
+  "environment": {
+    "system": "macOS Darwin arm64",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "desktop": "Electron 41.0.3",
+    "cli": "zcode-cli/0.16.9",
+    "adapter": "AnyAgent ZCode Adapter at a314e828e378cdc85bebe480aad2dfea14c7a7cf",
+    "provider": "OpenCode Go (Responses)",
+    "model": "gpt-5.6-luna",
+    "dataHome": "/tmp/anyagent-opencode-go.aBEA0z/home",
+    "project": "/tmp/anyagent-opencode-go.aBEA0z/m2-question-project"
+  },
+  "product": {
+    "taskId": "task_dcf446a1-35d7-4b72-bce9-b6f4d65eced2",
+    "participantId": "participant_2e43c21f-ac62-4e1a-849f-e8d703a7f4d4",
+    "sessionId": "session_2ce1855d-f636-4965-aca1-d14923603a39",
+    "inputId": "input_763eef69-e1f5-4300-955b-3a7742f0f54c",
+    "executionId": "execution_0af6d395-4b55-458e-bd75-2d4845e74e93",
+    "userInputId": "user-input_8593d18c-20e9-4351-9fa7-aece5ccea6d4",
+    "nativeRequestId": "perm_ebff62b9-92b1-4d3f-b0c0-4dc2ebe17cfe",
+    "question": "Which verified marker should I use?",
+    "requestStatusBeforeNativeResult": "pending",
+    "requestStatusAfterNativeResult": "forwarded",
+    "response": { "action": "accept", "content": { "answers": {} } },
+    "responseEvidenceSource": "engine",
+    "responseEvidenceId": "90b827ee-d448-4d0e-a37b-4b10e61d2ce4",
+    "responseAt": 1790345942416,
+    "executionStatus": "completed",
+    "executionTerminalAt": 1790345945751,
+    "counts": {
+      "input": 1,
+      "execution": 1,
+      "userInput": 1,
+      "userInputResponseEvent": 1
+    }
+  },
+  "native": {
+    "sessionId": "sess_ea9b0afe-7a9a-4895-b636-2eddd4fd8f79",
+    "sessionInputId": "queue_input_763eef69-e1f5-4300-955b-3a7742f0f54c",
+    "sessionInputStatus": "promoted",
+    "toolCallId": "call_I9WelYzziGv2wnFTAcfLrxZq",
+    "toolPartId": "part_muh1kivm_ca497349-001f-4ae9-a318-8cbe7883705e",
+    "toolStatus": "completed",
+    "toolOutput": "The user did not provide answers to these questions. Continue using your best judgment; do not treat this as a rejection or invent a user preference.",
+    "nativeToolResultEventId": "90b827ee-d448-4d0e-a37b-4b10e61d2ce4",
+    "toolPartCount": 1,
+    "sessionInputCount": 1
+  },
+  "observations": [
+    "正式 App 的原对话窗口显示结构化题目与两个选项；保持不作答。",
+    "原生 AskUserQuestion 成功完成，Adapter 在同一 Execution 映射一次带原生事件依据的空答复。",
+    "原 UserInput 变为 forwarded，Execution 随后 completed，UI 显示 No user answer was provided。",
+    "项目目录只有预置 README.md；该场景没有文件副作用。"
+  ],
+  "limits": [
+    "固定 CLI 工具结果和约五分钟等待与原生自动完成机制相符，但工具结果本身不单独证明具体触发器。",
+    "窗口由 CUA 实际观察，未保存可交付截图或录屏；最终 RC 视觉证据另补。"
+  ]
+}

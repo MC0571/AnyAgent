@@ -128,8 +128,12 @@ interface PendingRun {
       readonly inputKind: "text" | "choice" | "form";
       readonly options: readonly EngineUserInputOption[];
       readonly presentation?: EngineUserInputPresentation;
+      readonly turnId: string;
+      readonly toolCallId?: string;
+      readonly toolName?: string;
     }
   >;
+  readonly settledAskUserQuestionToolCalls: Set<string>;
   readonly toolDetails: Map<string, { name?: string; input?: unknown }>;
   turnId: string | null;
   nativeForegroundExecutionId: string | null;
@@ -903,7 +907,10 @@ export function createZCodeAdapter(options: {
       return;
     }
     if (incoming.type === "userInput.response") {
-      if (!run.userInputs.has(incoming.requestId)) return;
+      const request = run.userInputs.get(incoming.requestId);
+      if (!request) return;
+      if (request.toolName === "AskUserQuestion" && request.toolCallId)
+        run.settledAskUserQuestionToolCalls.add(request.toolCallId);
       publish(run, {
         type: "user-input.response",
         requestId: incoming.requestId as EngineUserInputRef,
@@ -957,7 +964,10 @@ export function createZCodeAdapter(options: {
         prompt,
         inputKind,
         options: inputOptions,
+        turnId: incoming.request.turnId,
         ...(userInputPresentation ? { presentation: userInputPresentation } : {}),
+        ...(incoming.request.toolCallId ? { toolCallId: incoming.request.toolCallId } : {}),
+        ...(incoming.request.toolName ? { toolName: incoming.request.toolName } : {}),
       });
       publish(run, {
         type: "user-input.requested",
@@ -1090,6 +1100,38 @@ export function createZCodeAdapter(options: {
             },
             event,
           );
+        if (data.kind === "result" && toolCallId) {
+          const result = payloadRecord(data.result);
+          const resultToolName = text(data.toolName) ?? details?.name;
+          const matchingRequests = [...run.userInputs.entries()].filter(
+            ([, request]) =>
+              request.toolName === "AskUserQuestion" &&
+              request.toolCallId === toolCallId &&
+              request.turnId === event.turnId,
+          );
+          if (
+            matchingRequests.length === 1 &&
+            !run.settledAskUserQuestionToolCalls.has(toolCallId) &&
+            (!resultToolName || resultToolName === "AskUserQuestion") &&
+            result.success === true &&
+            result.content ===
+              "The user did not provide answers to these questions. Continue using your best judgment; do not treat this as a rejection or invent a user preference."
+          ) {
+            const [requestId] = matchingRequests[0]!;
+            run.settledAskUserQuestionToolCalls.add(toolCallId);
+            publish(run, {
+              type: "user-input.response",
+              requestId: requestId as EngineUserInputRef,
+              status: "forwarded",
+              response: { action: "accept", content: { answers: {} } },
+              evidence: {
+                source: "engine",
+                evidenceId: event.eventId,
+                detail: "Native AskUserQuestion completed with no answers.",
+              },
+            });
+          }
+        }
         if (
           data.kind === "result" &&
           consumeZCodeAdapterObservationFailpoint({
@@ -1969,6 +2011,7 @@ export function createZCodeAdapter(options: {
         approvals: new Map(),
         approvalAnswers: new Map(),
         userInputs: new Map(),
+        settledAskUserQuestionToolCalls: new Set(),
         toolDetails: new Map(),
         turnId: null,
         nativeForegroundExecutionId: null,
