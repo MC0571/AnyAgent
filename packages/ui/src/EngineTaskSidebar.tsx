@@ -258,6 +258,9 @@ export function EngineTaskRow({
           }}
         >
           <span className={TASK_GROUP_ROW_LINE_CLASS}>
+            {engineTaskSidebarMetadata(task).unreadAt !== null ? (
+              <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-primary" />
+            ) : null}
             <TaskTitleOverflowText as="span" className="text-foreground" title={title}>
               {title}
             </TaskTitleOverflowText>

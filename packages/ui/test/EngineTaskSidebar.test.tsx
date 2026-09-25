@@ -879,15 +879,17 @@ test("grouped view mounts Engine rows among ungrouped native rows", async () => 
     listDeletedTaskIds: async () => [],
     onDynamicWorkspaceEvent: () => () => ({ dispose() {} }),
   };
+  let engineMiddle = {
+    ...runtimeTask(
+      "engine-middle",
+      { title: null, pinned: false, pinOrder: null, archivedAt: null, unreadAt: null },
+      now - 10,
+      now - 10,
+    ),
+    status: "active",
+  };
   const engineTasks = [
-    {
-      id: "engine-middle",
-      status: "active",
-      createdAt: now - 10,
-      updatedAt: now - 10,
-      engine: { engineId: "fake" },
-      session: { nativeSessionId: null },
-    },
+    engineMiddle,
     {
       id: "engine-duplicate",
       status: "active",
@@ -909,13 +911,41 @@ test("grouped view mounts Engine rows among ungrouped native rows", async () => 
       now - 40,
     ),
   ];
+  const unreadRequests: Array<Record<string, unknown>> = [];
+  const buildEngineHistory = (id: string) => ({
+    inputs: [{ text: id, receivedAt: 1 }],
+    executions: [],
+  });
+  type EngineTaskChange = {
+    taskId: string;
+    task: typeof engineMiddle;
+    history: ReturnType<typeof buildEngineHistory>;
+  };
+  const engineTaskListeners = new Set<(change: EngineTaskChange) => void>();
   const engineService = {
-    listTasks: async () => engineTasks,
-    getHistory: async (id: string) => ({
-      inputs: [{ text: id, receivedAt: 1 }],
-      executions: [],
-    }),
-    onDidChange: () => ({ dispose() {} }),
+    listTasks: async () => [engineMiddle, ...engineTasks.slice(1)],
+    setTaskUnread: async (input: Record<string, unknown>) => {
+      unreadRequests.push(input);
+      engineMiddle = {
+        ...engineMiddle,
+        sidebarMetadata: {
+          ...engineMiddle.sidebarMetadata,
+          unreadAt: input.unread === true ? 41 : null,
+        },
+      };
+      const change = {
+        taskId: engineMiddle.id,
+        task: engineMiddle,
+        history: buildEngineHistory(engineMiddle.id),
+      };
+      engineTaskListeners.forEach((listener) => listener(change));
+      return engineMiddle;
+    },
+    getHistory: async (id: string) => buildEngineHistory(id),
+    onDidChange: (listener: (change: EngineTaskChange) => void) => {
+      engineTaskListeners.add(listener);
+      return { dispose: () => engineTaskListeners.delete(listener) };
+    },
   };
   const engineSelected: string[] = [];
   const copied: string[] = [];
@@ -973,6 +1003,8 @@ test("grouped view mounts Engine rows among ungrouped native rows", async () => 
     ];
     assert.equal(rows.length, 4, "Engine and native rows share the grouped top-level list");
     assert.ok(rows.every((row) => row.classList.contains("group/task-row")));
+    const unreadRow = container.querySelector<HTMLElement>("[data-task-item-key='engine-middle']");
+    assert.equal(unreadRow?.querySelector("[aria-hidden='true'].bg-primary"), null);
     assert.equal(container.querySelector("[data-engine-task-rows]"), null);
     assert.deepEqual([...hiddenNativeIds], ["native-duplicate"]);
     assert.deepEqual(
@@ -985,10 +1017,9 @@ test("grouped view mounts Engine rows among ungrouped native rows", async () => 
       ),
       ["native-new", "engine-middle", "engine-duplicate", "native-old"],
     );
-    await act(async () => rows[1]?.click());
-    assert.deepEqual(engineSelected, ["engine-middle"]);
+
     await act(async () => {
-      rows[1]?.dispatchEvent(
+      unreadRow?.dispatchEvent(
         new dom.window.MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
@@ -999,8 +1030,64 @@ test("grouped view mounts Engine rows among ungrouped native rows", async () => 
     });
     const menu = document.querySelector("[data-slot='context-menu-content']");
     assert.match(menu?.textContent ?? "", /复制 Task ID/);
+    const markUnreadItem = [
+      ...(menu?.querySelectorAll<HTMLElement>("[data-slot='context-menu-item']") ?? []),
+    ].find((item) => item.textContent?.includes("标记为未读"));
+    assert.ok(markUnreadItem, "grouped Engine Task exposes the mark unread action");
     await act(async () => {
-      menu?.querySelector<HTMLElement>("[data-slot='context-menu-item']:last-child")?.click();
+      markUnreadItem.click();
+      await Promise.resolve();
+    });
+
+    assert.deepEqual(unreadRequests, [
+      {
+        taskId: "engine-middle",
+        participantId: "engine-middle-participant",
+        sessionId: "engine-middle-session",
+        unread: true,
+      },
+    ]);
+    const markedUnreadRow = container.querySelector<HTMLElement>(
+      "[data-task-item-key='engine-middle']",
+    );
+    assert.ok(markedUnreadRow?.querySelector("[aria-hidden='true'].bg-primary"));
+
+    await act(async () => {
+      markedUnreadRow?.click();
+      await Promise.resolve();
+    });
+    assert.deepEqual(engineSelected, ["engine-middle"]);
+    assert.deepEqual(unreadRequests[1], {
+      taskId: "engine-middle",
+      participantId: "engine-middle-participant",
+      sessionId: "engine-middle-session",
+      unread: false,
+      expectedUnreadAt: 41,
+    });
+    assert.equal(
+      container
+        .querySelector<HTMLElement>("[data-task-item-key='engine-middle']")
+        ?.querySelector("[aria-hidden='true'].bg-primary"),
+      null,
+    );
+
+    const selectedRow = container.querySelector<HTMLElement>(
+      "[data-task-item-key='engine-middle']",
+    );
+    await act(async () => {
+      selectedRow?.dispatchEvent(
+        new dom.window.MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 20,
+          clientY: 20,
+        }),
+      );
+    });
+    const copyMenu = document.querySelector("[data-slot='context-menu-content']");
+    assert.match(copyMenu?.textContent ?? "", /复制 Task ID/);
+    await act(async () => {
+      copyMenu?.querySelector<HTMLElement>("[data-slot='context-menu-item']:last-child")?.click();
     });
     assert.deepEqual(copied, ["engine-middle"]);
   } finally {
