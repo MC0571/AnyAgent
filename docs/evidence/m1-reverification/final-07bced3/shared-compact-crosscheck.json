@@ -1,0 +1,63 @@
+{
+  "productCodeCommit": "07bced37c5e82e1a9413b305dc2f0fa0c2358d85",
+  "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+  "nativeSessionId": "share-import-929acf3a-3577-46e3-9c06-2024c67e5963",
+  "compactOperations": [
+    {
+      "id": "compact_7353d488-0154-4495-816e-0bb58db0f084",
+      "status": "completed",
+      "instructions": null,
+      "acceptedAt": 1790302947666,
+      "terminalAt": 1790302987969,
+      "evidence": null
+    }
+  ],
+  "productInputs": [
+    {
+      "id": "input_b79953e6-8061-4717-bcea-ca040e55e5d4",
+      "status": "completed",
+      "text": "PR25_FINAL_SHARE_CONTEXT: Read the imported shared conversation context and reply with its exact unique marker only.",
+      "inputId": null,
+      "result": null
+    },
+    {
+      "id": "input_04f0a495-93a2-436f-b9ea-680b5ad64eae",
+      "status": "completed",
+      "text": "PR25_FINAL_AFTER_COMPACT: Reply exactly AFTER_COMPACT_OK_925.",
+      "inputId": null,
+      "result": null
+    }
+  ],
+  "productExecutions": [
+    {
+      "id": "execution_3bd816a3-d749-4c13-9e6d-ffcb4355f115",
+      "status": "completed",
+      "text": null,
+      "inputId": "input_b79953e6-8061-4717-bcea-ca040e55e5d4",
+      "result": "AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B"
+    },
+    {
+      "id": "execution_7bccbef3-2fc6-4db3-b663-0722c2e911d5",
+      "status": "completed",
+      "text": null,
+      "inputId": "input_04f0a495-93a2-436f-b9ea-680b5ad64eae",
+      "result": "AFTER_COMPACT_OK_925"
+    }
+  ],
+  "nativeSessionInputs": [
+    {
+      "id": "queue_input_b79953e6-8061-4717-bcea-ca040e55e5d4",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 0,
+      "text": "PR25_FINAL_SHARE_CONTEXT: Read the imported shared conversation context and reply with its exact unique marker only."
+    },
+    {
+      "id": "queue_input_04f0a495-93a2-436f-b9ea-680b5ad64eae",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 1,
+      "text": "PR25_FINAL_AFTER_COMPACT: Reply exactly AFTER_COMPACT_OK_925."
+    }
+  ]
+}

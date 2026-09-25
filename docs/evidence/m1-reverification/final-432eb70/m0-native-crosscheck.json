@@ -1,0 +1,13 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "m1Flag": "0",
+  "nativeCliVersion": "0.16.9",
+  "nativeSessionId": "sess_23cc9545-5527-4b89-854e-89c19e382f5a",
+  "nativeInputId": "queue_01a0d6a7-1f34-7506-910c-aa426631cb98",
+  "nativeInputStatus": "promoted",
+  "prompt": "PR25_M0_432: Reply exactly M0_432_OK.",
+  "modelSelection": null,
+  "nativeTurnId": "turn_23b8ce1e-5147-4f30-9e0e-4aa11bcf31e4",
+  "nativeAssistantMessageId": "msg_mugeyos9_20c1561e-a0ac-4399-96b2-7eaeb4a455ca",
+  "answer": "M0_432_OK"
+}

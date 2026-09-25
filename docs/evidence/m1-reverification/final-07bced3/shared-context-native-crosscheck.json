@@ -1,0 +1,99 @@
+{
+  "productCodeCommit": "07bced37c5e82e1a9413b305dc2f0fa0c2358d85",
+  "evidenceLayer": "formal App -> Host/Runtime -> ZCode Adapter -> existing service -> real zcode-cli/0.16.9 -> configured OpenCode Go; share HTTP response supplied by isolated localhost fixture",
+  "fixtureOrigin": "http://127.0.0.1:43127",
+  "fixtureCode": "pr25-fixture-028efd12886f433386eb",
+  "fixtureMarker": "AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B",
+  "product": {
+    "taskId": "task_b2161cef-8933-4e72-a6d9-97ef095b6f51",
+    "participantId": "participant_6d2d2638-96a3-4f74-875c-5a3a2eb8b43d",
+    "sessionId": "session_ac454fdb-6362-4dff-adbb-c9591f606362",
+    "nativeSessionId": "share-import-929acf3a-3577-46e3-9c06-2024c67e5963",
+    "authorizationId": "authorization_3a1725fc-2b4d-462c-931f-cb85e6aeb304",
+    "inputId": "input_b79953e6-8061-4717-bcea-ca040e55e5d4",
+    "inputStatus": "completed",
+    "submissionConfig": {
+      "mode": "build",
+      "planEnabled": false,
+      "modelSelection": {
+        "providerId": "opencode-go-messages",
+        "modelId": "qwen3.8-flash",
+        "options": {
+          "reasoningLevel": "xhigh"
+        }
+      }
+    },
+    "executionId": "execution_3bd816a3-d749-4c13-9e6d-ffcb4355f115",
+    "executionStatus": "completed",
+    "result": "AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B"
+  },
+  "native": {
+    "sessionInputs": [
+      {
+        "id": "queue_input_b79953e6-8061-4717-bcea-ca040e55e5d4",
+        "kind": "sendText",
+        "status": "promoted",
+        "admittedSequence": 0,
+        "text": "PR25_FINAL_SHARE_CONTEXT: Read the imported shared conversation context and reply with its exact unique marker only."
+      }
+    ],
+    "sharedContextMessages": [
+      {
+        "id": "msg_share-import-929acf3a-3577-46e3-9c06-2024c67e5963_shared_context",
+        "shareId": "share-pr25-fixture-028efd12-886f-4333-86eb-2d3b5ccd179b",
+        "contextId": "shared-context-a8d2367a-e6f0-4f85-b2b1-ed9dd8a0b05a",
+        "status": "attached"
+      }
+    ],
+    "userMessages": [
+      {
+        "id": "msg_mugc3juc_32dbdadb-8df5-4161-a84c-832b3e66275a",
+        "sourceCommandId": "input_b79953e6-8061-4717-bcea-ca040e55e5d4",
+        "sharedContextRefs": [
+          {
+            "kind": "shared_context_import",
+            "context_id": "shared-context-a8d2367a-e6f0-4f85-b2b1-ed9dd8a0b05a"
+          }
+        ],
+        "modelSelection": {
+          "providerId": "opencode-go-messages",
+          "modelId": "qwen3.8-flash",
+          "options": {
+            "reasoningLevel": "xhigh"
+          }
+        }
+      }
+    ],
+    "assistantMessages": [
+      {
+        "id": "msg_mugc3jui_77d5fc5d-e336-447f-88b2-d8bea8f3c900"
+      },
+      {
+        "id": "msg_mugc5fei_d1d75959-9d52-4ebf-babd-30e55a3dbd14"
+      }
+    ],
+    "markerParts": [
+      {
+        "id": "part_share-import-929acf3a-3577-46e3-9c06-2024c67e5963_shared_context_text",
+        "type": "text",
+        "containsFixtureMarker": true,
+        "sharedContext": true,
+        "text": "# Shared conversation: PR #25 isolated shared-context fixture\n\n## User\n\nPreserve this fixture marker exactly in imported context: AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B\n\n## Assistant\n\nFixture assistant response. Marker: AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B\n"
+      },
+      {
+        "id": "part_mugc6ai4_6118a925-db20-43f9-86c0-4de8d4476f4e",
+        "type": "text",
+        "containsFixtureMarker": true,
+        "sharedContext": false,
+        "text": "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\nSummary:\n1. Primary Request and Intent:\n   This conversation is an isolated test fixture for PR #25, validating that shared/imported conversation context survives across sessions and compaction. The user's explicit requests were:\n   - First turn (\"Shared conversation: PR #25 isolated shared-context fixture\"): \"Preserve this fixture marker exactly in imported context: AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B\", followed by the instruction \"PR25_FINAL_SHARE_CONTEXT: Read the imported shared conversation context and reply with its exact unique marker only.\" The intent was to verify the assistant reads imported context and echoes the exact unique marker with nothing else.\n   - Second turn: Produce a detailed conversation summary in `<analysis>` + `<summary>` blocks, with the CRITICAL constraint: \"Respond with TEXT ONLY. Do NOT call any tools.\" — \"Do NOT use Read, Bash, Grep, Glob, Edit, Write, or ANY other tool. Tool calls will be REJECTED and will waste your only turn — you will fail the task.\" The Additional Instructions contained the tag `PR25_FINAL_SHARE_COMPACT`, marking this as the compaction half of the PR #25 fixture.\n\n2. Key Technical Concepts:\n   - PR #25 shared-context fixture validation: a test that a unique opaque marker string survives session import and later compaction.\n   - Unique fixture marker (must be preserved verbatim): `AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B`\n   - Fixture command tags: `PR25_FINAL_SHARE_CONTEXT` (echo the marker) and `PR25_FINAL_SHARE_COMPACT` (summary directive).\n   - ZCode skill system: a local fixture skill `pr25-validation` exists at `/private/tmp/anyagent-opencode-go.aBEA0z/project/.zcode/skills/pr25-validation/SKILL.md` (described as \"Isolated PR #25 test skill; use only to confirm the native Skill tool loads this local fixture\") — it was available but intentionally NOT invoked, as the task only required echoing the marker.\n   - Conversation compaction: summaries carry context forward; markers must be reproduced exactly.\n\n3. Files and Code Sections:\n   - No files were read, modified, or created during this conversation. No tool calls were made.\n   - Only file reference in context (not accessed): `/private/tmp/anyagent-opencode-go.aBEA0z/project/.zcode/skills/pr25-validation/SKILL.md` (skill listing only).\n   - The only code-relevant artifact is the fixture marker string itself:\n     `AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B`\n\n4. Errors and fixes:\n   - None. No errors occurred; no tool calls were attempted or rejected.\n\n5. Problem Solving:\n   - Solved: correctly identified the first-turn task as a pure context-echo verification and responded with the exact unique marker only, satisfying the `PR25_FINAL_SHARE_CONTEXT` instruction.\n   - Solved: recognized the second turn as the compaction-validation step and produced this summary without any tool usage, per the explicit constraint.\n\n6. All user messages:\n   - Message 1 (shared conversation fixture): \"# Shared conversation: PR #25 isolated shared-context fixture ## User Preserve this fixture marker exactly in imported context: AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B ## Assistant Fixture assistant response. Marker: AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B PR25_FINAL_SHARE_CONTEXT: Read the imported shared conversation context and reply with its exact unique marker only.\"\n   - Message 2 (summary request): \"CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. - Do NOT use Read, Bash, Grep, Glob, Edit, Write, or ANY other tool. - You already have all the context you need in the conversation above. - Tool calls will be REJECTED and will waste your only turn — you will fail the task. Your entire response must be plain text: an <analysis> block followed by a <summary> block.\" — plus the standard summary-structure instructions and \"Additional Instructions: PR25_FINAL_SHARE_COMPACT\".\n   - Security/constraint instructions to preserve verbatim: \"Preserve this fixture marker exactly in imported context: AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B\"; \"Respond with TEXT ONLY. Do NOT call any tools.\" (applies to the summary turn); \"reply with its exact unique marker only\" (applied to the first fixture turn).\n\n7. Pending Tasks:\n   - None beyond this fixture validation. No development work, file edits, or follow-up tasks were requested.\n\n8. Current Work:\n   Immediately before this summary request, the assistant had completed the PR #25 shared-context echo test by replying with exactly `AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B`. The current work is producing this text-only compaction summary (tagged `PR25_FINAL_SHARE_COMPACT`), preserving the fixture marker verbatim so it survives compaction for continued validation.\n\n9. Optional Next Step:\n   None — the fixture task chain (echo marker, then summarize) is complete. If a further fixture instruction arrives (e.g., another `PR25_*` tag), respond per its directive; a likely expected response remains the exact marker `AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B` if asked to re-confirm imported/compacted context. Do not begin any other work without an explicit user request.\nContinue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with \"I'll continue\" or similar. Pick up the last task as if the break never happened."
+      },
+      {
+        "id": "part_mugc3nad_c5c0933c-f834-4a80-85c5-2ef5c85103d3",
+        "type": "text",
+        "containsFixtureMarker": true,
+        "sharedContext": false,
+        "text": "AA_PR25_SHARED_CONTEXT_028EFD12886F433386EB2D3B5CCD179B"
+      }
+    ]
+  }
+}

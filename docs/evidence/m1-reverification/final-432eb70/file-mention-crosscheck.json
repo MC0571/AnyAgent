@@ -1,0 +1,16 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+  "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+  "nativeSessionId": "sess_a7848fd5-e2be-4011-9cbf-cad873dcf377",
+  "productInputId": "input_c406fa36-1bbb-482c-8ba3-d92f05eb419d",
+  "productText": "[m1-attachment.txt](./m1-attachment.txt) PR25_432_MENTION: Use the Read tool on the referenced m1-attachment.txt and reply with its marker only.",
+  "productStatus": "completed",
+  "productResult": "ATTACHMENT_MARKER_M1_924",
+  "nativeInputId": "queue_input_c406fa36-1bbb-482c-8ba3-d92f05eb419d",
+  "nativeStatus": "promoted",
+  "nativeSourceCommandId": "input_c406fa36-1bbb-482c-8ba3-d92f05eb419d",
+  "nativeText": "[m1-attachment.txt](./m1-attachment.txt) PR25_432_MENTION: Use the Read tool on the referenced m1-attachment.txt and reply with its marker only.",
+  "nativeMentionRefs": null,
+  "nativePromotedMessageId": "msg_mugfo07y_1d0ed992-fa2d-42d4-9d54-560ded4c8d95"
+}

@@ -1,0 +1,32 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "fixtureOrigin": "http://127.0.0.1:43127",
+  "fixtureCode": "pr25-fixture-b9725cc48081448ab41b",
+  "fixtureMarker": "AA_PR25_SHARED_CONTEXT_B9725CC48081448AB41B353D43385123",
+  "taskId": "task_be8094b4-7cd6-4d66-b680-2a1f0ff2d548",
+  "participantId": "participant_be21eca2-7c3f-4e47-905e-9ecaa626748a",
+  "productSessionId": "session_5a3e08d7-9c14-45f9-a09e-dbdf0285dc01",
+  "nativeSessionId": "share-import-1defa4d0-abbb-423f-971f-96a35d1aefa7",
+  "authorizationId": "authorization_da1d774d-fc49-496a-8ec5-75f98cf5f486",
+  "sharedContext": {
+    "contextId": "shared-context-49d6deb7-7b2a-46ef-b064-306e63376de1",
+    "title": "PR #25 isolated shared-context fixture",
+    "shareUrl": "http://127.0.0.1:43127/cn/share/pr25-fixture-b9725cc48081448ab41b"
+  },
+  "productInputId": "input_8a9aa292-2020-4fd9-8fb4-0071a0450598",
+  "productExecutionId": "execution_1fbfb8e0-b7dc-441a-982b-1d96dcb035ee",
+  "productExecutionStatus": "completed",
+  "nativeInputId": "queue_input_8a9aa292-2020-4fd9-8fb4-0071a0450598",
+  "nativeInputStatus": "promoted",
+  "nativeSourceCommandId": "input_8a9aa292-2020-4fd9-8fb4-0071a0450598",
+  "nativeSharedContextRefs": [
+    {
+      "kind": "shared_context_import",
+      "context_id": "shared-context-49d6deb7-7b2a-46ef-b064-306e63376de1"
+    }
+  ],
+  "nativePromotedMessageId": "msg_mugfezuc_4af06a4b-f435-4e70-a76b-a125f66533c4",
+  "nativeTurnId": "turn_442919c0-55a9-4b62-ba7a-287b90410545",
+  "nativeAssistantMessageId": "msg_mugfezui_c90ebafd-a8ff-4d9d-8e34-5f3914906456",
+  "nativeAnswer": "AA_PR25_SHARED_CONTEXT_B9725CC48081448AB41B353D43385123\n\nThe fixture marker from the shared conversation context has been preserved exactly as provided."
+}

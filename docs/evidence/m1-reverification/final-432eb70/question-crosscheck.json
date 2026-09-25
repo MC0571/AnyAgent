@@ -1,0 +1,50 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+  "participantId": "participant_f844add5-ab6f-4745-b19c-837492f8d968",
+  "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+  "nativeSessionId": "sess_a7848fd5-e2be-4011-9cbf-cad873dcf377",
+  "inputId": "input_63163b3b-d51a-4c86-b246-f4817dbebd81",
+  "executionId": "execution_5ad198c2-af91-43a4-bb0b-62059c2d5e84",
+  "executionStatus": "completed",
+  "result": "QUESTION_432_B",
+  "userInput": {
+    "id": "user-input_d3fc4d8e-a39f-43a7-97a0-81977f7172aa",
+    "requestEventId": "event_8ae840cd-963a-41b3-a663-b61dbb3208e9",
+    "executionId": "execution_5ad198c2-af91-43a4-bb0b-62059c2d5e84",
+    "nativeRequestId": "perm_17869587-e9c9-47f7-b5c0-6eea615655f5",
+    "prompt": "Choose A or B?",
+    "inputKind": "choice",
+    "options": [
+      {
+        "id": "A",
+        "label": "A"
+      },
+      {
+        "id": "B",
+        "label": "B"
+      }
+    ],
+    "status": "forwarded",
+    "response": {
+      "action": "accept",
+      "content": {
+        "answers": {
+          "Choose A or B?": "B"
+        },
+        "answer_0": "B",
+        "answer": "B"
+      }
+    }
+  },
+  "nativeInputId": "queue_input_63163b3b-d51a-4c86-b246-f4817dbebd81",
+  "nativeInputStatus": "promoted",
+  "nativeSourceCommandId": "input_63163b3b-d51a-4c86-b246-f4817dbebd81",
+  "nativeRequestEntry": {
+    "interactionId": "perm_17869587-e9c9-47f7-b5c0-6eea615655f5",
+    "toolCallId": "call-a0e931e1-de3a-4346-ab12-20d57a704faa-0",
+    "eventId": "1f92c779-ab73-460e-88f3-eab3b328ba84",
+    "turnId": "turn_20cc15fe-494f-4d5f-93cb-62fead7848ef",
+    "sequenceNumber": 518
+  }
+}

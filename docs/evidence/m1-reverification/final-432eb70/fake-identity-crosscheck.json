@@ -1,0 +1,41 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "inputs": [
+    {
+      "id": "input_a0a92d8e-3bf5-4bc9-80f7-a46e0228e6fc",
+      "taskId": "task_eb6f64d3-edde-4b5e-91d8-347a51b6e1b8",
+      "participantId": "participant_45236bb0-0eef-4c28-9441-0b63bce8953c",
+      "sessionId": "session_95a0a403-81b2-4c00-998d-220a49a220e2",
+      "text": "FAKE_432_A_R1: first round.",
+      "status": "completed",
+      "nativeExecutionId": "fake-execution-1"
+    },
+    {
+      "id": "input_f86d008c-7871-47e4-9381-2b667019982c",
+      "taskId": "task_eb6f64d3-edde-4b5e-91d8-347a51b6e1b8",
+      "participantId": "participant_45236bb0-0eef-4c28-9441-0b63bce8953c",
+      "sessionId": "session_95a0a403-81b2-4c00-998d-220a49a220e2",
+      "text": "FAKE_432_A_R2: second round.",
+      "status": "completed",
+      "nativeExecutionId": "fake-execution-2"
+    },
+    {
+      "id": "input_8b41a207-7cf9-4716-938a-d39a051513c0",
+      "taskId": "task_895456f9-91d9-4e05-a0f2-5fab2cbee3f9",
+      "participantId": "participant_885abdfd-8d87-4554-9bac-a35e8766f5f5",
+      "sessionId": "session_6255e3fc-fa0d-4a77-8d23-1f5c038e7d5d",
+      "text": "FAKE_432_B_R1: independent task.",
+      "status": "completed",
+      "nativeExecutionId": "fake-execution-3"
+    },
+    {
+      "id": "input_75f6aac7-a846-4852-86a8-bd4d39442c9a",
+      "taskId": "task_eb6f64d3-edde-4b5e-91d8-347a51b6e1b8",
+      "participantId": "participant_45236bb0-0eef-4c28-9441-0b63bce8953c",
+      "sessionId": "session_95a0a403-81b2-4c00-998d-220a49a220e2",
+      "text": "FAKE_432_A_R3: after B, return to original A.",
+      "status": "completed",
+      "nativeExecutionId": "fake-execution-4"
+    }
+  ]
+}

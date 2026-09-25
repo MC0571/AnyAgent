@@ -1,0 +1,126 @@
+{
+  "productCodeCommit": "432eb7075024639b1e5e9f0692c20666f85d7fa7",
+  "productSessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+  "nativeSessionId": "sess_a7848fd5-e2be-4011-9cbf-cad873dcf377",
+  "toolRuns": [
+    {
+      "productInputId": "input_e64ba147-3d01-4a72-875d-4ccac3d5c865",
+      "text": "PR25_432_TOOL_ALLOW: Please use the Write tool to create pr25-final432-tool.txt in the current isolated project with exactly TOOL_ALLOW_432. Then reply TOOL_DONE_432.",
+      "status": "completed",
+      "nativeInput": {
+        "id": "queue_input_e64ba147-3d01-4a72-875d-4ccac3d5c865",
+        "status": "promoted",
+        "promoted_message_id": "msg_mugf3avz_59e5d21e-b06f-4052-81b1-02c78181f038"
+      },
+      "productExecution": {
+        "id": "execution_f5ac2d7e-8d6b-47d2-8315-f939a996144f",
+        "inputId": "input_e64ba147-3d01-4a72-875d-4ccac3d5c865",
+        "status": "completed",
+        "result": "TOOL_DONE_432",
+        "nativeExecutionId": "input_e64ba147-3d01-4a72-875d-4ccac3d5c865"
+      },
+      "approvals": [
+        {
+          "id": "approval_8c6ea24b-c5d1-44d9-9f4c-c51ed1a85997",
+          "status": "forwarded",
+          "requestEventId": "event_494c3d72-61b3-4166-ad6e-4c341b076612",
+          "executionId": "execution_f5ac2d7e-8d6b-47d2-8315-f939a996144f",
+          "decision": null
+        }
+      ],
+      "productEventChain": [
+        {
+          "id": "event_494c3d72-61b3-4166-ad6e-4c341b076612",
+          "type": "approval.requested",
+          "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+          "sessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+          "inputId": "input_e64ba147-3d01-4a72-875d-4ccac3d5c865",
+          "executionId": "execution_f5ac2d7e-8d6b-47d2-8315-f939a996144f",
+          "nativeEventId": "73b8b5bb-d37d-404c-9c8a-d64c5f16ca05",
+          "toolCallId": "call-c628c573-f441-4e58-9c35-d8caf793da99-0",
+          "optionIds": ["allow_once", "allow_project", "deny"]
+        },
+        {
+          "id": "event_9281ebc1-3508-4a7b-98a8-2616899ad3ad",
+          "type": "approval.response",
+          "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+          "sessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+          "inputId": "input_e64ba147-3d01-4a72-875d-4ccac3d5c865",
+          "executionId": "execution_f5ac2d7e-8d6b-47d2-8315-f939a996144f",
+          "optionId": "allow_once",
+          "decision": "approve",
+          "status": "forwarded",
+          "engineEvidenceId": "0cb56b35-6131-4f0f-b19f-8e311fa946dd"
+        },
+        {
+          "id": "event_8699fe2b-2bff-4d7e-ae08-5ad423e2f171",
+          "type": "tool.completed",
+          "taskId": "task_e648e24c-a120-4cb7-8b96-1560624b200e",
+          "sessionId": "session_8f295888-4142-4c96-8fcf-07e4d10fd1f1",
+          "inputId": "input_e64ba147-3d01-4a72-875d-4ccac3d5c865",
+          "executionId": "execution_f5ac2d7e-8d6b-47d2-8315-f939a996144f",
+          "toolCallId": "call-c628c573-f441-4e58-9c35-d8caf793da99-0",
+          "name": "Write",
+          "inputContent": "TOOL_ALLOW_432",
+          "resultSuccess": true
+        }
+      ],
+      "nativeWritePart": {
+        "id": "part_mugf3ftx_9369894b-ced2-4781-80e5-c64458d11b70",
+        "messageId": "msg_mugf3aw7_7bed7791-1068-4787-a702-8d3cafa2cd22",
+        "toolCallId": "call-c628c573-f441-4e58-9c35-d8caf793da99-0",
+        "tool": "Write",
+        "status": "completed",
+        "targetBasename": "pr25-final432-tool.txt",
+        "inputContent": "TOOL_ALLOW_432",
+        "outputCreated": true,
+        "readFileStateContent": "TOOL_ALLOW_432",
+        "readFileStateSizeBytes": 14
+      },
+      "nativeWritePartsWithSameCallId": 1,
+      "nativeWritePartsForTargetFile": 1
+    },
+    {
+      "productInputId": "input_f64dbe0f-9fdc-41d5-8b4b-e3a83a1c8ed4",
+      "text": "PR25_432_TOOL_DENY: Please use the Write tool to create pr25-final432-deny.txt in the current isolated project with exactly MUST_NOT_EXIST_432. Do not use another method.",
+      "status": "completed",
+      "nativeInput": {
+        "id": "queue_input_f64dbe0f-9fdc-41d5-8b4b-e3a83a1c8ed4",
+        "status": "promoted",
+        "promoted_message_id": "msg_mugf48jv_c493b043-a878-485d-9118-1153072a7988"
+      },
+      "productExecution": {
+        "id": "execution_52d91620-49d3-4862-91ca-afb70868bd7a",
+        "inputId": "input_f64dbe0f-9fdc-41d5-8b4b-e3a83a1c8ed4",
+        "status": "completed",
+        "result": "The Write tool was rejected, so `pr25-final432-deny.txt` was not created. I did not try another method. How should I proceed?",
+        "nativeExecutionId": "input_f64dbe0f-9fdc-41d5-8b4b-e3a83a1c8ed4"
+      },
+      "approvals": [
+        {
+          "id": "approval_27e3ce30-2d1e-41fa-8de9-2a673805d468",
+          "status": "rejected",
+          "requestEventId": "event_61c881c5-4cf1-4bf4-b32f-0c346862e869",
+          "executionId": "execution_52d91620-49d3-4862-91ca-afb70868bd7a",
+          "decision": null
+        }
+      ]
+    }
+  ],
+  "rewindOperations": [
+    {
+      "id": "file-rewind_8e2d3017-c9e2-4797-a369-c56040307556",
+      "executionId": "execution_f5ac2d7e-8d6b-47d2-8315-f939a996144f",
+      "status": "applied",
+      "evidence": {
+        "source": "engine",
+        "evidenceId": "file-rewind_8e2d3017-c9e2-4797-a369-c56040307556",
+        "detail": "Rewound 1 file from summary checkpoints."
+      }
+    }
+  ],
+  "isolatedFiles": {
+    "pr25-final432-tool.txt": false,
+    "pr25-final432-deny.txt": false
+  }
+}
