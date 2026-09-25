@@ -2709,6 +2709,20 @@ test("mounted Engine timeline keeps delta, tool, delta order without guessing id
       execution.querySelectorAll(`[data-testid="engine-answer-${executionId}"]`).length,
       2,
     );
+    for (const id of ["approval-one", "approval-two", "request-one", "request-two"])
+      assert.equal(
+        execution.querySelector(
+          `[data-testid="engine-${id.startsWith("approval") ? "approval" : "user-input"}-${id}"]`,
+        ),
+        null,
+        `${id} must not remain actionable after Execution completion`,
+      );
+    for (const status of ["failed", "stopped"] as const) {
+      history.executions[0] = { ...history.executions[0]!, status };
+      await render();
+      assert.equal(execution.querySelector("[data-testid^='engine-approval-']"), null);
+      assert.equal(execution.querySelector("[data-testid^='engine-user-input-']"), null);
+    }
   } finally {
     await act(async () => root.unmount());
     container.remove();

@@ -3935,6 +3935,13 @@ test("expired or finished-Execution interactions never reach the Engine", async 
       evidence: { source: "engine", evidenceId: "done" },
     });
     await until(() => runtime.getHistory(task.id)!.executions[0]!.status === "completed");
+    await until(
+      () =>
+        runtime.getHistory(task.id)!.approvals[1]!.status === "rejected" &&
+        runtime.getHistory(task.id)!.userInputs[1]!.status === "rejected",
+    );
+    assert.equal(runtime.getHistory(task.id)!.approvals[1]!.requestEventId !== null, true);
+    assert.equal(runtime.getHistory(task.id)!.userInputs[1]!.requestEventId !== null, true);
     await assert.rejects(
       () =>
         runtime.replyToApproval({
@@ -3942,7 +3949,7 @@ test("expired or finished-Execution interactions never reach the Engine", async 
           approvalId: runtime.getHistory(task.id)!.approvals[1]!.id,
           optionId: "allow",
         }),
-      /finished Execution/i,
+      /rejected/i,
     );
     await assert.rejects(
       () =>
@@ -3951,12 +3958,101 @@ test("expired or finished-Execution interactions never reach the Engine", async 
           requestId: runtime.getHistory(task.id)!.userInputs[1]!.id,
           response: "yes",
         }),
-      /finished Execution/i,
+      /rejected/i,
     );
     assert.equal(engine.approvalReplies, 0);
     assert.equal(engine.userInputReplies, 0);
   } finally {
     runtime.close();
+  }
+});
+
+test("failed and stopped Executions retire pending interactions without native replies", async () => {
+  for (const status of ["failed", "stopped"] as const) {
+    const engine = new ManualEngine();
+    const runtime = createTaskRuntime({
+      databasePath: ":memory:",
+      engines: new Map([["manual", engine]]),
+    });
+    try {
+      const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+      const scope = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: authorization.id,
+      };
+      await runtime.submitInput({ ...scope, text: `waiting for ${status}` });
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "accepted" },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+      engine.emit(0, {
+        type: "approval.requested",
+        approvalId: `approval-${status}` as never,
+        operation: "write",
+        options: [{ id: "allow", label: "Allow", decision: "approve" }],
+        expiresAt: null,
+      });
+      engine.emit(0, {
+        type: "user-input.requested",
+        requestId: `question-${status}` as never,
+        prompt: "Continue?",
+        inputKind: "text",
+        expiresAt: null,
+      });
+      await until(
+        () =>
+          runtime.getHistory(task.id)!.approvals.length === 1 &&
+          runtime.getHistory(task.id)!.userInputs.length === 1,
+      );
+      engine.emit(
+        0,
+        status === "failed"
+          ? {
+              type: "execution.failed",
+              failure: {
+                kind: "execution-failed",
+                operation: "execution.run",
+                message: "native failure",
+                sideEffects: "none",
+              },
+              evidence: { source: "engine", evidenceId: "failed" },
+            }
+          : {
+              type: "execution.stopped",
+              evidence: { source: "engine", evidenceId: "stopped" },
+            },
+      );
+      await until(() => runtime.getHistory(task.id)!.executions[0]!.status === status);
+      const history = runtime.getHistory(task.id)!;
+      assert.equal(history.approvals[0]?.status, "rejected");
+      assert.equal(history.userInputs[0]?.status, "rejected");
+      assert.equal(history.events.filter((event) => event.type.endsWith(".requested")).length, 2);
+      await assert.rejects(
+        () =>
+          runtime.replyToApproval({
+            ...scope,
+            approvalId: history.approvals[0]!.id,
+            optionId: "allow",
+          }),
+        /rejected/i,
+      );
+      await assert.rejects(
+        () =>
+          runtime.replyToUserInput({
+            ...scope,
+            requestId: history.userInputs[0]!.id,
+            response: "yes",
+          }),
+        /rejected/i,
+      );
+      assert.equal(engine.approvalReplies, 0);
+      assert.equal(engine.userInputReplies, 0);
+    } finally {
+      runtime.close();
+    }
   }
 });
 

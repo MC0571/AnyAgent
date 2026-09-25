@@ -4267,7 +4267,36 @@ export class TaskRuntime {
       input.createdAt,
       now,
     );
+    if (TERMINAL_EXECUTION_STATUSES.has(data.status) && isTerminalEvent(event.type))
+      this.#rejectPendingInteractions(target.taskId, target.sessionId, execution.id, now);
     return TERMINAL_EXECUTION_STATUSES.has(data.status) && isTerminalEvent(event.type);
+  }
+
+  #rejectPendingInteractions(
+    taskId: string,
+    sessionId: string,
+    executionId: string,
+    now: number,
+  ): void {
+    for (const kind of ["approval", "user-input"] as const) {
+      for (const record of this.#store.list<ApprovalData | UserInputData>(kind, taskId)) {
+        if (record.data.executionId !== executionId || record.data.status !== "pending") continue;
+        const data = { ...record.data, status: "rejected" as const };
+        this.#save(
+          kind,
+          record.id,
+          taskId,
+          sessionId,
+          executionId,
+          data,
+          data.status,
+          record.createdAt,
+          now,
+          record.nativeKey,
+        );
+        this.#publish(taskId, kind, record.id);
+      }
+    }
   }
 
   #invalidTerminal(target: RunTarget, event: EngineEvent, detail: string): false {
