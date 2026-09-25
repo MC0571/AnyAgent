@@ -597,13 +597,18 @@ function webElementPickerScript(options: WebElementPickerScriptOptions) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    if (!hoveredElement) {
+    // AX/坐标点击可能不先派发 mousemove；以实际 click 命中元素为准。
+    const clickedElement =
+      event.target instanceof Element
+        ? event.target
+        : (document.elementFromPoint?.(event.clientX, event.clientY) ?? hoveredElement);
+    if (!clickedElement) {
       finishPicker?.({ status: "cancelled" });
       return;
     }
     finishPicker?.({
       status: "selected",
-      element: collectElement(hoveredElement),
+      element: collectElement(clickedElement),
     });
   }
 
