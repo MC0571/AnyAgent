@@ -2974,6 +2974,7 @@ export function EngineConversation({
                   ...(queuePaused ? { pauseReason: "manual" as const } : {}),
                 }}
                 onDeleteItem={cancelQueuedInput}
+                disableCompactDelete
                 onEditItem={editQueuedInput}
                 pendingEditQueueItemId={pendingEditQueueItemId}
                 onMoveItem={

@@ -4712,6 +4712,11 @@ test("an active ZCode Harness task switches models within its Session and submit
         ],
       );
     }, "the mounted product queue should preserve Input -> compact -> later Input order");
+    assert.equal(
+      container.querySelector('[data-testid="v4-queue-item-delete-compact-queued-ui"]'),
+      null,
+      "Harness compact has no cancellation command, so its queue row cannot offer delete",
+    );
     assert.equal(history.inputs.length, inputsBeforeQueuedCompact + 3);
     assert.equal(history.executions.length, executionsBeforeQueuedCompact + 1);
     assert.equal(history.compactOperations?.length, 1, "compact remains maintenance, not an Input");
@@ -4719,6 +4724,58 @@ test("an active ZCode Harness task switches models within its Session and submit
     await act(async () => root.unmount());
     container.remove();
     zcodeSessionStore.setSlashCommands(workspacePath, originalSlashCommands);
+    dom.window.close();
+  }
+});
+
+test("shared queue panel keeps native M0 compact deletion", async () => {
+  const dom = installDom();
+  const [{ ConversationQueuePanel }, { ZCodeIntlProvider }, { TooltipProvider }] =
+    await Promise.all([
+      import("../src/v4/ConversationQueuePanel.js"),
+      import("../src/i18n/IntlProvider.js"),
+      import("../src/components/ui/tooltip.js"),
+    ]);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const deleted: string[] = [];
+  try {
+    await act(async () =>
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(ConversationQueuePanel, {
+              queue: {
+                autoDrain: true,
+                items: [
+                  {
+                    queueItemId: "native-compact-test",
+                    kind: "compact",
+                    text: "/compact",
+                    dispatch: { state: "queued" },
+                  },
+                ],
+              },
+              onDeleteItem: (id: string) => deleted.push(id),
+            }),
+          ),
+        ),
+      ),
+    );
+    const deleteButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="v4-queue-item-delete-native-compact-test"]',
+    );
+    assert.ok(deleteButton, "the original native queue must retain compact removal");
+    await act(async () => deleteButton.click());
+    assert.deepEqual(deleted, ["native-compact-test"]);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
     dom.window.close();
   }
 });

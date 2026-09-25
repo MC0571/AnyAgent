@@ -751,6 +751,76 @@ test("Runtime restart holds queued attachment until original reconciliation, nat
   }
 });
 
+test("cold restored queue resumes compact-only work after the last Input is cancelled or withdrawn", async () => {
+  for (const withdraw of [false, true]) {
+    const directory = await mkdtemp(join(tmpdir(), "anyagent-runtime-compact-only-"));
+    const databasePath = join(directory, "runtime.sqlite");
+    const engine = new ManualEngine();
+    let runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+    try {
+      const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+      const identity = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: task.authorizationId,
+      };
+      await runtime.submitInput({ ...identity, text: "active A" });
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: "compact-only-A-accepted" },
+      });
+      engine.emit(0, {
+        type: "execution.started",
+        evidence: { source: "engine", evidenceId: "compact-only-A-started" },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions[0]?.status === "started");
+      const queued = await runtime.submitInput({
+        ...identity,
+        text: "queued B",
+        delivery: "queue",
+      });
+      runtime.close();
+
+      runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+      engine.setCapability("execution.reconcile", {
+        support: "supported",
+        availability: "available",
+      });
+      engine.reconcileResult = {
+        status: "completed",
+        result: "original finished",
+        evidence: { source: "engine", evidenceId: "compact-only-A-terminal" },
+      };
+      const executionId = runtime.getHistory(task.id)!.executions[0]!.id;
+      await runtime.reconcileExecution({ ...identity, executionId });
+      await runtime.restoreTaskSession(identity);
+      const compact = await runtime.compactSession(identity);
+      assert.equal(compact.status, "queued");
+      if (withdraw) runtime.withdrawQueuedInputForEdit({ ...identity, inputId: queued.id });
+      else runtime.cancelQueuedInput({ ...identity, inputId: queued.id });
+      const removed = runtime.getHistory(task.id)!.inputs.find((item) => item.id === queued.id);
+      assert.equal(removed?.status, "cancelled");
+      if (withdraw) assert.match(removed?.error ?? "", /Withdrawn for editing/);
+      assert.equal(engine.compactCalls.length, 0);
+      runtime.close();
+
+      runtime = createTaskRuntime({ databasePath, engines: new Map([["manual", engine]]) });
+      assert.equal(runtime.getTask(task.id)?.session.queuePaused, true);
+      await runtime.restoreTaskSession(identity);
+      await runtime.resumeQueuedInputs(identity);
+      await until(() => runtime.getHistory(task.id)!.compactOperations[0]?.status === "completed");
+      assert.equal(engine.compactCalls.length, 1);
+      assert.equal(engine.compactCalls[0]?.commandId, compact.id);
+      assert.equal(engine.runs.length, 1, "resuming compact cannot resend A or B");
+      assert.equal(runtime.getHistory(task.id)!.executions.length, 1);
+    } finally {
+      runtime.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});
+
 test("expired queued attachment is rejected before native promotion", async () => {
   const engine = new ManualEngine();
   let now = 0;

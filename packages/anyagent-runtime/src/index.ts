@@ -1800,8 +1800,8 @@ export class TaskRuntime {
         throw new RuntimeEligibilityError("This Session queue is not paused.");
       this.#assertNoNativeActiveCompact(task.id, session.id);
       this.#assertNoActiveFileRewind(task.id, session.id);
-      const queued = this.#queuedInputs(session.id);
-      if (!queued.length) throw new RuntimeEligibilityError("This Session has no queued Inputs.");
+      if (!this.#queuedSessionWork(session.id).length)
+        throw new RuntimeEligibilityError("This Session has no queued work.");
       const unresolvedInput = this.#store
         .listInSession<InputData>("input", session.id)
         .find((record) =>
@@ -1839,7 +1839,8 @@ export class TaskRuntime {
       if (
         !latest.session.data.projection.queuePaused ||
         latest.session.data.nativeSessionId !== nativeSessionId ||
-        this.#liveSessions.get(session.id) !== nativeSessionId
+        this.#liveSessions.get(session.id) !== nativeSessionId ||
+        !this.#queuedSessionWork(session.id).length
       )
         throw new RuntimeEligibilityError(
           "The Task or native Session changed before queue resume.",
@@ -5222,7 +5223,9 @@ export class TaskRuntime {
       .list<RuntimeCompactOperation>("compact-operation", taskId)
       .find(
         (record) =>
-          record.data.sessionId === sessionId && ACTIVE_COMPACT_STATUSES.has(record.data.status),
+          record.data.sessionId === sessionId &&
+          record.data.status !== "queued" &&
+          ACTIVE_COMPACT_STATUSES.has(record.data.status),
       );
     const fileRewind = this.#store
       .list<RuntimeFileRewindOperation>("file-rewind-operation", taskId)
@@ -5708,7 +5711,7 @@ export class TaskRuntime {
       session.data.projection = {
         ...session.data.projection,
         status: "unknown",
-        ...(this.#queuedInputs(session.id).length ? { queuePaused: true } : {}),
+        ...(this.#queuedSessionWork(session.id).length ? { queuePaused: true } : {}),
         updatedAt: recoveredAt,
       };
       this.#save(
@@ -5785,24 +5788,21 @@ export class TaskRuntime {
           !ACTIVE_COMPACT_STATUSES.has(operation.data.status)
         )
           continue;
-        const wasQueued = operation.data.status === "queued";
-        const reason = wasQueued
-          ? "Runtime restarted before queued compaction was dispatched; it was not sent to the native Session."
-          : "Runtime restarted; native compaction cannot be safely reattached or resent.";
+        // A queued compact has no native side effect yet. Keep its position behind
+        // the explicit resume gate; only in-flight native work becomes unknown.
+        if (operation.data.status === "queued") continue;
+        const reason =
+          "Runtime restarted; native compaction cannot be safely reattached or resent.";
         const evidence = {
           source: "host" as const,
           evidenceId: `${operation.id}:restart`,
-          detail: wasQueued
-            ? "Runtime restarted before queued compaction reached native dispatch."
-            : "Runtime restarted before native compaction reached terminal evidence.",
+          detail: "Runtime restarted before native compaction reached terminal evidence.",
         };
         const data: RuntimeCompactOperation = {
           ...operation.data,
-          status: wasQueued ? "failed" : "unknown",
+          status: "unknown",
           queuePosition: undefined,
-          ...(wasQueued
-            ? { terminalAt: recoveredAt, failureEvidence: evidence }
-            : { unknownEvidence: evidence }),
+          unknownEvidence: evidence,
           reason,
         };
         this.#save(

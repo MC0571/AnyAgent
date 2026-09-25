@@ -42,6 +42,8 @@ interface ConversationQueuePanelProps {
   queue: QueueDisplayState;
   /** 删除队列项（deleteQueueItem command）。 */
   onDeleteItem?: (queueItemId: string) => void;
+  /** Harness compact 尚无取消动作；原生队列仍可删除 compact。 */
+  disableCompactDelete?: boolean;
   /** 撤回队列项到发起端 composer；权威删除成功后才恢复草稿。 */
   onEditItem?: (queueItemId: string) => Promise<void> | void;
   /** 正在等待 delete ACK / composer restore 的目标项；仅锁该 row。 */
@@ -125,6 +127,7 @@ interface QueueRowProps {
   intl: ReturnType<typeof useZCodeIntl>["intl"];
   sortable: boolean;
   onDeleteItem?: (queueItemId: string) => void;
+  disableCompactDelete: boolean;
   onEditItem?: (queueItemId: string) => Promise<void> | void;
   editPending: boolean;
   onSendNow?: (queueItemId: string) => void;
@@ -136,6 +139,7 @@ const QueueRow = memo(function QueueRow({
   intl,
   sortable,
   onDeleteItem,
+  disableCompactDelete,
   onEditItem,
   onSendNow,
   editPending,
@@ -260,7 +264,7 @@ const QueueRow = memo(function QueueRow({
           </Button>
         </ControlHintTooltip>
       ) : null}
-      {onDeleteItem && !isCompact ? (
+      {onDeleteItem && (!isCompact || !disableCompactDelete) ? (
         <ControlHintTooltip title={intl.formatMessage({ id: "chat.queue.remove" })}>
           <Button
             type="button"
@@ -287,6 +291,7 @@ const QueueRow = memo(function QueueRow({
 function ConversationQueuePanelImpl({
   queue,
   onDeleteItem,
+  disableCompactDelete = false,
   onEditItem,
   pendingEditQueueItemId = null,
   onSendNow,
@@ -389,6 +394,7 @@ function ConversationQueuePanelImpl({
                 intl={intl}
                 sortable={Boolean(onMoveItem)}
                 onDeleteItem={onDeleteItem}
+                disableCompactDelete={disableCompactDelete}
                 onEditItem={onEditItem}
                 onSendNow={onSendNow}
                 editPending={pendingEditQueueItemId === item.queueItemId}
