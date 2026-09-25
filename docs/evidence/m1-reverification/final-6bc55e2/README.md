@@ -25,4 +25,6 @@
 
 第一轮原生 `AskUserQuestion` 以原提问对话框询问能否创建隔离文件，选 Allow 后原 Write 权限对话框选仅本次允许。界面显示提问、工具、文件变化摘要和 `M2_6BC_WRITE_DONE`；实际 `m2-6bc-allow.txt` 内容为 `M2_6BC_ALLOW`。第二轮同原生 Session 请求另一次 Write，在原权限对话框选拒绝；界面报告 Write 被拒，`m2-6bc-deny.txt` 实际不存在。产品 Task／Participant／Session、两轮 Input／Execution、提问／审批归属和状态，与原生 Session、`session_input` 顺序、模型及工具状态在[同场景选取字段](question-approval-crosscheck.json)核对。桌面启动日志为 `/tmp/pr25-6bc-desktop.log`。
 
-本轮 CUA 对原窗口的提问、审批和最终画面作了截图观察，图片随本任务工具记录显示，但当前工具未提供获准的仓库截图保存路径，因此这里没有可交付的截图文件。这个正向真实 CLI 场景也不能代替过期竞态的真实 CLI 重现；竞态由定向故障注入测试证明。`6bc55e2` 的 M0 flag-off、最终全量视觉／导航及 #21 其余 RC 场景尚待复验；先前 `f47e6b7` 的 M0 对照保留其原提交归属。
+同一产品提交下关闭 M1 flag 重启隔离 App，窗口 URL 不含 `anyAgentServiceEnabled`，原选择器仅列 Provider；原 Composer 用 Return 提交 `M0_6BC_SMOKE`，真实 CLI `opencode-go-messages/qwen3.8-flash` 返回 `M0_6BC_OK`，原侧栏、自动化与 Provider 设置入口可达。[原生 Input／消息核对](m0-flag-off-crosscheck.json)。这只证明 M0 基础回归，不外推全部产品能力。
+
+本轮 CUA 对原窗口的提问、审批和最终画面作了截图观察，图片随本任务工具记录显示，但当前工具未提供获准的仓库截图保存路径，因此这里没有可交付的截图文件。这个正向真实 CLI 场景也不能代替过期竞态的真实 CLI 重现；竞态由定向故障注入测试证明。`6bc55e2` 的最终全量视觉／导航及 #21 其余 RC 场景尚待复验；先前 `f47e6b7` 的 M0 对照保留其原提交归属。

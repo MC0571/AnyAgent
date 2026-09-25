@@ -1,0 +1,56 @@
+{
+  "productCommit": "6bc55e2eeab63bc495a9c2c954feb15549969e52",
+  "path": "M1 flag off, original Root and Composer to original ZCode Host/service and real CLI",
+  "environment": {
+    "system": "macOS Darwin arm64",
+    "node": "24.14.0",
+    "pnpm": "10.33.2",
+    "electron": "41.0.3",
+    "cli": "zcode-cli/0.16.9",
+    "model": "opencode-go-messages/qwen3.8-flash",
+    "reasoning": "xhigh",
+    "isolatedData": "/tmp/anyagent-opencode-go.aBEA0z"
+  },
+  "uiObserved": [
+    "URL had no anyAgentServiceEnabled parameter.",
+    "Original model picker listed only Provider groups, no Harness group.",
+    "Original Composer keyboard Return submitted M0_6BC_SMOKE.",
+    "Original message view showed M0_6BC_OK.",
+    "Original task sidebar, Automation and model Provider settings entry remained available."
+  ],
+  "nativeInputs": [
+    {
+      "id": "queue_01a0d785-d858-740a-9cfe-623c3259c9a5",
+      "sessionId": "sess_605bdcdd-5df3-42d7-99bb-4de5083f8c6e",
+      "kind": "sendText",
+      "status": "promoted",
+      "admittedSequence": 0,
+      "promotedSequence": 0,
+      "text": "M0_6BC_SMOKE: Reply exactly M0_6BC_OK. Do not call tools."
+    }
+  ],
+  "nativeMessages": [
+    {
+      "id": "msg_mugnnjd6_3b196ea9-5f24-4423-a8aa-03355c282c3f",
+      "sequence": 0,
+      "role": "user",
+      "model": {
+        "providerID": "opencode-go-messages",
+        "modelID": "qwen3.8-flash",
+        "variant": "xhigh"
+      },
+      "texts": ["M0_6BC_SMOKE: Reply exactly M0_6BC_OK. Do not call tools."]
+    },
+    {
+      "id": "msg_mugnnjdj_025e81e2-f2fe-448c-a166-dfb7ef03f601",
+      "sequence": 1,
+      "role": "assistant",
+      "model": null,
+      "texts": ["M0_6BC_OK"]
+    }
+  ],
+  "limits": [
+    "CUA window screenshot observed in current task trace; no repository screenshot file saved.",
+    "This is M0 basic smoke, not validation of all M0 Product Parity features."
+  ]
+}
