@@ -2,6 +2,14 @@
 
 本次分层整理所据产品候选：`f47e6b7679f199d82d2f78fc8534aa417b110367`，当时基于 `origin/main` 的 `644120db21f654edbf40b4008df92294772a08cc`；整理前 PR 证据 head 为 `f66b629646446b504e452f9e31fccdf5b9906d33`。本候选已有[增量原生桌面与检查记录](final-f47e6b7/README.md)，但尚未完成全量必测回归。上一次较完整的桌面证据对应 `432eb7075024639b1e5e9f0692c20666f85d7fa7`，见[该候选原生桌面与检查证据](final-432eb70/README.md)；后续 `dda479f031212729dfcb289a983161e32686e872` 的[冷恢复增量复验](final-dda479f/README.md)保留原提交归属。较早 `44cfb92096238882c24c87315b271a2d8428aa4a` 的[网页拾取证据](final-44cfb92/README.md)、`07bced37c5e82e1a9413b305dc2f0fa0c2358d85` 的[分享、队列与恢复证据](final-07bced3/README.md)、`b0fc0e97ccac4127a20d6eba11a30fddfbcf3a34` 的[集成证据](final-b0fc0e9/README.md)、`db192db555f1ef950052f528595ad3d055562ef9` 的[桌面证据](final-db192db/README.md)以及更早提交的截图保留原归属。PR #25 已在独立集成审阅后合并为 `d813b84318aa554c65c162e533c079ba9ed16bdc`；Milestone #2 保持 open，本记录不表示最终 RC 已通过。
 
+## PR #30 候选增量：运行中 compact 与混合队列
+
+本增量被测产品提交为 `ee2bd51cb2de467c358e47cbb5aac295628e4978`，基于 `origin/main` 的 `5d3b2a519bf3e993a06febbf8b83ec6a0de38bc5`。在原 Root、原 Composer 与 Harness zcode 路径中，运行中普通 `/compact` 保留独立维护操作身份，和前后排队的业务 Input 以同一顺序推进；恢复冷启动队列时，未派发 compact 保持等待并须显式恢复，已派发但无终态的 compact 仍为 unknown，不盲目重发。Harness 侧没有 compact 取消命令，因此该行不显示删除；共用队列组件在原 M0 SessionPane 仍保留原生 compact 删除动作。
+
+隔离 macOS App 使用真实 `zcode-cli/0.16.9`、OpenCode Go (Anthropic) 的 `qwen3.8-flash`，从正式 UI 发送 A，运行时排入 B → `/compact` → C。正式窗口观察到 A 在完成前流式输出、队列顺序及最终 `B_DONE_RC_925`、`C_AFTER_COMPACT_RC_925`；[同一运行的产品与原生 SQLite 对账](final-ee2bd51/busy-compact-crosscheck.json)记录完整代码提交、Task／Session、三条 Input／Execution、独立 compact、四条原生终态与原生命令事实，顺序为 A → B → compact → C，均成功，未重复派发。本次窗口未保存可交付的截图／录屏，故这项视觉证据仍待最终 RC 补齐；不以数据库记录代替视觉事实。
+
+本机执行 Contract 9/9、Runtime 71/71、Service／Adapter／附件 83/83、UI 实际挂载／DOM 34/34、bootstrap 原生 session mapper 3/3；`pnpm typecheck`、bootstrap typecheck、`pnpm lint`（0 error、65 条既有 warning）、`pnpm architecture:check -- --changed`、`pnpm build:bootstrap`、ADR 索引、受改文件格式及 `git diff --check` 通过。无适用远端 CI，以上仅为本机结果。独立 reviewer 对完整 PR 增量先指出冷恢复仅剩 compact 无法继续和共用组件误删 M0 按钮两个 P2；修复后复审当前代码与测试，结论无剩余 P1/P2/P3。本次是 PR 集成候选，不宣称 Milestone #2 closure；真实 CLI 断线后同一执行对账与副作用去重、通用 Runtime 的 `sideEffects: possible` 安全重试资格，以及最终 RC 组合与视觉证据仍需继续完成。
+
 ## PR #28 合并后的当前增量：授权撤销
 
 PR #28 已合并至 main `480d92dd5c02ca84628fab1c09ea4ebe7ab304e5`。授权撤销分支的被测产品提交为 `576a382522e63627d2e586f5664a6f0b0b2ca3b8`（功能提交 `3ee852d` 与导入恢复补修 `576a382`，中间合并了该 main）。Host 在现有产品 SQLite 中持久化每个授权的当前状态，并在创建 Session、恢复、派发及相关异步等待后的原生发送点重新核验；Renderer 只读展示，不取得撤销写权。迁移时只为有明确既有授权的 Task 一次性回填；缺失记录关闭派发资格。撤销后既有历史仍可读，旧能力快照不被改写。

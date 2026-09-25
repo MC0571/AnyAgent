@@ -1,0 +1,151 @@
+{
+  "productCommit": "ee2bd51cb2de467c358e47cbb5aac295628e4978",
+  "platform": "Darwin 27.0.0 arm64",
+  "runtime": "Node v24.14.0; pnpm 10.33.2; Electron 41.0.3",
+  "cli": "zcode-cli/0.16.9",
+  "adapter": "ZCode Adapter m1.2",
+  "providerModel": "OpenCode Go (Anthropic)/qwen3.8-flash",
+  "condition": "Isolated HOME and project under /tmp/anyagent-opencode-go.aBEA0z; original Root and Composer; Harness zcode; build/change-before-confirm; reasoning xhigh; no tool requests",
+  "steps": [
+    "Send A requesting 40 TypeScript narrowing suggestions from the original composer; observe streamed content before completion.",
+    "While A is running, queue B; choose /compact from the slash picker and queue it; queue C after compact.",
+    "Observe the product queue B -> /compact -> C and final replies START_A_RC_925/END_A_RC_925, B_DONE_RC_925, C_AFTER_COMPACT_RC_925.",
+    "After exit, read only the product and native SQLite stores from this same isolated run and verify exact identities and terminal order."
+  ],
+  "product": {
+    "taskId": "task_c1b87019-e0ae-40c8-84d7-3ba7bbedcf47",
+    "sessionId": "session_3f114401-415f-494a-9102-21c991ffb2ef",
+    "nativeSessionId": "sess_80c334fb-8370-4400-a038-46ec18f42890",
+    "records": [
+      {
+        "id": "input_16626e78-c137-4df5-8fc9-c9c5f684a145",
+        "kind": "input",
+        "status": "completed",
+        "createdAt": 1790334076168,
+        "updatedAt": 1790334123149,
+        "queuePosition": null,
+        "inputId": null
+      },
+      {
+        "id": "execution_d628bf4a-0122-4507-b727-a47c927791bb",
+        "kind": "execution",
+        "status": "completed",
+        "createdAt": 1790334076193,
+        "updatedAt": 1790334123149,
+        "queuePosition": null,
+        "inputId": "input_16626e78-c137-4df5-8fc9-c9c5f684a145"
+      },
+      {
+        "id": "input_5835fedd-4ca7-4f35-90a4-8d20c588f851",
+        "kind": "input",
+        "status": "completed",
+        "createdAt": 1790334086029,
+        "updatedAt": 1790334126430,
+        "queuePosition": null,
+        "inputId": null
+      },
+      {
+        "id": "compact_a8b25423-2377-4b6f-9f31-2ba574bad3ad",
+        "kind": "compact-operation",
+        "status": "completed",
+        "createdAt": 1790334107661,
+        "updatedAt": 1790334161879,
+        "queuePosition": null,
+        "inputId": null
+      },
+      {
+        "id": "input_d30fce33-4415-4629-ad5d-e8977f2ba925",
+        "kind": "input",
+        "status": "completed",
+        "createdAt": 1790334116632,
+        "updatedAt": 1790334164752,
+        "queuePosition": null,
+        "inputId": null
+      },
+      {
+        "id": "execution_7b11d379-4c5a-4a3d-8c58-fba4277c14b3",
+        "kind": "execution",
+        "status": "completed",
+        "createdAt": 1790334123215,
+        "updatedAt": 1790334126430,
+        "queuePosition": null,
+        "inputId": "input_5835fedd-4ca7-4f35-90a4-8d20c588f851"
+      },
+      {
+        "id": "execution_13b0929f-bba6-4d80-a76d-f00c9057f128",
+        "kind": "execution",
+        "status": "completed",
+        "createdAt": 1790334161898,
+        "updatedAt": 1790334164752,
+        "queuePosition": null,
+        "inputId": "input_d30fce33-4415-4629-ad5d-e8977f2ba925"
+      }
+    ]
+  },
+  "native": {
+    "sessionId": "sess_80c334fb-8370-4400-a038-46ec18f42890",
+    "inputs": [
+      {
+        "id": "queue_input_16626e78-c137-4df5-8fc9-c9c5f684a145",
+        "kind": "sendText",
+        "delivery": "startNow",
+        "status": "promoted",
+        "admittedSequence": 0,
+        "promotedSequence": 0
+      },
+      {
+        "id": "queue_input_5835fedd-4ca7-4f35-90a4-8d20c588f851",
+        "kind": "sendText",
+        "delivery": "startNow",
+        "status": "promoted",
+        "admittedSequence": 1,
+        "promotedSequence": 1
+      },
+      {
+        "id": "queue_compact_a8b25423-2377-4b6f-9f31-2ba574bad3ad",
+        "kind": "compact",
+        "delivery": "startNow",
+        "status": "admitted",
+        "admittedSequence": 2,
+        "promotedSequence": null
+      },
+      {
+        "id": "queue_input_d30fce33-4415-4629-ad5d-e8977f2ba925",
+        "kind": "sendText",
+        "delivery": "startNow",
+        "status": "promoted",
+        "admittedSequence": 3,
+        "promotedSequence": 2
+      }
+    ],
+    "terminals": [
+      {
+        "inputId": "input_16626e78-c137-4df5-8fc9-c9c5f684a145",
+        "resultType": "success",
+        "sequenceNumber": 704
+      },
+      {
+        "inputId": "input_5835fedd-4ca7-4f35-90a4-8d20c588f851",
+        "resultType": "success",
+        "sequenceNumber": 730
+      },
+      {
+        "inputId": "compact_a8b25423-2377-4b6f-9f31-2ba574bad3ad",
+        "resultType": "success",
+        "sequenceNumber": 742
+      },
+      {
+        "inputId": "input_d30fce33-4415-4629-ad5d-e8977f2ba925",
+        "resultType": "success",
+        "sequenceNumber": 768
+      }
+    ],
+    "compactFact": [
+      {
+        "commandId": "compact_a8b25423-2377-4b6f-9f31-2ba574bad3ad",
+        "lifecycleStatus": "success"
+      }
+    ]
+  },
+  "result": "passed: 3 completed product Inputs, 3 completed Executions, 1 separate completed compact operation; native terminal order A, B, compact, C; no duplicate dispatch"
+}

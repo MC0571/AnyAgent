@@ -63,6 +63,7 @@ export interface RuntimeCompactOperation {
   readonly participantId: string;
   readonly sessionId: string;
   readonly status:
+    | "queued"
     | "requested"
     | "accepted"
     | "completed"
@@ -71,6 +72,8 @@ export interface RuntimeCompactOperation {
     | "cancelled"
     | "unknown";
   readonly requestedAt: number;
+  /** FIFO position shared with queued Inputs while the maintenance command waits. */
+  readonly queuePosition?: number;
   readonly acceptedAt: number | null;
   readonly terminalAt: number | null;
   readonly requestedEvidence: EngineEvidence;

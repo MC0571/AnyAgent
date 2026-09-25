@@ -747,6 +747,15 @@ export function EngineConversation({
   const queuedInputs = visibleHistory?.inputs.filter((input) => input.status === "queued") ?? [];
   const queuePaused = visibleTask?.session.queuePaused === true;
   queuedInputs.sort((left, right) => (left.queuePosition ?? 0) - (right.queuePosition ?? 0));
+  const queuedCompactOperations =
+    visibleHistory?.compactOperations.filter(
+      (operation) =>
+        operation.queuePosition !== undefined &&
+        ["queued", "requested", "accepted"].includes(operation.status),
+    ) ?? [];
+  queuedCompactOperations.sort(
+    (left, right) => (left.queuePosition ?? 0) - (right.queuePosition ?? 0),
+  );
   useEffect(() => {
     if (visibleTask && visibleHistory)
       onQueueRecoveryReconcile?.(visibleTask.id, visibleHistory.inputs);
@@ -831,15 +840,21 @@ export function EngineConversation({
         input.status === "unknown" &&
         !visibleHistory.executions.some((execution) => execution.inputId === input.id),
     ) ?? [];
+  const unknownCompact =
+    visibleHistory?.compactOperations.some((operation) => operation.status === "unknown") === true;
+  const activeCompact =
+    visibleHistory?.compactOperations.some((operation) =>
+      ["queued", "requested", "accepted"].includes(operation.status),
+    ) === true;
   const reconciledTerminalExecutions =
     visibleHistory?.executions.filter(
       (execution) => isTerminal(execution.status) && execution.reconciledAt !== undefined,
     ) ?? [];
   const hasPendingRound = activeRound || unknownRound || queuedInputs.length > 0;
-  const shouldQueue = activeRound || queuedInputs.length > 0;
+  const shouldQueue = activeRound || queuedInputs.length > 0 || (activeCompact && !unknownCompact);
   const hasUnresolvedMaintenance =
     visibleHistory?.compactOperations?.some((operation) =>
-      ["requested", "accepted", "unknown"].includes(operation.status),
+      ["queued", "requested", "accepted", "unknown"].includes(operation.status),
     ) === true ||
     visibleHistory?.fileRewindOperations?.some((operation) =>
       ["requested", "unknown"].includes(operation.status),
@@ -857,7 +872,7 @@ export function EngineConversation({
         : null;
   const currentAttachments = visibleTask ? (attachmentsByTask[visibleTask.id] ?? []) : [];
   const runBlockedReason = visibleTask
-    ? unknownRound
+    ? unknownRound || unknownCompact
       ? "当前轮次的原生结果未知，无法安全发送或排队。"
       : currentTaskBlock(visibleTask, "execution.run", engines, refreshFailed)
     : "请选择或创建一个 Engine Task。";
@@ -1548,14 +1563,29 @@ export function EngineConversation({
           engines,
           refreshFailed,
         );
-        if (compactBlockedReason || hasPendingRound || busyAction) {
+        const unresolvedFileRewind =
+          visibleHistory?.fileRewindOperations?.some((operation) =>
+            ["requested", "unknown"].includes(operation.status),
+          ) ?? false;
+        if (
+          compactBlockedReason ||
+          unknownRound ||
+          unknownCompact ||
+          activeCompact ||
+          unresolvedFileRewind ||
+          busyAction
+        ) {
           setNotice({
             kind: "info",
             message:
               compactBlockedReason ??
-              (hasPendingRound
-                ? "当前 Session 尚有未完成的输入或队列，暂不能压缩。"
-                : "当前操作尚未完成。"),
+              (unknownRound || unknownCompact
+                ? "当前 Session 有结果未知的操作；请先对账后再压缩。"
+                : activeCompact
+                  ? "当前 Session 已有压缩操作正在排队或执行。"
+                  : unresolvedFileRewind
+                    ? "当前 Session 有未决文件撤销操作，暂不能压缩。"
+                    : "当前操作尚未完成。"),
           });
           return false;
         }
@@ -1584,7 +1614,9 @@ export function EngineConversation({
                 ? "原生 Session 跳过了本次压缩。"
                 : operation.status === "unknown"
                   ? "上下文压缩结果未知；不会自动重试。"
-                  : "上下文压缩请求已记录，仍需等待原生结果。",
+                  : operation.status === "queued"
+                    ? "上下文压缩已按当前队列顺序等待前序输入。"
+                    : "上下文压缩请求已记录，仍需等待原生结果。",
         ).then((accepted) => {
           if (accepted && inputApiRef.current === editor) editor?.clear();
         });
@@ -2920,20 +2952,39 @@ export function EngineConversation({
               ) : null}
               <ConversationQueuePanel
                 queue={{
-                  items: queuedInputs.map((input) => ({
-                    queueItemId: input.id,
-                    kind: "sendText",
-                    text: input.text,
-                    dispatch: { state: "queued" },
-                  })),
+                  items: [
+                    ...queuedInputs.map((input) => ({
+                      queueItemId: input.id,
+                      kind: "sendText" as const,
+                      text: input.text,
+                      dispatch: { state: "queued" as const },
+                      queuePosition: input.queuePosition ?? 0,
+                    })),
+                    ...queuedCompactOperations.map((operation) => ({
+                      queueItemId: operation.id,
+                      kind: "compact" as const,
+                      text: "/compact",
+                      dispatch: { state: "queued" as const },
+                      queuePosition: operation.queuePosition ?? 0,
+                    })),
+                  ]
+                    .sort((left, right) => left.queuePosition - right.queuePosition)
+                    .map(({ queuePosition: _queuePosition, ...item }) => item),
                   autoDrain: !queuePaused,
                   ...(queuePaused ? { pauseReason: "manual" as const } : {}),
                 }}
                 onDeleteItem={cancelQueuedInput}
+                disableCompactDelete
                 onEditItem={editQueuedInput}
                 pendingEditQueueItemId={pendingEditQueueItemId}
-                onMoveItem={runBlockedReason ? undefined : moveQueuedInput}
-                onSendNow={queuePaused ? undefined : sendQueuedInputNow}
+                onMoveItem={
+                  runBlockedReason || queuedCompactOperations.length > 0
+                    ? undefined
+                    : moveQueuedInput
+                }
+                onSendNow={
+                  queuePaused || queuedCompactOperations.length > 0 ? undefined : sendQueuedInputNow
+                }
                 onResume={queuePaused && !runBlockedReason ? resumeQueuedInputs : undefined}
               />
               <div className="chat-composer-input-surface w-full">

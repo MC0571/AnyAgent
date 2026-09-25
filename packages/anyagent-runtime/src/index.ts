@@ -162,6 +162,20 @@ type UserInputData = Mutable<RuntimeUserInput> & { nativeRequestId: string };
 type StopRequestData = Mutable<RuntimeStopRequest>;
 type EventData = RuntimeEvent & { readonly canonicalPayload: string };
 
+type QueuedSessionWork =
+  | {
+      readonly kind: "input";
+      readonly id: string;
+      readonly queuePosition: number;
+      readonly record: StoredRecord<InputData>;
+    }
+  | {
+      readonly kind: "compact";
+      readonly id: string;
+      readonly queuePosition: number;
+      readonly record: StoredRecord<RuntimeCompactOperation>;
+    };
+
 interface RunTarget {
   readonly taskId: string;
   readonly participantId: string;
@@ -188,7 +202,7 @@ const ACTIVE_INPUT_STATUSES = new Set([
   "unknown",
 ]);
 const DISPATCHED_INPUT_STATUSES = new Set(["received", "native-accepted", "started"]);
-const ACTIVE_COMPACT_STATUSES = new Set(["requested", "accepted", "unknown"]);
+const ACTIVE_COMPACT_STATUSES = new Set(["queued", "requested", "accepted", "unknown"]);
 const TERMINAL_EXECUTION_STATUSES = new Set(["completed", "failed", "stopped"]);
 const MAX_SUBMISSION_CONFIG_BYTES = 16 * 1024;
 const MAX_SUBMISSION_CONFIG_DEPTH = 8;
@@ -1731,6 +1745,14 @@ export class TaskRuntime {
     this.#requireActiveTask(task);
     if (this.#queueDrainingSessions.has(session.id))
       throw new RuntimeEligibilityError("A queued Input is already being dispatched.");
+    if (
+      this.#activeCompactOperations(task.id, session.id).some(
+        (record) => record.data.queuePosition !== undefined,
+      )
+    )
+      throw new RuntimeEligibilityError(
+        "Queued Inputs cannot be reordered across a Session compaction barrier.",
+      );
     const queued = this.#queuedInputs(session.id);
     const moving = queued.find((record) => record.id === input.inputId);
     if (!moving || moving.data.participantId !== input.participantId)
@@ -1776,10 +1798,10 @@ export class TaskRuntime {
       this.#requireActiveTask(task);
       if (!session.data.projection.queuePaused)
         throw new RuntimeEligibilityError("This Session queue is not paused.");
-      this.#assertNoActiveCompact(task.id, session.id);
+      this.#assertNoNativeActiveCompact(task.id, session.id);
       this.#assertNoActiveFileRewind(task.id, session.id);
-      const queued = this.#queuedInputs(session.id);
-      if (!queued.length) throw new RuntimeEligibilityError("This Session has no queued Inputs.");
+      if (!this.#queuedSessionWork(session.id).length)
+        throw new RuntimeEligibilityError("This Session has no queued work.");
       const unresolvedInput = this.#store
         .listInSession<InputData>("input", session.id)
         .find((record) =>
@@ -1817,12 +1839,13 @@ export class TaskRuntime {
       if (
         !latest.session.data.projection.queuePaused ||
         latest.session.data.nativeSessionId !== nativeSessionId ||
-        this.#liveSessions.get(session.id) !== nativeSessionId
+        this.#liveSessions.get(session.id) !== nativeSessionId ||
+        !this.#queuedSessionWork(session.id).length
       )
         throw new RuntimeEligibilityError(
           "The Task or native Session changed before queue resume.",
         );
-      this.#assertNoActiveCompact(task.id, session.id);
+      this.#assertNoNativeActiveCompact(task.id, session.id);
       this.#assertNoActiveFileRewind(task.id, session.id);
       if (
         this.#store
@@ -1876,6 +1899,10 @@ export class TaskRuntime {
       const originalOrder = this.#queuedInputs(session.id).map((record) => record.id);
       if (!originalOrder.includes(input.inputId))
         throw new RuntimeEligibilityError("Input is no longer queued.");
+      if (this.#activeCompactOperations(task.id, session.id).length)
+        throw new RuntimeEligibilityError(
+          "Send-now cannot move an Input across an unresolved Session compaction.",
+        );
       const inputs = this.#store.listInSession<InputData>("input", session.id);
       if (inputs.some((record) => record.data.status === "unknown"))
         throw new RuntimeEligibilityError(
@@ -1998,6 +2025,60 @@ export class TaskRuntime {
             (right.record.data.queuePosition ?? right.index) || left.index - right.index,
       )
       .map(({ record }) => record);
+  }
+
+  #activeCompactOperations(
+    taskId: string,
+    sessionId: string,
+  ): StoredRecord<RuntimeCompactOperation>[] {
+    return this.#store
+      .list<RuntimeCompactOperation>("compact-operation", taskId)
+      .filter(
+        (record) =>
+          record.data.sessionId === sessionId && ACTIVE_COMPACT_STATUSES.has(record.data.status),
+      );
+  }
+
+  #queuedSessionWork(sessionId: string): QueuedSessionWork[] {
+    const inputs: QueuedSessionWork[] = this.#queuedInputs(sessionId).map((record, index) => ({
+      kind: "input",
+      id: record.id,
+      queuePosition: record.data.queuePosition ?? index,
+      record,
+    }));
+    const compactions: QueuedSessionWork[] = this.#store
+      .list<RuntimeCompactOperation>("compact-operation")
+      .filter(
+        (record) =>
+          record.data.sessionId === sessionId &&
+          record.data.status === "queued" &&
+          record.data.queuePosition !== undefined,
+      )
+      .map((record) => ({
+        kind: "compact",
+        id: record.id,
+        queuePosition: record.data.queuePosition!,
+        record,
+      }));
+    return [...inputs, ...compactions].sort(
+      (left, right) =>
+        left.queuePosition - right.queuePosition ||
+        left.record.createdAt - right.record.createdAt ||
+        left.id.localeCompare(right.id),
+    );
+  }
+
+  #nextQueuePosition(sessionId: string): number {
+    const work = this.#queuedSessionWork(sessionId).map((item) => item.queuePosition);
+    const task = this.#store
+      .list<RuntimeCompactOperation>("compact-operation")
+      .find((record) => record.data.sessionId === sessionId);
+    if (task) {
+      for (const record of this.#activeCompactOperations(task.taskId, sessionId)) {
+        work.push(record.data.queuePosition ?? 0);
+      }
+    }
+    return Math.max(-1, ...work) + 1;
   }
 
   async reviseTurn(input: ReviseTurn): Promise<RuntimeInput> {
@@ -2200,7 +2281,6 @@ export class TaskRuntime {
         .list<InputData>("input", task.id)
         .filter((record) => record.data.sessionId === session.id);
       if (promotedInputId) {
-        const queuedRecords = this.#queuedInputs(session.id);
         const queuedRecord = this.#require<InputData>("input", promotedInputId);
         if (
           queuedRecord.taskId !== task.id ||
@@ -2213,8 +2293,9 @@ export class TaskRuntime {
             "Queued Input ownership or state changed before promotion.",
             "ownership",
           );
-        if (queuedRecords[0]?.id !== promotedInputId)
-          throw new RuntimeEligibilityError("Queued Inputs must be promoted in FIFO order.");
+        const nextQueuedWork = this.#queuedSessionWork(session.id)[0];
+        if (nextQueuedWork?.kind !== "input" || nextQueuedWork.id !== promotedInputId)
+          throw new RuntimeEligibilityError("Queued Session work must be promoted in FIFO order.");
         if (attachments?.length)
           resolvedAttachments = this.#takeQueuedAttachments(task, session, id, attachments);
         const unknown = records.find(
@@ -2233,7 +2314,21 @@ export class TaskRuntime {
           throw new RuntimeEligibilityError(
             `Queued Input cannot be promoted while Input ${unresolved[0]!.id} is unresolved.`,
           );
-        this.#assertNoActiveCompact(task.id, session.id);
+        const compactBarrier = this.#activeCompactOperations(task.id, session.id).find(
+          (operation) =>
+            operation.id !== promotedInputId &&
+            (operation.data.status === "unknown" ||
+              ((operation.data.status === "requested" || operation.data.status === "accepted") &&
+                (operation.data.queuePosition === undefined ||
+                  operation.data.queuePosition < (queuedRecord.data.queuePosition ?? 0)))),
+        );
+        if (compactBarrier)
+          throw new RuntimeEligibilityError(
+            compactBarrier.data.status === "unknown"
+              ? `Queued Input is blocked by compaction ${compactBarrier.id} with an unknown native result.`
+              : `Queued Input cannot be promoted before compaction ${compactBarrier.id} reaches a terminal state.`,
+            compactBarrier.data.status === "unknown" ? "result-unknown" : "invalid-request",
+          );
         this.#assertNoActiveFileRewind(task.id, session.id);
         queuedRecord.data.status = "received";
         queuedRecord.data.nativeCommandId ??= promotedInputId;
@@ -2265,20 +2360,27 @@ export class TaskRuntime {
               record.data.sessionId === session.id &&
               ACTIVE_COMPACT_STATUSES.has(record.data.status),
           );
-        const mustQueue = queuedRecords.length > 0 || dispatchedRecords.length > 0;
+        const pendingCompaction = compactRecords.find((record) => record.data.status === "unknown");
+        const pendingDispatch = records.some((record) => record.data.status === "received");
+        const mustQueue =
+          queuedRecords.length > 0 ||
+          dispatchedRecords.length > 0 ||
+          pendingDispatch ||
+          compactRecords.length > 0;
         if (mustQueue && input.delivery === "queue") {
           if (unknown)
             throw new RuntimeEligibilityError(
               `Cannot queue behind Input ${unknown.id}; its native result is unknown.`,
               "result-unknown",
             );
+          if (pendingCompaction)
+            throw new RuntimeEligibilityError(
+              `Cannot queue behind compaction ${pendingCompaction.id}; its native result is unknown.`,
+              "result-unknown",
+            );
           if (dispatchedRecords.length > 1)
             throw new RuntimeEligibilityError(
               "Cannot queue because the Session has multiple unresolved Inputs.",
-            );
-          if (compactRecords.length)
-            throw new RuntimeEligibilityError(
-              `Cannot queue while compaction ${compactRecords[0]!.id} is unresolved.`,
             );
           queued = true;
         } else {
@@ -2305,11 +2407,7 @@ export class TaskRuntime {
           status: queued ? "queued" : "received",
           ...(queued
             ? {
-                queuePosition:
-                  Math.max(
-                    queuedRecords.length - 1,
-                    ...queuedRecords.map((record) => record.data.queuePosition ?? -1),
-                  ) + 1,
+                queuePosition: this.#nextQueuePosition(session.id),
               }
             : {}),
           receivedAt,
@@ -3085,7 +3183,9 @@ export class TaskRuntime {
       "session.compact",
     );
     this.#requireActiveTask(task);
-    this.#assertSessionIdle(task.id, session.id);
+    this.#assertNoUnknownInput(task.id, session.id);
+    this.#assertNoActiveFileRewind(task.id, session.id);
+    this.#assertNoActiveCompact(task.id, session.id);
     const nativeSessionId = session.data.nativeSessionId;
     if (!nativeSessionId || this.#liveSessions.get(session.id) !== nativeSessionId)
       throw new RuntimeEligibilityError("The native Session is not attached in this Host.");
@@ -3106,15 +3206,57 @@ export class TaskRuntime {
         "unsupported",
       );
 
+    const latest = this.#qualify(
+      input.taskId,
+      input.participantId,
+      input.sessionId,
+      input.authorizationId,
+      "session.compact",
+    );
+    this.#requireActiveTask(latest.task);
+    if (
+      latest.session.data.nativeSessionId !== nativeSessionId ||
+      this.#liveSessions.get(session.id) !== nativeSessionId
+    )
+      throw new RuntimeEligibilityError("The native Session changed before compaction request.");
+    this.#assertNoUnknownInput(task.id, session.id);
+    this.#assertNoActiveFileRewind(task.id, session.id);
+    this.#assertNoActiveCompact(task.id, session.id);
+
+    const inputs = this.#store.listInSession<InputData>("input", session.id);
+    if (inputs.some((record) => record.data.status === "unknown"))
+      throw new RuntimeEligibilityError(
+        "The Session has an Input with an unknown native result; reconcile it before compaction.",
+        "result-unknown",
+      );
+    const queuedInputs = this.#queuedInputs(session.id);
+    const preDispatchInput = inputs.some((record) => record.data.status === "received");
+    const activeNativeInputs = inputs.filter((record) =>
+      DISPATCHED_INPUT_STATUSES.has(record.data.status),
+    );
+    if (activeNativeInputs.length > 1)
+      throw new RuntimeEligibilityError("Cannot compact while multiple Inputs are unresolved.");
+    const waitForEarlierInputs = queuedInputs.length > 0 || preDispatchInput;
+    if (waitForEarlierInputs && instructions)
+      throw new RuntimeEligibilityError(
+        "Compaction with instructions cannot be queued; submit plain /compact after earlier Inputs finish.",
+        "unsupported",
+      );
+
     const operationId = this.#newId("compact");
     const requestedAt = this.#now();
+    const queuePosition =
+      waitForEarlierInputs || activeNativeInputs.length > 0
+        ? this.#nextQueuePosition(session.id)
+        : undefined;
     const operation: RuntimeCompactOperation = {
       id: operationId,
       taskId: task.id,
       participantId: input.participantId,
       sessionId: session.id,
-      status: "requested",
+      status: waitForEarlierInputs ? "queued" : "requested",
       requestedAt,
+      ...(queuePosition !== undefined ? { queuePosition } : {}),
       acceptedAt: null,
       terminalAt: null,
       requestedEvidence: {
@@ -3137,7 +3279,9 @@ export class TaskRuntime {
         "session.compact",
       );
       this.#requireActiveTask(latest.task);
-      this.#assertSessionIdle(task.id, session.id);
+      this.#assertNoUnknownInput(task.id, session.id);
+      this.#assertNoActiveFileRewind(task.id, session.id);
+      this.#assertNoActiveCompact(task.id, session.id);
       if (
         latest.session.data.nativeSessionId !== nativeSessionId ||
         this.#liveSessions.get(session.id) !== nativeSessionId
@@ -3159,76 +3303,183 @@ export class TaskRuntime {
       );
     });
     this.#publish(task.id, "compact-operation", operationId);
+    if (waitForEarlierInputs) {
+      void this.#drainQueuedInputs(session.id);
+      return this.#clone(operation);
+    }
+    return this.#executeCompactOperation(operationId, engine, nativeSessionId as EngineSessionRef, {
+      instructions,
+      allowNativeBusyQueue: activeNativeInputs.length > 0,
+      returnOnAccepted: activeNativeInputs.length > 0,
+    });
+  }
 
+  async #executeCompactOperation(
+    operationId: string,
+    engine: EngineAdapter,
+    nativeSessionId: EngineSessionRef,
+    options: {
+      readonly instructions?: string;
+      readonly allowNativeBusyQueue: boolean;
+      readonly returnOnAccepted: boolean;
+    },
+  ): Promise<RuntimeCompactOperation> {
+    const record = this.#require<RuntimeCompactOperation>("compact-operation", operationId);
+    if (record.data.status === "queued")
+      this.#updateCompactOperation(operationId, { status: "requested" });
+    const currentOperation = this.#require<RuntimeCompactOperation>(
+      "compact-operation",
+      operationId,
+    );
+    const task = this.#require<TaskData>("task", currentOperation.taskId);
+    const authorizationId = task.data.authorization.id;
     const beforeDispatch = this.#dispatchGuard({
-      taskId: input.taskId,
-      participantId: input.participantId,
-      sessionId: input.sessionId,
-      authorizationId: input.authorizationId,
+      taskId: currentOperation.taskId,
+      participantId: currentOperation.data.participantId,
+      sessionId: currentOperation.data.sessionId,
+      authorizationId,
       capability: "session.compact",
       engine,
-      nativeSessionId: nativeSessionId as EngineSessionRef,
+      nativeSessionId,
     });
-    const checkDispatch = () => {
-      beforeDispatch();
-      this.#assertSessionIdle(task.id, session.id, operationId);
-      const current = this.#require<RuntimeCompactOperation>("compact-operation", operationId);
-      if (current.data.status !== "requested")
-        throw new RuntimeEligibilityError("Compaction request is no longer awaiting dispatch.");
-    };
-    try {
-      const receipt = await engine.compactSession({
-        session: nativeSessionId as EngineSessionRef,
-        commandId: operationId,
-        ...(instructions ? { instructions } : {}),
-        beforeDispatch: checkDispatch,
-        onAccepted: (evidence) => {
-          const current = this.#require<RuntimeCompactOperation>("compact-operation", operationId);
-          if (current.data.status === "requested")
-            this.#updateCompactOperation(operationId, {
-              status: "accepted",
-              acceptedAt: this.#now(),
-              acceptedEvidence: evidence,
-            });
-        },
-      });
-      if (receipt.status === "unknown")
-        return this.#updateCompactOperation(operationId, {
-          status: "unknown",
-          unknownEvidence: receipt.evidence ?? {
-            source: "adapter",
-            evidenceId: `${operationId}:unknown`,
-            detail: "Native compaction outcome is unknown.",
+    let releaseAcceptance!: () => void;
+    const accepted = new Promise<void>((resolve) => {
+      releaseAcceptance = resolve;
+    });
+    const terminal = async (): Promise<RuntimeCompactOperation> => {
+      try {
+        const latestCapabilities = await this.#capabilities(engine);
+        this.#assertCapability(
+          latestCapabilities,
+          task.data.engineId,
+          task.data.environment.id,
+          "session.compact",
+          task.data.engine.configurationVersion,
+          task.data.engine.adapterVersion,
+        );
+        const checkDispatch = () => {
+          beforeDispatch();
+          const latest = this.#qualify(
+            currentOperation.taskId,
+            currentOperation.data.participantId,
+            currentOperation.data.sessionId,
+            authorizationId,
+            "session.compact",
+          );
+          this.#requireActiveTask(latest.task);
+          this.#assertNoUnknownInput(latest.task.id, latest.session.id);
+          this.#assertNoActiveFileRewind(latest.task.id, latest.session.id);
+          this.#assertNoActiveCompact(latest.task.id, latest.session.id, operationId);
+          if (
+            latest.session.data.nativeSessionId !== nativeSessionId ||
+            this.#liveSessions.get(latest.session.id) !== nativeSessionId
+          )
+            throw new RuntimeEligibilityError(
+              "The native Session changed before compaction dispatch.",
+            );
+          const operationState = this.#require<RuntimeCompactOperation>(
+            "compact-operation",
+            operationId,
+          );
+          if (operationState.data.status !== "requested")
+            throw new RuntimeEligibilityError("Compaction is no longer awaiting native dispatch.");
+          const earlierQueuedInput = this.#queuedInputs(latest.session.id).find(
+            (input) =>
+              operationState.data.queuePosition === undefined ||
+              (input.data.queuePosition ?? 0) < operationState.data.queuePosition,
+          );
+          if (earlierQueuedInput)
+            throw new RuntimeEligibilityError(
+              `Input ${earlierQueuedInput.id} must be promoted before compaction.`,
+            );
+          if (!options.allowNativeBusyQueue) {
+            const activeInput = this.#store
+              .listInSession<InputData>("input", latest.session.id)
+              .find(
+                (input) =>
+                  input.data.status !== "queued" && ACTIVE_INPUT_STATUSES.has(input.data.status),
+              );
+            if (activeInput)
+              throw new RuntimeEligibilityError(
+                `Input ${activeInput.id} must finish before compaction can be promoted.`,
+              );
+          }
+        };
+        checkDispatch();
+        const compactSession = engine.compactSession;
+        if (!compactSession)
+          throw new RuntimeEligibilityError(
+            "This Engine has no native Session compaction command.",
+            "unsupported",
+          );
+        const receipt = await compactSession.call(engine, {
+          session: nativeSessionId,
+          commandId: operationId,
+          ...(options.instructions ? { instructions: options.instructions } : {}),
+          beforeDispatch: checkDispatch,
+          onAccepted: (evidence) => {
+            const latest = this.#require<RuntimeCompactOperation>("compact-operation", operationId);
+            if (latest.data.status === "requested") {
+              this.#updateCompactOperation(operationId, {
+                status: "accepted",
+                acceptedAt: this.#now(),
+                acceptedEvidence: evidence,
+              });
+            }
+            releaseAcceptance();
           },
-          reason: receipt.reason ?? "Native compaction outcome is unknown.",
         });
-      const terminalAt = this.#now();
-      const failed = receipt.status === "failed";
-      return this.#updateCompactOperation(operationId, {
-        status: receipt.status,
-        terminalAt,
-        terminalEvidence: receipt.evidence ?? null,
-        ...(failed ? { failureEvidence: receipt.evidence ?? null } : {}),
-        reason: receipt.reason ?? null,
-      });
-    } catch (error) {
-      const reason = errorMessage(error);
-      const uncertain =
-        error instanceof EngineContractError
-          ? error.failure.sideEffects !== "none" || error.kind === "result-unknown"
-          : !(error instanceof RuntimeEligibilityError);
-      const evidence = {
-        source: error instanceof EngineContractError ? ("adapter" as const) : ("host" as const),
-        evidenceId: `${operationId}:${uncertain ? "unknown" : "failed"}`,
-        detail: reason,
-      };
-      return this.#updateCompactOperation(operationId, {
-        status: uncertain ? "unknown" : "failed",
-        ...(uncertain ? { unknownEvidence: evidence } : { failureEvidence: evidence }),
-        ...(!uncertain ? { terminalAt: this.#now() } : {}),
-        reason,
-      });
-    }
+        if (receipt.status === "unknown")
+          return this.#updateCompactOperation(operationId, {
+            status: "unknown",
+            queuePosition: undefined,
+            unknownEvidence: receipt.evidence ?? {
+              source: "adapter",
+              evidenceId: `${operationId}:unknown`,
+              detail: "Native compaction outcome is unknown.",
+            },
+            reason: receipt.reason ?? "Native compaction outcome is unknown.",
+          });
+        const failed = receipt.status === "failed";
+        return this.#updateCompactOperation(operationId, {
+          status: receipt.status,
+          queuePosition: undefined,
+          terminalAt: this.#now(),
+          terminalEvidence: receipt.evidence ?? null,
+          ...(failed ? { failureEvidence: receipt.evidence ?? null } : {}),
+          reason: receipt.reason ?? null,
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        const uncertain =
+          error instanceof EngineContractError
+            ? error.failure.sideEffects !== "none" || error.kind === "result-unknown"
+            : !(error instanceof RuntimeEligibilityError);
+        const evidence = {
+          source: error instanceof EngineContractError ? ("adapter" as const) : ("host" as const),
+          evidenceId: `${operationId}:${uncertain ? "unknown" : "failed"}`,
+          detail: reason,
+        };
+        return this.#updateCompactOperation(operationId, {
+          status: uncertain ? "unknown" : "failed",
+          queuePosition: undefined,
+          ...(uncertain ? { unknownEvidence: evidence } : { failureEvidence: evidence }),
+          ...(!uncertain ? { terminalAt: this.#now() } : {}),
+          reason,
+        });
+      } finally {
+        releaseAcceptance();
+        void this.#drainQueuedInputs(currentOperation.data.sessionId);
+      }
+    };
+    const completion = terminal();
+    if (!options.returnOnAccepted) return completion;
+    return Promise.race([
+      completion,
+      accepted.then(
+        () => this.#require<RuntimeCompactOperation>("compact-operation", operationId).data,
+      ),
+    ]);
   }
 
   async getExecutionFileChanges(input: ExecutionFileTarget): Promise<EngineFileChanges | null> {
@@ -3741,18 +3992,22 @@ export class TaskRuntime {
     if (this.#closed || this.#queueDrainingSessions.has(sessionId)) return;
     this.#queueDrainingSessions.add(sessionId);
     try {
-      const queued = this.#queuedInputs(sessionId)[0];
-      if (!queued) return;
+      const next = this.#queuedSessionWork(sessionId)[0];
+      if (!next) return;
 
-      const { taskId } = queued;
+      const { taskId } = next.record;
       const task = this.#store.get<TaskData>("task", taskId);
       const session = this.#store.get<SessionData>("session", sessionId);
-      if (session?.data.projection.queuePaused) return;
       if (!task || task.data.status !== "active") {
         this.#rejectQueuedInputs(
           taskId,
           sessionId,
-          `Queued Input was not sent because Task is ${task?.data.status ?? "missing"}.`,
+          `Queued Session work was not dispatched because Task is ${task?.data.status ?? "missing"}.`,
+        );
+        this.#failQueuedCompactions(
+          taskId,
+          sessionId,
+          `Queued compaction was not dispatched because Task is ${task?.data.status ?? "missing"}.`,
         );
         return;
       }
@@ -3760,40 +4015,81 @@ export class TaskRuntime {
         this.#rejectQueuedInputs(
           taskId,
           sessionId,
-          `Queued Input was not sent because Session is ${session?.data.projection.status ?? "missing"}.`,
+          `Queued Session work was not dispatched because Session is ${session?.data.projection.status ?? "missing"}.`,
+        );
+        this.#failQueuedCompactions(
+          taskId,
+          sessionId,
+          `Queued compaction was not dispatched because Session is ${session?.data.projection.status ?? "missing"}.`,
         );
         return;
       }
+      if (session.data.projection.queuePaused) return;
+
       const records = this.#store.listInSession<InputData>("input", sessionId);
-      const unknown = records.find(
-        (record) => record.id !== queued.id && record.data.status === "unknown",
-      );
+      const unknown = records.find((record) => record.data.status === "unknown");
       if (unknown) {
         this.#rejectQueuedInputs(
           taskId,
           sessionId,
-          `Queue stopped because Input ${unknown.id} has an unknown native result; queued Inputs were not resent.`,
+          `Queue stopped because Input ${unknown.id} has an unknown native result; queued work was not resent or dispatched.`,
+        );
+        this.#failQueuedCompactions(
+          taskId,
+          sessionId,
+          `Compaction was not dispatched because Input ${unknown.id} has an unknown native result.`,
         );
         return;
       }
-      const unresolved = records.find(
-        (record) => record.id !== queued.id && DISPATCHED_INPUT_STATUSES.has(record.data.status),
+      const unknownCompact = this.#activeCompactOperations(taskId, sessionId).find(
+        (record) => record.data.status === "unknown",
       );
-      if (unresolved) return;
-      const compact = this.#store
-        .list<RuntimeCompactOperation>("compact-operation", taskId)
-        .find(
-          (record) =>
-            record.data.sessionId === sessionId && ACTIVE_COMPACT_STATUSES.has(record.data.status),
-        );
-      if (compact) {
+      if (unknownCompact) {
         this.#rejectQueuedInputs(
           taskId,
           sessionId,
-          `Queued Input was not sent because compaction ${compact.id} is unresolved.`,
+          `Queue stopped because compaction ${unknownCompact.id} has an unknown native result; queued Inputs were not resent.`,
+        );
+        this.#failQueuedCompactions(
+          taskId,
+          sessionId,
+          `Compaction was not dispatched because compaction ${unknownCompact.id} is unresolved.`,
         );
         return;
       }
+
+      const unresolved = records.find(
+        (record) =>
+          record.data.status !== "queued" && ACTIVE_INPUT_STATUSES.has(record.data.status),
+      );
+      if (unresolved) return;
+
+      const activeCompact = this.#activeCompactOperations(taskId, sessionId).find(
+        (record) => record.data.status === "requested" || record.data.status === "accepted",
+      );
+      if (
+        activeCompact &&
+        (activeCompact.data.queuePosition === undefined ||
+          activeCompact.data.queuePosition <= next.queuePosition)
+      )
+        return;
+
+      if (next.kind === "compact") {
+        if (next.record.data.status !== "queued") return;
+        const engine = this.#engineFor(task.data);
+        void this.#executeCompactOperation(
+          next.id,
+          engine,
+          session.data.nativeSessionId as EngineSessionRef,
+          {
+            allowNativeBusyQueue: false,
+            returnOnAccepted: false,
+          },
+        );
+        return;
+      }
+
+      const queued = next.record;
       const data = queued.data;
       try {
         await this.#submitInput(
@@ -3820,26 +4116,55 @@ export class TaskRuntime {
             sessionId,
             `Queue stopped because Input ${queued.id} has an unknown native result; queued Inputs were not resent.`,
           );
+          this.#failQueuedCompactions(
+            taskId,
+            sessionId,
+            `Compaction was not dispatched because Input ${queued.id} has an unknown native result.`,
+          );
         } else {
           this.#rejectQueuedInputs(
             taskId,
             sessionId,
             `Queue stopped because Input ${queued.id} could not be dispatched: ${reason}`,
           );
+          queueMicrotask(() => void this.#drainQueuedInputs(sessionId));
         }
       }
     } catch (error) {
       if (!this.#closed) {
-        const queued = this.#queuedInputs(sessionId)[0];
-        if (queued)
+        const queued = this.#queuedSessionWork(sessionId)[0];
+        if (queued) {
           this.#rejectQueuedInputs(
-            queued.taskId,
+            queued.record.taskId,
             sessionId,
-            `Queued Input could not be requalified: ${errorMessage(error)}`,
+            `Queued Session work could not be requalified: ${errorMessage(error)}`,
           );
+          this.#failQueuedCompactions(
+            queued.record.taskId,
+            sessionId,
+            `Queued compaction could not be requalified: ${errorMessage(error)}`,
+          );
+        }
       }
     } finally {
       this.#queueDrainingSessions.delete(sessionId);
+    }
+  }
+
+  #failQueuedCompactions(taskId: string, sessionId: string, reason: string): void {
+    for (const record of this.#store.list<RuntimeCompactOperation>("compact-operation", taskId)) {
+      if (record.data.sessionId !== sessionId || record.data.status !== "queued") continue;
+      this.#updateCompactOperation(record.id, {
+        status: "failed",
+        queuePosition: undefined,
+        terminalAt: this.#now(),
+        failureEvidence: {
+          source: "host",
+          evidenceId: `${record.id}:not-dispatched`,
+          detail: reason,
+        },
+        reason,
+      });
     }
   }
 
@@ -4898,7 +5223,9 @@ export class TaskRuntime {
       .list<RuntimeCompactOperation>("compact-operation", taskId)
       .find(
         (record) =>
-          record.data.sessionId === sessionId && ACTIVE_COMPACT_STATUSES.has(record.data.status),
+          record.data.sessionId === sessionId &&
+          record.data.status !== "queued" &&
+          ACTIVE_COMPACT_STATUSES.has(record.data.status),
       );
     const fileRewind = this.#store
       .list<RuntimeFileRewindOperation>("file-rewind-operation", taskId)
@@ -5093,6 +5420,16 @@ export class TaskRuntime {
     if (pendingCompact)
       throw new RuntimeEligibilityError(
         `Session already has unresolved compaction ${pendingCompact.id}.`,
+      );
+  }
+
+  #assertNoNativeActiveCompact(taskId: string, sessionId: string): void {
+    const pendingCompact = this.#activeCompactOperations(taskId, sessionId).find(
+      (record) => record.data.status !== "queued",
+    );
+    if (pendingCompact)
+      throw new RuntimeEligibilityError(
+        `Session has native or unknown compaction ${pendingCompact.id}; resolve it before resuming the queue.`,
       );
   }
 
@@ -5374,7 +5711,7 @@ export class TaskRuntime {
       session.data.projection = {
         ...session.data.projection,
         status: "unknown",
-        ...(this.#queuedInputs(session.id).length ? { queuePaused: true } : {}),
+        ...(this.#queuedSessionWork(session.id).length ? { queuePaused: true } : {}),
         updatedAt: recoveredAt,
       };
       this.#save(
@@ -5451,15 +5788,22 @@ export class TaskRuntime {
           !ACTIVE_COMPACT_STATUSES.has(operation.data.status)
         )
           continue;
+        // A queued compact has no native side effect yet. Keep its position behind
+        // the explicit resume gate; only in-flight native work becomes unknown.
+        if (operation.data.status === "queued") continue;
+        const reason =
+          "Runtime restarted; native compaction cannot be safely reattached or resent.";
+        const evidence = {
+          source: "host" as const,
+          evidenceId: `${operation.id}:restart`,
+          detail: "Runtime restarted before native compaction reached terminal evidence.",
+        };
         const data: RuntimeCompactOperation = {
           ...operation.data,
           status: "unknown",
-          unknownEvidence: {
-            source: "host",
-            evidenceId: `${operation.id}:restart`,
-            detail: "Runtime restarted before native compaction reached terminal evidence.",
-          },
-          reason: "Runtime restarted; native compaction cannot be safely reattached or resent.",
+          queuePosition: undefined,
+          unknownEvidence: evidence,
+          reason,
         };
         this.#save(
           "compact-operation",

@@ -78,6 +78,8 @@ function emptyHistory(forTaskId = taskId) {
     approvals: [] as Array<Record<string, unknown>>,
     userInputs: [] as Array<Record<string, unknown>>,
     stopRequests: [] as Array<Record<string, unknown>>,
+    compactOperations: [] as Array<Record<string, unknown>>,
+    fileRewindOperations: [] as Array<Record<string, unknown>>,
     integrityIssues: [],
   };
 }
@@ -3194,6 +3196,7 @@ test("an active ZCode Harness task switches models within its Session and submit
   let nativeFeedback: "like" | "dislike" | null = null;
   const changes = new Set<(change: Record<string, unknown>) => void>();
   let history = emptyHistory();
+  let queueCompactScenario = false;
   const historyB = emptyHistory(zcodeTaskB.id);
   const forkHistory = emptyHistory(forkTask.id);
   history.inputs.push({
@@ -3248,9 +3251,76 @@ test("an active ZCode Harness task switches models within its Session and submit
     },
     submitInput: async (input: Record<string, unknown>) => {
       submissions.push(input);
+      if (queueCompactScenario && input.delivery === "queue") {
+        const positions = [
+          ...history.inputs
+            .filter((item) => item.status === "queued")
+            .map((item) => Number(item.queuePosition ?? -1)),
+          ...(history.compactOperations ?? [])
+            .filter(
+              (item) =>
+                typeof item.status === "string" &&
+                ["queued", "requested", "accepted"].includes(item.status),
+            )
+            .map((item) => Number(item.queuePosition ?? -1)),
+        ];
+        const queuedInput = {
+          id: `input-queued-ui-${history.inputs.length}`,
+          taskId,
+          participantId,
+          sessionId,
+          text: String(input.text),
+          status: "queued",
+          queuePosition: Math.max(-1, ...positions) + 1,
+          receivedAt: 1_300 + history.inputs.length,
+          acceptedAt: null,
+          startedAt: null,
+          terminalAt: null,
+          error: null,
+        };
+        history = { ...history, inputs: [...history.inputs, queuedInput] };
+        for (const listener of changes) listener({ taskId, history });
+      }
     },
     compactSession: async (input: Record<string, unknown>) => {
       compactRequests.push(input);
+      if (queueCompactScenario) {
+        const positions = [
+          ...history.inputs
+            .filter((item) => item.status === "queued")
+            .map((item) => Number(item.queuePosition ?? -1)),
+          ...(history.compactOperations ?? [])
+            .filter(
+              (item) =>
+                typeof item.status === "string" &&
+                ["queued", "requested", "accepted"].includes(item.status),
+            )
+            .map((item) => Number(item.queuePosition ?? -1)),
+        ];
+        const operation = {
+          id: "compact-queued-ui",
+          taskId,
+          participantId,
+          sessionId,
+          status: "queued",
+          requestedAt: 1_350,
+          queuePosition: Math.max(-1, ...positions) + 1,
+          acceptedAt: null,
+          terminalAt: null,
+          requestedEvidence: { source: "host", evidenceId: "compact-queued-ui" },
+          acceptedEvidence: null,
+          terminalEvidence: null,
+          failureEvidence: null,
+          unknownEvidence: null,
+          reason: null,
+        };
+        history = {
+          ...history,
+          compactOperations: [...(history.compactOperations ?? []), operation],
+        };
+        for (const listener of changes) listener({ taskId, history });
+        return operation;
+      }
       return { status: "completed", reason: null };
     },
     createTask: async (input: Record<string, unknown>) => {
@@ -4575,10 +4645,137 @@ test("an active ZCode Harness task switches models within its Session and submit
       "custom slash must submit through the original Task/Session Host request",
     );
     await waitFor(() => assert.equal(customInput.__zcodeLexicalInputE2E!.getText(), ""));
+
+    const submissionsBeforeQueuedCompact = submissions.length;
+    const inputsBeforeQueuedCompact = history.inputs.length;
+    const executionsBeforeQueuedCompact = history.executions.length;
+    const activeInput = {
+      id: "input-active-queued-compact-ui",
+      taskId,
+      participantId,
+      sessionId,
+      text: "active A",
+      status: "started",
+      receivedAt: 1_400,
+      acceptedAt: 1_401,
+      startedAt: 1_402,
+      terminalAt: null,
+      error: null,
+    };
+    const activeExecution = {
+      id: "execution-active-queued-compact-ui",
+      taskId,
+      participantId,
+      sessionId,
+      inputId: "input-active-queued-compact-ui",
+      nativeExecutionId: "native-active-queued-compact-ui",
+      status: "started",
+      acceptedAt: 1_401,
+      startedAt: 1_402,
+      terminalAt: null,
+      result: null,
+      error: null,
+    };
+    history = {
+      ...history,
+      inputs: [...history.inputs, activeInput],
+      executions: [...history.executions, activeExecution],
+      compactOperations: [],
+    };
+    queueCompactScenario = true;
+    await act(async () => {
+      for (const listener of changes) listener({ taskId, history });
+    });
+    await act(async () => customInput.__zcodeLexicalInputE2E!.setText("earlier queued B"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforeQueuedCompact + 1));
+    assert.equal(submissions.at(-1)?.delivery, "queue");
+
+    await act(async () => customInput.__zcodeLexicalInputE2E!.setText("/compact"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(compactRequests.length, 3));
+    assert.equal(compactRequests.at(-1)?.taskId, taskId);
+    assert.equal(compactRequests.at(-1)?.instructions, undefined);
+    await waitFor(() => assert.equal(history.compactOperations?.[0]?.status, "queued"));
+    await act(async () => customInput.__zcodeLexicalInputE2E!.setText("later queued C"));
+    await submitCurrentDraft();
+    await waitFor(() => assert.equal(submissions.length, submissionsBeforeQueuedCompact + 2));
+    assert.equal(submissions.at(-1)?.delivery, "queue");
+    await waitFor(() => {
+      const rows = Array.from(container.querySelectorAll<HTMLLIElement>("li[data-kind]"));
+      assert.deepEqual(
+        rows.map((row) => ({ kind: row.dataset.kind, text: row.textContent?.trim() })),
+        [
+          { kind: "sendText", text: "earlier queued B" },
+          { kind: "compact", text: "/compact" },
+          { kind: "sendText", text: "later queued C" },
+        ],
+      );
+    }, "the mounted product queue should preserve Input -> compact -> later Input order");
+    assert.equal(
+      container.querySelector('[data-testid="v4-queue-item-delete-compact-queued-ui"]'),
+      null,
+      "Harness compact has no cancellation command, so its queue row cannot offer delete",
+    );
+    assert.equal(history.inputs.length, inputsBeforeQueuedCompact + 3);
+    assert.equal(history.executions.length, executionsBeforeQueuedCompact + 1);
+    assert.equal(history.compactOperations?.length, 1, "compact remains maintenance, not an Input");
   } finally {
     await act(async () => root.unmount());
     container.remove();
     zcodeSessionStore.setSlashCommands(workspacePath, originalSlashCommands);
+    dom.window.close();
+  }
+});
+
+test("shared queue panel keeps native M0 compact deletion", async () => {
+  const dom = installDom();
+  const [{ ConversationQueuePanel }, { ZCodeIntlProvider }, { TooltipProvider }] =
+    await Promise.all([
+      import("../src/v4/ConversationQueuePanel.js"),
+      import("../src/i18n/IntlProvider.js"),
+      import("../src/components/ui/tooltip.js"),
+    ]);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const deleted: string[] = [];
+  try {
+    await act(async () =>
+      root.render(
+        createElement(
+          ZCodeIntlProvider,
+          { initialLocale: "zh-CN" },
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(ConversationQueuePanel, {
+              queue: {
+                autoDrain: true,
+                items: [
+                  {
+                    queueItemId: "native-compact-test",
+                    kind: "compact",
+                    text: "/compact",
+                    dispatch: { state: "queued" },
+                  },
+                ],
+              },
+              onDeleteItem: (id: string) => deleted.push(id),
+            }),
+          ),
+        ),
+      ),
+    );
+    const deleteButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="v4-queue-item-delete-native-compact-test"]',
+    );
+    assert.ok(deleteButton, "the original native queue must retain compact removal");
+    await act(async () => deleteButton.click());
+    assert.deepEqual(deleted, ["native-compact-test"]);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
     dom.window.close();
   }
 });
