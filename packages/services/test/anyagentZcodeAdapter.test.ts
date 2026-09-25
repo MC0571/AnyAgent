@@ -69,6 +69,7 @@ function harness({
   readConfigurationVersion,
   beforeResume,
   createSessionId,
+  slashCommands = [],
 }: {
   earlyStart?: boolean;
   delayedAck?: boolean;
@@ -99,6 +100,7 @@ function harness({
   readConfigurationVersion?: () => Promise<string>;
   beforeResume?: () => Promise<void>;
   createSessionId?: (index: number) => string;
+  slashCommands?: Array<{ name: string; source: "builtin" | "custom" }>;
 } = {}) {
   const listeners = new Set<(event: unknown) => void>();
   let lifecycleListener: ((event: unknown) => void) | undefined;
@@ -137,6 +139,15 @@ function harness({
     readSession: async () => ({
       runtime: { activeTurnId: nativeActiveTurnId, pendingRequestIds: nativePendingRequestIds },
       session: { status: nativeSessionStatus },
+    }),
+    readWorkspacePresentation: async () => ({
+      workspace: { workspacePath: "/tmp/workspace" },
+      mode: "build",
+      slashCommands: slashCommands.map(({ name, source }) => ({
+        name,
+        source,
+        description: name,
+      })),
     }),
     resumeSession: async ({ sessionId }: { sessionId: string }) => {
       resumeCalls.push(sessionId);
@@ -1154,6 +1165,35 @@ test("Runtime preserves each input configuration and ZCode sends it through the 
     });
   } finally {
     runtime.close();
+    fixture.adapter.dispose();
+  }
+});
+
+test("ZCode dispatches only currently advertised custom slash commands", async () => {
+  const slashCommands = [{ name: "custom-note", source: "custom" as const }];
+  const fixture = harness({ slashCommands });
+  try {
+    const session = await fixture.adapter.createSession();
+    await fixture.adapter.run({ session, input: "/custom-note first" });
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 1);
+    const sent = fixture.commands.find((entry) => entry.type === "sendText");
+    assert.ok(sent);
+    assert.equal((sent.payload as { text: string }).text, "/custom-note first");
+    completeNativeSource(fixture);
+
+    slashCommands.length = 0;
+    for (const text of ["/custom-note second", "/missing third", "/goal resume"]) {
+      await assert.rejects(fixture.adapter.run({ session, input: text }), (error: unknown) => {
+        assert.equal((error as EngineContractError).failure.sideEffects, "none");
+        return true;
+      });
+    }
+    assert.equal(
+      fixture.commands.filter((entry) => entry.type === "sendText").length,
+      1,
+      "stale, unknown and typed goal commands must never fall through as ordinary prompts",
+    );
+  } finally {
     fixture.adapter.dispose();
   }
 });

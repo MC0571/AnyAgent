@@ -29,6 +29,10 @@
 
 第五轮继续用原 Composer、真实 `grok-4.6` 请求长回答。正式窗口在仍显示 Stop 时已呈现 `STREAM_START_6BC` 及第 1–22 条，完成后显示末尾 `STREAM_END_6BC` 并恢复发送按钮；产品同一 Execution 记录 79 个 `message.delta`，首条在 `execution.completed` 前约 21 秒。原生第 5 个 Input、assistant text part 和产品 Input／Execution 相互对应，详见[流式同场景核对](stream-crosscheck.json)。
 
+在同一产品提交及隔离 Session 中，长回答运行时用原 Composer 加入下一轮文本队列；从队列“编辑”返回草稿、修改后重新排队。原产品记录显示旧队列 Input `cancelled`、新队列 Input `completed`，原生只晋升新文本。接着从原 slash 入口运行空闲 `/compact`，产品操作记录取得原生 success 证据，原生 Session 出现 Compact summary。[队列与压缩同场景核对](queue-compact-crosscheck.json)。这不证明附件排队或运行中压缩；二者仍是接入缺口。
+
+随后启动第八轮长回答，在原 UI 流式输出时点“请求中断”。界面先明确提示“中断请求已提交，仍需等待实际停止证据”，产品 Stop Request 在原生送达后由 `execution.stopped` 确认为 `confirmed`，原 Input／Execution 均为 `stopped`；原生 assistant 留下部分文本且没有完整尾标记。[真实 Stop 请求与终态对账](stop-crosscheck.json)。断线或未知结果仍需另测。
+
 同一产品提交下关闭 M1 flag 重启隔离 App，窗口 URL 不含 `anyAgentServiceEnabled`，原选择器仅列 Provider；原 Composer 用 Return 提交 `M0_6BC_SMOKE`，真实 CLI `opencode-go-messages/qwen3.8-flash` 返回 `M0_6BC_OK`，原侧栏、自动化与 Provider 设置入口可达。[原生 Input／消息核对](m0-flag-off-crosscheck.json)。这只证明 M0 基础回归，不外推全部产品能力。
 
 本轮 CUA 对原窗口的提问、审批和最终画面作了截图观察，图片随本任务工具记录显示，但当前工具未提供获准的仓库截图保存路径，因此这里没有可交付的截图文件。这个正向真实 CLI 场景也不能代替过期竞态的真实 CLI 重现；竞态由定向故障注入测试证明。`6bc55e2` 的最终全量视觉／导航及 #21 其余 RC 场景尚待复验；先前 `f47e6b7` 的 M0 对照保留其原提交归属。

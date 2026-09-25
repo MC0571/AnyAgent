@@ -6,12 +6,19 @@
 // 语义：scope = sessionId（draft 态 = "__draft__"）；保存 text + editorStateJson，外部预填在
 // Lexical 尚未挂载时额外保存 mention（保证重挂载不降级为纯文本）。
 // mode/modelSelection 与正文同 scope 保存；发送只清内容，显式清理才删除整个 scope。
-// 附件不入草稿（objectUrl/File 不可序列化，localPath 附件重启后归属难校验——
-// 与「v4 composer 不做附件草稿持久化」的裁决一致）。
+// 原始附件不入草稿（objectUrl/File 不可序列化，localPath 附件重启后归属难校验）。
+// AnyAgent 队列撤回只存 Host 一次性附件票据的元数据；路径与内容仍由 Host 管理。
 import { logger } from "@/logger.js";
 import { modelSelectionSchema, type ModelSelection } from "@zcode/shared";
 import { submissionModeSchema, type SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
 import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
+
+export interface QueueEditAttachmentTicket {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
 
 export interface V4ComposerDraft {
   text: string;
@@ -26,6 +33,8 @@ export interface V4ComposerDraft {
   modelSelection?: ModelSelection;
   /** AnyAgent queue-edit scopes only: makes a prepared Input merge idempotent. */
   queueEditRecoveredInputIds?: string[];
+  /** AnyAgent queue-edit only: opaque Host tickets, never local file paths. */
+  queueEditAttachmentTickets?: QueueEditAttachmentTicket[];
   /** Preserves the original queue mode, including plan, across draft restoration. */
   queueEditOriginalMode?: SubmissionMode;
   /** AnyAgent queue draft must be checked against history before restoration. */
@@ -147,6 +156,27 @@ function readDraft(value: unknown): V4ComposerDraft | null {
           ),
         }
       : {}),
+    ...(Array.isArray(value.queueEditAttachmentTickets)
+      ? {
+          queueEditAttachmentTickets: value.queueEditAttachmentTickets
+            .filter((item): item is Record<string, unknown> => isRecord(item))
+            .filter(
+              (item) =>
+                typeof item.id === "string" &&
+                typeof item.fileName === "string" &&
+                typeof item.mimeType === "string" &&
+                Number.isSafeInteger(item.sizeBytes) &&
+                (item.sizeBytes as number) >= 0,
+            )
+            .slice(0, 8)
+            .map((item) => ({
+              id: item.id as string,
+              fileName: item.fileName as string,
+              mimeType: item.mimeType as string,
+              sizeBytes: item.sizeBytes as number,
+            })),
+        }
+      : {}),
     ...(submissionModeSchema.safeParse(value.queueEditOriginalMode).success
       ? { queueEditOriginalMode: value.queueEditOriginalMode as SubmissionMode }
       : {}),
@@ -220,6 +250,7 @@ export function persistV4ComposerDraft(
     !draft.mode &&
     !draft.modelSelection &&
     !draft.queueEditRecoveredInputIds?.length &&
+    !draft.queueEditAttachmentTickets?.length &&
     !draft.queueEditOriginalMode &&
     !draft.queueEditRequiresReview &&
     !draft.initializeFromNewTask

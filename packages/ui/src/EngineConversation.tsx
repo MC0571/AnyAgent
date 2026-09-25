@@ -30,6 +30,7 @@ import {
   type EngineLocalAttachment,
 } from "@/EngineConversationTimeline.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
+import type { QueueEditAttachmentTicket } from "@/v4/composer/composerDraftStore.js";
 import {
   projectEngineConversation,
   type EngineConversationProjection,
@@ -86,11 +87,14 @@ type InheritedSource = {
   projection: EngineConversationProjection | null;
   submissionConfig?: NonNullable<EngineHistory["inputs"][number]["submissionConfig"]>;
 };
-type EngineComposerAttachment = EngineLocalAttachment;
+type EngineComposerAttachment = EngineLocalAttachment & {
+  readonly ticket?: QueueEditAttachmentTicket;
+};
 export interface EngineTaskComposerDraft {
   readonly text: string;
   readonly config?: { readonly mode?: string; readonly modelSelection?: ModelSelection };
   readonly editorStateJson?: string;
+  readonly attachmentTickets?: readonly QueueEditAttachmentTicket[];
   readonly recoveryParts?: readonly {
     readonly version: number;
     readonly text: string;
@@ -225,8 +229,13 @@ function excludedNativeSlashCommandNames(
     ...nativePromptBuiltinSlashCommands,
   ]);
   return commands
-    .map((command) => normalizeSlashCommandValue(command.name).toLowerCase())
-    .filter((name) => !isZCodeHarness || !visibleBuiltinNames.has(name));
+    .filter(
+      (command) =>
+        !isZCodeHarness ||
+        (command.source !== "custom" &&
+          !visibleBuiltinNames.has(normalizeSlashCommandValue(command.name).toLowerCase())),
+    )
+    .map((command) => normalizeSlashCommandValue(command.name).toLowerCase());
 }
 
 function formatEngineSlashHelp(
@@ -287,7 +296,7 @@ function formatEngineSlashHelp(
       return [
         catalogCommand.inputHint?.trim() || `/${catalogCommand.name}`,
         catalogCommand.description,
-        "M1 Engine 对话暂不执行 ZCode CLI 自定义命令；输入会保留。",
+        "M1 Engine 经 Host 核对当前 CLI 命令目录后，在本 Task 的原生 Session 执行。",
       ].join("\n");
     }
     if (catalogCommand) {
@@ -315,9 +324,7 @@ function formatEngineSlashHelp(
     `M1 Engine 对话支持：${supportedCommands.join("、")}。`,
     "其中 /plugins 仅支持 list/status 只读查询。",
     `固定 CLI 命令暂不支持：${unsupportedBuiltins.join("、")}。`,
-    ...(customNames.length > 0
-      ? [`ZCode CLI 自定义命令暂不支持：${customNames.join("、")}。`]
-      : []),
+    ...(customNames.length > 0 ? [`当前 CLI 自定义命令：${customNames.join("、")}。`] : []),
     "输入 /help <命令> 查看说明。",
   ].join("\n");
 }
@@ -418,6 +425,7 @@ export function EngineConversation({
   onRecoveredSubmitUncertain,
   onResolveRecoveredReview,
   onQueueEditPrepare,
+  onRecoveredAttachmentTicketsChange,
   onQueueDraftRecovered,
   onQueueRecoveryReconcile,
 }: {
@@ -457,7 +465,11 @@ export function EngineConversation({
   onQueueEditPrepare?: (
     taskId: string,
     inputId: string,
-    recovered: Pick<EngineTaskComposerDraft, "text" | "config">,
+    recovered: Pick<EngineTaskComposerDraft, "text" | "config" | "attachmentTickets">,
+  ) => boolean;
+  onRecoveredAttachmentTicketsChange?: (
+    taskId: string,
+    tickets: readonly QueueEditAttachmentTicket[],
   ) => boolean;
   onQueueDraftRecovered?: (taskId: string, inputId: string) => boolean;
   onQueueRecoveryReconcile?: (
@@ -507,6 +519,7 @@ export function EngineConversation({
   const changeVersionRef = useRef(0);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
   const appliedQueueRecoveryVersion = useRef(0);
+  const appliedQueueRecoveryTaskId = useRef<string | null>(null);
   const queuedSubmissionRef = useRef<{
     taskId: string;
     authorizationId: string;
@@ -737,6 +750,10 @@ export function EngineConversation({
       onQueueRecoveryReconcile?.(visibleTask.id, visibleHistory.inputs);
   }, [draftStorageIssue, onQueueRecoveryReconcile, visibleHistory, visibleTask?.id]);
   useEffect(() => {
+    if (appliedQueueRecoveryTaskId.current !== (visibleTask?.id ?? null) || !composerDraft) {
+      appliedQueueRecoveryTaskId.current = visibleTask?.id ?? null;
+      appliedQueueRecoveryVersion.current = 0;
+    }
     if (
       !visibleTask ||
       !composerDraft ||
@@ -766,6 +783,27 @@ export function EngineConversation({
         ...current,
         [visibleTask.id]: composerDraft.config!,
       }));
+    if (composerDraft.attachmentTickets?.length)
+      setAttachmentsByTask((current) => {
+        const existing = current[visibleTask.id] ?? [];
+        const missing = composerDraft.attachmentTickets!.filter(
+          (ticket) => !existing.some((attachment) => attachment.ticket?.id === ticket.id),
+        );
+        if (!missing.length) return current;
+        return {
+          ...current,
+          [visibleTask.id]: [
+            ...existing,
+            ...missing.map((ticket) => ({
+              localPath: "",
+              fileName: ticket.fileName,
+              mimeType: ticket.mimeType,
+              sizeBytes: ticket.sizeBytes,
+              ticket,
+            })),
+          ],
+        };
+      });
     editor.focus();
   }, [composerDraft?.recoveryVersion, visibleTask?.id]);
   useEffect(() => {
@@ -831,8 +869,8 @@ export function EngineConversation({
       ).success)
       ? "无法核实分叉 Session 继承的模型配置。"
       : null) ??
-    (shouldQueue && (currentAttachments.length > 0 || webElementContexts.length > 0)
-      ? "当前轮次未结束，上下文不能安全排队；请等待后发送。"
+    (shouldQueue && webElementContexts.length > 0
+      ? "当前轮次未结束，网页上下文不能安全排队；请等待后发送。"
       : null);
   const approvalBlockedReason = visibleTask
     ? currentTaskBlock(visibleTask, "approval.respond", engines, refreshFailed)
@@ -1885,19 +1923,29 @@ export function EngineConversation({
         const catalogCommand = nativeSlashCommands.find(
           (command) => normalizeSlashCommandValue(command.name).toLowerCase() === slashCommand.name,
         );
-        const unsupportedReason = nativeBuiltin
-          ? unsupportedNativeSlashReasons[
-              slashCommand.name as keyof typeof unsupportedNativeSlashReasons
-            ]?.[locale === "zh-CN" ? "zh" : "en"]
-          : null;
-        const message = nativeBuiltin
-          ? locale === "zh-CN"
-            ? `/${slashCommand.name} 暂不映射：${unsupportedReason ?? "当前 M1 Engine 对话没有对应的 Task 级 Host 操作。"} 输入已保留。`
-            : `/${slashCommand.name} is not mapped: ${unsupportedReason ?? "M1 Engine conversations have no matching Task-scoped Host action."} Your draft is preserved.`
-          : catalogCommand?.source === "custom"
+        if (!nativeBuiltin && catalogCommand?.source === "custom") {
+          if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
+            setNotice({
+              kind: "info",
+              message: `/${slashCommand.name} 当前只接受文本参数；输入已保留。`,
+            });
+            return false;
+          }
+          submitActionId = `custom:${slashCommand.name}`;
+          submitSuccessMessage = () =>
+            shouldQueue
+              ? `/${slashCommand.name} 已加入输入队列。`
+              : `/${slashCommand.name} 已提交。`;
+        } else {
+          const unsupportedReason = nativeBuiltin
+            ? unsupportedNativeSlashReasons[
+                slashCommand.name as keyof typeof unsupportedNativeSlashReasons
+              ]?.[locale === "zh-CN" ? "zh" : "en"]
+            : null;
+          const message = nativeBuiltin
             ? locale === "zh-CN"
-              ? `/${slashCommand.name} 是 ZCode CLI 自定义命令；当前 M1 Engine 对话不执行此类命令，输入已保留。`
-              : `/${slashCommand.name} is a ZCode CLI custom command; M1 Engine conversations do not run these commands. Your draft is preserved.`
+              ? `/${slashCommand.name} 暂不映射：${unsupportedReason ?? "当前 M1 Engine 对话没有对应的 Task 级 Host 操作。"} 输入已保留。`
+              : `/${slashCommand.name} is not mapped: ${unsupportedReason ?? "M1 Engine conversations have no matching Task-scoped Host action."} Your draft is preserved.`
             : catalogCommand
               ? locale === "zh-CN"
                 ? `/${slashCommand.name} 不在固定 ZCode v0.16.9 支持范围内；输入已保留。`
@@ -1905,8 +1953,9 @@ export function EngineConversation({
               : locale === "zh-CN"
                 ? `未知斜杠命令 /${slashCommand.name}；输入已保留。`
                 : `Unknown slash command /${slashCommand.name}. Your draft is preserved.`;
-        setNotice({ kind: "info", message });
-        return false;
+          setNotice({ kind: "info", message });
+          return false;
+        }
       }
     }
 
@@ -1963,13 +2012,18 @@ export function EngineConversation({
         if (submitPreflight) await submitPreflight();
         const attachments = await Promise.all(
           selectedAttachments.map((attachment) =>
-            service.stageAttachment({
-              taskId: visibleTask.id,
-              participantId: visibleTask.participant.id,
-              sessionId: visibleTask.session.id,
-              authorizationId: visibleTask.authorizationId,
-              ...attachment,
-            }),
+            attachment.ticket
+              ? Promise.resolve(attachment.ticket)
+              : service.stageAttachment({
+                  taskId: visibleTask.id,
+                  participantId: visibleTask.participant.id,
+                  sessionId: visibleTask.session.id,
+                  authorizationId: visibleTask.authorizationId,
+                  localPath: attachment.localPath,
+                  fileName: attachment.fileName,
+                  mimeType: attachment.mimeType,
+                  sizeBytes: attachment.sizeBytes,
+                }),
           ),
         );
         return service.submitInput({
@@ -2205,13 +2259,6 @@ export function EngineConversation({
     }
     const input = queuedInputs.find((entry) => entry.id === inputId);
     if (!input) return;
-    if (input.attachments?.length) {
-      setNotice({
-        kind: "error",
-        message: "该队列项含附件，当前无法安全恢复到草稿；原队列项已保留。",
-      });
-      return;
-    }
     const sourceTask = visibleTask;
     const editor = inputApiRef.current;
     if (!editor || editor.getText().trim()) {
@@ -2232,6 +2279,7 @@ export function EngineConversation({
       !onQueueEditPrepare(sourceTask.id, inputId, {
         text: input.text,
         ...(config ? { config } : {}),
+        ...(input.attachments?.length ? { attachmentTickets: input.attachments } : {}),
       })
     ) {
       setNotice({ kind: "error", message: "草稿保存失败，队列项已保留；请检查本地存储后重试。" });
@@ -2242,7 +2290,7 @@ export function EngineConversation({
       const accepted = await runAction(
         `queue-edit:${inputId}`,
         () =>
-          service.cancelQueuedInput({
+          service.withdrawQueuedInputForEdit({
             taskId: sourceTask.id,
             participantId: sourceTask.participant.id,
             sessionId: sourceTask.session.id,
@@ -2258,6 +2306,20 @@ export function EngineConversation({
       } else if (selectedTaskIdRef.current === sourceTask.id && inputApiRef.current === editor) {
         editor.setText([editor.getText(), input.text].filter(Boolean).join("\n\n"));
         editor.focus();
+        if (input.attachments?.length)
+          setAttachmentsByTask((current) => ({
+            ...current,
+            [sourceTask.id]: [
+              ...(current[sourceTask.id] ?? []),
+              ...input.attachments!.map((ticket) => ({
+                localPath: "",
+                fileName: ticket.fileName,
+                mimeType: ticket.mimeType,
+                sizeBytes: ticket.sizeBytes,
+                ticket,
+              })),
+            ],
+          }));
       }
       if (input.submissionConfig && !onQueueDraftRecovered) {
         setConfigByTask((current) => ({
@@ -2455,11 +2517,22 @@ export function EngineConversation({
   );
   const removeAttachment = (index: number) => {
     if (!visibleTask) return;
+    const remaining = (attachmentsByTask[visibleTask.id] ?? []).filter(
+      (_, itemIndex) => itemIndex !== index,
+    );
+    if (
+      onRecoveredAttachmentTicketsChange &&
+      !onRecoveredAttachmentTicketsChange(
+        visibleTask.id,
+        remaining.flatMap((attachment) => (attachment.ticket ? [attachment.ticket] : [])),
+      )
+    ) {
+      setNotice({ kind: "error", message: "附件草稿保存失败；队列编辑状态已保留。" });
+      return;
+    }
     setAttachmentsByTask((current) => ({
       ...current,
-      [visibleTask.id]: (current[visibleTask.id] ?? []).filter(
-        (_, itemIndex) => itemIndex !== index,
-      ),
+      [visibleTask.id]: remaining,
     }));
   };
 
@@ -2886,18 +2959,16 @@ export function EngineConversation({
                   attachmentAction={platform.canSelectFilePath ? attachmentAction : undefined}
                   showMentionButton={isZCodeHarness}
                   fileReferencesOnly={isZCodeHarness}
-                  actionMenuDisabled={shouldQueue || !!runBlockedReason || busyAction !== null}
+                  actionMenuDisabled={!!runBlockedReason || busyAction !== null}
                   actionMenuDisabledReason={
                     runBlockedReason ??
                     (busyAction !== null
                       ? "操作正在处理中。"
-                      : shouldQueue
-                        ? "附件不能排队；请等待当前轮次完成后发送。"
-                        : intl.formatMessage({
-                            id: platform.canSelectFilePath
-                              ? "engine.composer.textOnly"
-                              : "engine.composer.attachmentLocalPathRequired",
-                          }))
+                      : intl.formatMessage({
+                          id: platform.canSelectFilePath
+                            ? "engine.composer.textOnly"
+                            : "engine.composer.attachmentLocalPathRequired",
+                        }))
                   }
                   leadingActions={
                     <ConfigSelect
