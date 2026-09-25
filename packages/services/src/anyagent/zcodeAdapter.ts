@@ -2107,6 +2107,7 @@ export function createZCodeAdapter(options: {
       approvalId,
       optionId,
       feedback,
+      beforeDispatch,
     }): Promise<EngineApprovalReceipt> {
       const run = runs.get(session);
       const optionsForRequest = run?.approvals.get(approvalId);
@@ -2123,6 +2124,7 @@ export function createZCodeAdapter(options: {
         answer: { optionId, ...(feedback === undefined ? {} : { freeText: feedback }) },
       });
       // The native permission.resolved event may arrive before the command ACK.
+      beforeDispatch?.();
       run?.approvalAnswers.set(approvalId, optionId);
       try {
         const ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
@@ -2140,7 +2142,12 @@ export function createZCodeAdapter(options: {
         return { status: "unknown" };
       }
     },
-    async replyToUserInput({ session, requestId, response }): Promise<EngineUserInputReceipt> {
+    async replyToUserInput({
+      session,
+      requestId,
+      response,
+      beforeDispatch,
+    }): Promise<EngineUserInputReceipt> {
       const request = runs.get(session)?.userInputs.get(requestId);
       if (!request) return { status: "unsupported" };
       let answer: {
@@ -2210,6 +2217,7 @@ export function createZCodeAdapter(options: {
         interactionId: requestId,
         answer,
       });
+      beforeDispatch?.();
       try {
         const ack = await options.agent.sendConversationCommandV4({ ...workspace, envelope });
         if (interactionWasDelivered(ack, envelope.commandId))

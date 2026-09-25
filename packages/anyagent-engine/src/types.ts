@@ -440,11 +440,15 @@ export interface EngineAdapter {
     readonly approvalId: EngineApprovalRef;
     readonly optionId: string;
     readonly feedback?: string;
+    /** Recheck Host eligibility immediately before forwarding the native answer. */
+    readonly beforeDispatch?: () => void;
   }): Promise<EngineApprovalReceipt>;
   replyToUserInput(input: {
     readonly session: EngineSessionRef;
     readonly requestId: EngineUserInputRef;
     readonly response: EngineUserInputAnswer;
+    /** Recheck Host eligibility immediately before forwarding the native answer. */
+    readonly beforeDispatch?: () => void;
   }): Promise<EngineUserInputReceipt>;
   /** Set feedback on a source assistant message. Runtime must qualify its Execution first. */
   setAssistantFeedback?(input: {

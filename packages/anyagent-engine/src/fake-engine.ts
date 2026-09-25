@@ -3,7 +3,6 @@ import {
   type CapabilityStatus,
   type EngineAdapter,
   type EngineApprovalReceipt,
-  type EngineApprovalRef,
   type EngineCapability,
   type EngineCapabilitySnapshot,
   type EngineCommandReceipt,
@@ -12,7 +11,6 @@ import {
   type EngineExecutionRef,
   type EngineSessionRef,
   type EngineUserInputReceipt,
-  type EngineUserInputRef,
 } from "./types.js";
 import {
   AsyncEventQueue,
@@ -151,12 +149,9 @@ export class FakeEngine implements EngineAdapter {
     return { executionId, events: record.events };
   }
 
-  async replyToApproval(input: {
-    readonly session: EngineSessionRef;
-    readonly approvalId: EngineApprovalRef;
-    readonly optionId: string;
-    readonly feedback?: string;
-  }): Promise<EngineApprovalReceipt> {
+  async replyToApproval(
+    input: Parameters<EngineAdapter["replyToApproval"]>[0],
+  ): Promise<EngineApprovalReceipt> {
     const found = findFakeApproval(this.#executions.values(), input.session, input.approvalId);
     if (!found) return { status: "unknown" };
     const { record, pending } = found;
@@ -168,6 +163,7 @@ export class FakeEngine implements EngineAdapter {
 
     const option = pending.options.find((item) => item.id === input.optionId);
     if (!option) return { status: "unsupported" };
+    input.beforeDispatch?.();
     const expired = pending.expiresAt !== null && this.#now() >= pending.expiresAt;
     pending.status = expired ? "expired" : "forwarded";
     const evidence = this.#evidence(
@@ -186,11 +182,9 @@ export class FakeEngine implements EngineAdapter {
     return { status: expired ? "expired" : "forwarded", evidence };
   }
 
-  async replyToUserInput(input: {
-    readonly session: EngineSessionRef;
-    readonly requestId: EngineUserInputRef;
-    readonly response: unknown;
-  }): Promise<EngineUserInputReceipt> {
+  async replyToUserInput(
+    input: Parameters<EngineAdapter["replyToUserInput"]>[0],
+  ): Promise<EngineUserInputReceipt> {
     const record = findFakeUserInput(this.#executions.values(), input.session, input.requestId);
     if (!record) return { status: "unknown" };
     const pending = record.userInputs.get(input.requestId)!;
@@ -208,6 +202,7 @@ export class FakeEngine implements EngineAdapter {
       return { status: "unsupported" };
     }
 
+    input.beforeDispatch?.();
     const expired = pending.expiresAt !== null && this.#now() >= pending.expiresAt;
     pending.status = expired ? "expired" : "forwarded";
     const evidence = this.#evidence(

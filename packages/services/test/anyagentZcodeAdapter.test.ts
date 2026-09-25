@@ -3955,6 +3955,19 @@ test("ZCode ACK, native start, approval, stop request and terminal remain distin
     ).status,
     "unsupported",
   );
+  const approvalCommandCount = fixture.commands.length;
+  await assert.rejects(
+    fixture.adapter.replyToApproval({
+      session,
+      approvalId: "approval-1" as never,
+      optionId: "deny",
+      beforeDispatch: () => {
+        throw new Error("Host approval eligibility expired");
+      },
+    }),
+    /eligibility expired/u,
+  );
+  assert.equal(fixture.commands.length, approvalCommandCount);
   const reply = fixture.adapter.replyToApproval({
     session,
     approvalId: "approval-1" as never,
@@ -4573,6 +4586,19 @@ test("single-choice user input maps to a constrained native AskUserQuestion answ
     fixture.commands.some((item) => item.type === "resolveInteraction"),
     false,
   );
+  const questionCommandCount = fixture.commands.length;
+  await assert.rejects(
+    fixture.adapter.replyToUserInput({
+      session,
+      requestId: "native-choice" as never,
+      response: "src/two.ts",
+      beforeDispatch: () => {
+        throw new Error("Host question eligibility expired");
+      },
+    }),
+    /eligibility expired/u,
+  );
+  assert.equal(fixture.commands.length, questionCommandCount);
   assert.equal(
     (
       await fixture.adapter.replyToUserInput({

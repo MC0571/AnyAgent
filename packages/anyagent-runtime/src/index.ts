@@ -2483,11 +2483,61 @@ export class TaskRuntime {
           `Approval ${input.approvalId} belongs to a finished Execution.`,
         );
       }
+      const guard = this.#dispatchGuard({
+        taskId: input.taskId,
+        participantId: input.participantId,
+        sessionId: input.sessionId,
+        authorizationId: input.authorizationId,
+        capability: "approval.respond",
+        engine,
+        nativeSessionId: session.data.nativeSessionId as EngineSessionRef,
+      });
+      const beforeDispatch = () => {
+        guard();
+        const pending = this.#require<ApprovalData>("approval", input.approvalId);
+        this.#assertRelated(
+          pending.data.taskId,
+          pending.data.participantId,
+          pending.data.sessionId,
+          input,
+        );
+        if (
+          pending.data.status !== "pending" ||
+          pending.data.nativeApprovalId !== latest.data.nativeApprovalId
+        )
+          throw new RuntimeEligibilityError(`Approval ${input.approvalId} is no longer pending.`);
+        if (pending.data.expiresAt !== null && this.#now() >= pending.data.expiresAt) {
+          const expired: ApprovalData = { ...pending.data, status: "expired" };
+          this.#save(
+            "approval",
+            pending.id,
+            task.id,
+            session.id,
+            pending.executionId,
+            expired,
+            expired.status,
+            pending.createdAt,
+            this.#now(),
+          );
+          this.#publish(task.id, "approval", pending.id);
+          throw new RuntimeEligibilityError(`Approval ${input.approvalId} has expired.`);
+        }
+        if (
+          TERMINAL_EXECUTION_STATUSES.has(
+            this.#require<ExecutionData>("execution", pending.data.executionId).data.status,
+          )
+        )
+          throw new RuntimeEligibilityError(
+            `Approval ${input.approvalId} belongs to a finished Execution.`,
+          );
+      };
+      beforeDispatch();
       const receipt = await engine.replyToApproval({
         session: session.data.nativeSessionId as EngineSessionRef,
         approvalId: latest.data.nativeApprovalId as EngineApprovalRef,
         optionId: input.optionId,
         ...(input.feedback === undefined ? {} : { feedback: input.feedback }),
+        beforeDispatch,
       });
       const resolved = this.#require<ApprovalData>("approval", input.approvalId);
       if (resolved.data.status !== "pending") return this.#publicApproval(resolved.data);
@@ -2594,10 +2644,60 @@ export class TaskRuntime {
           `User input ${input.requestId} belongs to a finished Execution.`,
         );
       }
+      const guard = this.#dispatchGuard({
+        taskId: input.taskId,
+        participantId: input.participantId,
+        sessionId: input.sessionId,
+        authorizationId: input.authorizationId,
+        capability: "user-input.respond",
+        engine,
+        nativeSessionId: session.data.nativeSessionId as EngineSessionRef,
+      });
+      const beforeDispatch = () => {
+        guard();
+        const pending = this.#require<UserInputData>("user-input", input.requestId);
+        this.#assertRelated(
+          pending.data.taskId,
+          pending.data.participantId,
+          pending.data.sessionId,
+          input,
+        );
+        if (
+          pending.data.status !== "pending" ||
+          pending.data.nativeRequestId !== latest.data.nativeRequestId
+        )
+          throw new RuntimeEligibilityError(`User input ${input.requestId} is no longer pending.`);
+        if (pending.data.expiresAt !== null && this.#now() >= pending.data.expiresAt) {
+          const expired: UserInputData = { ...pending.data, status: "expired" };
+          this.#save(
+            "user-input",
+            pending.id,
+            task.id,
+            session.id,
+            pending.executionId,
+            expired,
+            expired.status,
+            pending.createdAt,
+            this.#now(),
+          );
+          this.#publish(task.id, "user-input", pending.id);
+          throw new RuntimeEligibilityError(`User input ${input.requestId} has expired.`);
+        }
+        if (
+          TERMINAL_EXECUTION_STATUSES.has(
+            this.#require<ExecutionData>("execution", pending.data.executionId).data.status,
+          )
+        )
+          throw new RuntimeEligibilityError(
+            `User input ${input.requestId} belongs to a finished Execution.`,
+          );
+      };
+      beforeDispatch();
       const receipt = await engine.replyToUserInput({
         session: session.data.nativeSessionId as EngineSessionRef,
         requestId: latest.data.nativeRequestId as EngineUserInputRef,
         response: input.response,
+        beforeDispatch,
       });
       const resolved = this.#require<UserInputData>("user-input", input.requestId);
       // A native response event can overtake the command ACK. Preserve its more

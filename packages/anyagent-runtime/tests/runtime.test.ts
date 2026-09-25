@@ -234,11 +234,17 @@ class ManualEngine implements EngineAdapter {
     return { executionId, events };
   }
 
-  async replyToApproval(): Promise<EngineApprovalReceipt> {
+  async replyToApproval(
+    input: Parameters<EngineAdapter["replyToApproval"]>[0],
+  ): Promise<EngineApprovalReceipt> {
+    input.beforeDispatch?.();
     this.approvalReplies++;
     return { status: "forwarded" };
   }
-  async replyToUserInput(): Promise<EngineUserInputReceipt> {
+  async replyToUserInput(
+    input: Parameters<EngineAdapter["replyToUserInput"]>[0],
+  ): Promise<EngineUserInputReceipt> {
+    input.beforeDispatch?.();
     this.userInputReplies++;
     return { status: "forwarded" };
   }
@@ -3951,6 +3957,104 @@ test("expired or finished-Execution interactions never reach the Engine", async 
     assert.equal(engine.userInputReplies, 0);
   } finally {
     runtime.close();
+  }
+});
+
+test("approval and question answers recheck expiry immediately before native dispatch", async () => {
+  for (const kind of ["approval", "question"] as const) {
+    let now = 5;
+    const engine = new ManualEngine();
+    const runtime = createTaskRuntime({
+      databasePath: ":memory:",
+      engines: new Map([["manual", engine]]),
+      now: () => now,
+    });
+    try {
+      const task = await runtime.createTask({ engineId: "manual", environment, authorization });
+      const scope = {
+        taskId: task.id,
+        participantId: task.participant.id,
+        sessionId: task.session.id,
+        authorizationId: authorization.id,
+      };
+      await runtime.submitInput({ ...scope, text: "waiting for interaction" });
+      engine.emit(0, {
+        type: "input.accepted",
+        evidence: { source: "engine", evidenceId: `${kind}-accepted` },
+      });
+      await until(() => runtime.getHistory(task.id)!.executions.length === 1);
+      if (kind === "approval") {
+        engine.emit(0, {
+          type: "approval.requested",
+          approvalId: "expiring-approval" as never,
+          operation: "write",
+          options: [{ id: "allow", label: "Allow", decision: "approve" }],
+          expiresAt: 10,
+        });
+      } else {
+        engine.emit(0, {
+          type: "user-input.requested",
+          requestId: "expiring-question" as never,
+          prompt: "Continue?",
+          inputKind: "text",
+          expiresAt: 10,
+        });
+      }
+      await until(
+        () =>
+          (kind === "approval"
+            ? runtime.getHistory(task.id)!.approvals
+            : runtime.getHistory(task.id)!.userInputs
+          ).length === 1,
+      );
+
+      let entered = false;
+      let effects = 0;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      engine.replyToApproval = async (input) => {
+        entered = true;
+        await held;
+        input.beforeDispatch?.();
+        effects++;
+        return { status: "forwarded" };
+      };
+      engine.replyToUserInput = async (input) => {
+        entered = true;
+        await held;
+        input.beforeDispatch?.();
+        effects++;
+        return { status: "forwarded" };
+      };
+      const pending =
+        kind === "approval"
+          ? runtime.replyToApproval({
+              ...scope,
+              approvalId: runtime.getHistory(task.id)!.approvals[0]!.id,
+              optionId: "allow",
+            })
+          : runtime.replyToUserInput({
+              ...scope,
+              requestId: runtime.getHistory(task.id)!.userInputs[0]!.id,
+              response: "yes",
+            });
+      await until(() => entered);
+      now = 10;
+      release();
+      await assert.rejects(pending, /expired/i);
+      assert.equal(effects, 0, `${kind} must not reach native dispatch after expiry`);
+      assert.equal(
+        (kind === "approval"
+          ? runtime.getHistory(task.id)!.approvals[0]
+          : runtime.getHistory(task.id)!.userInputs[0]
+        )?.status,
+        "expired",
+      );
+    } finally {
+      runtime.close();
+    }
   }
 });
 
