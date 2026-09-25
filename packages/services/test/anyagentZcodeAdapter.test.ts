@@ -1158,6 +1158,139 @@ test("Runtime preserves each input configuration and ZCode sends it through the 
   }
 });
 
+test("ZCode Goal control uses a typed native command with the product Input identity", async () => {
+  const fixture = harness({ nativeSessionStatus: "idle", nativePendingRequestIds: [] });
+  const modelSelection = { providerId: "provider-a", modelId: "model-a" };
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({
+      session,
+      input: "/goal Finish the isolated task",
+      commandId: "input_goal_1",
+      submissionConfig: {
+        control: "goal",
+        modelSelection,
+        mode: "build",
+        planEnabled: false,
+      },
+    });
+    const native = fixture.commands.find((entry) => entry.type === "sendGoalCommand");
+    assert.equal(native?.commandId, "input_goal_1");
+    assert.deepEqual(native?.payload, {
+      text: "Finish the isolated task",
+      displayText: "/goal Finish the isolated task",
+      mode: "build",
+      planEnabled: false,
+      modelSelection,
+    });
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendText").length, 0);
+    assert.ok(run.events);
+    await assert.rejects(
+      () =>
+        fixture.adapter.run({
+          session,
+          input: "/goal no plan overlap",
+          commandId: "input_goal_2",
+          submissionConfig: { control: "goal", modelSelection, planEnabled: true },
+        }),
+      /Goal control cannot/,
+    );
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("Runtime persists a Goal Input and only the original Task can dispatch its typed command", async () => {
+  const fixture = harness({ nativeSessionStatus: "idle", nativePendingRequestIds: [] });
+  const runtime = createTaskRuntime({
+    databasePath: ":memory:",
+    engines: new Map([["zcode", fixture.adapter]]),
+  });
+  const environment = {
+    id: "local:/tmp/workspace",
+    kind: "workspace" as const,
+    workDirectory: "/tmp/workspace",
+  };
+  try {
+    const task = await runtime.createTask({
+      engineId: "zcode",
+      environment,
+      authorization: {
+        id: "host-goal-grant",
+        environmentId: environment.id,
+        issuer: "host",
+        expiresAt: null,
+        scopes: ["session.create", "execution.run"],
+      },
+    });
+    const config = {
+      control: "goal",
+      mode: "build",
+      planEnabled: false,
+      modelSelection: { providerId: "provider-a", modelId: "model-a" },
+    };
+    await assert.rejects(
+      () =>
+        runtime.submitInput({
+          taskId: task.id,
+          participantId: task.participant.id,
+          sessionId: task.session.id,
+          authorizationId: "wrong-grant",
+          text: "/goal finish",
+          submissionConfig: config,
+        }),
+      /authorization/i,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendGoalCommand").length, 0);
+    await runtime.submitInput({
+      taskId: task.id,
+      participantId: task.participant.id,
+      sessionId: task.session.id,
+      authorizationId: task.authorizationId,
+      text: "/goal finish",
+      submissionConfig: config,
+    });
+    const [input] = runtime.getHistory(task.id)?.inputs ?? [];
+    assert.equal(input?.text, "/goal finish");
+    assert.equal((input?.submissionConfig as { control?: string })?.control, "goal");
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendGoalCommand").length, 1);
+    assert.equal(
+      fixture.commands.find((entry) => entry.type === "sendGoalCommand")?.commandId,
+      input?.id,
+    );
+  } finally {
+    runtime.close();
+    fixture.adapter.dispose();
+  }
+});
+
+test("ZCode refuses Goal control when native Session became busy before dispatch", async () => {
+  const fixture = harness({
+    nativeSessionStatus: "running",
+    nativeActiveTurnId: "earlier-turn",
+    nativePendingRequestIds: [],
+  });
+  try {
+    const session = await fixture.adapter.createSession();
+    await assert.rejects(
+      () =>
+        fixture.adapter.run({
+          session,
+          input: "/goal do not interrupt prior turn",
+          commandId: "input_goal_busy",
+          submissionConfig: {
+            control: "goal",
+            modelSelection: { providerId: "provider-a", modelId: "model-a" },
+          },
+        }),
+      /Goal control must remain a product-queued Input/,
+    );
+    assert.equal(fixture.commands.filter((entry) => entry.type === "sendGoalCommand").length, 0);
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
 test("ZCode maps Host-resolved Engine attachments to native sendText references", async () => {
   const fixture = harness();
   try {

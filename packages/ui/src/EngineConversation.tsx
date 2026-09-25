@@ -111,6 +111,7 @@ const nativePromptBuiltinSlashCommands = new Set(["init"]);
 const rendererMappedSlashCommands = new Set([
   "compact",
   "effort",
+  "goal",
   "help",
   "locale",
   "mode",
@@ -157,10 +158,6 @@ const unsupportedNativeSlashReasons = {
   rewind: {
     en: "M0 restores workspace checkpoints; M1 only offers file rewind qualified to a specific product Execution.",
     zh: "M0 恢复工作区检查点；M1 只支持绑定到指定产品 Execution 的文件撤销。",
-  },
-  goal: {
-    en: "M1 currently supports only read-only /goal status; goal changes and continuation have no safe Task-scoped dispatch path yet.",
-    zh: "M1 当前仅支持只读 /goal 查询；目标变更和续跑尚无安全的 Task 级派发路径。",
   },
 } as const;
 
@@ -1388,6 +1385,7 @@ export function EngineConversation({
     let submitActionId = "input";
     let submitPreflight: (() => Promise<void>) | null = null;
     let submitSuccessMessage: (() => string | null) | null = null;
+    let nativeGoalControl = false;
 
     if (isZCodeHarness && slashCommand) {
       if (
@@ -1476,6 +1474,23 @@ export function EngineConversation({
           }
         })();
         return false;
+      } else if (slashCommand.name === "goal") {
+        if (/^(?:pause|resume)$/iu.test(slashCommand.args)) {
+          setNotice({ kind: "info", message: "Goal 暂停与续跑尚无 Task 级控制路径；输入已保留。" });
+          return false;
+        }
+        if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
+          setNotice({
+            kind: "info",
+            message: "/goal 目标控制不接受附件或网页上下文；输入已保留。",
+          });
+          return false;
+        }
+        if (zcodeSubmission?.planEnabled) {
+          setNotice({ kind: "info", message: "Plan 模式不能同时启动 Goal；输入已保留。" });
+          return false;
+        }
+        nativeGoalControl = true;
       } else if (slashCommand.name === "compact") {
         if (selectedAttachments.length > 0 || selectedWebContexts.length > 0) {
           setNotice({
@@ -1938,7 +1953,7 @@ export function EngineConversation({
       return false;
     }
     const delivery = shouldQueue ? "queue" : "startNow";
-    const configKey = JSON.stringify(submission ?? null);
+    const configKey = JSON.stringify({ submission, nativeGoalControl });
     const queueKey = shouldQueue
       ? queuedSubmissionRef.current?.taskId === visibleTask.id &&
         queuedSubmissionRef.current.authorizationId === visibleTask.authorizationId &&
@@ -1984,6 +1999,7 @@ export function EngineConversation({
           ...(isZCodeHarness && submission
             ? {
                 submissionConfig: {
+                  ...(nativeGoalControl ? { control: "goal" } : {}),
                   mode: submission.mode,
                   planEnabled: submission.planEnabled,
                   modelSelection: {

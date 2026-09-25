@@ -132,6 +132,8 @@ interface ZCodeSubmissionConfig {
   readonly mode?: ZCodeSubmissionMode;
   readonly planEnabled?: boolean;
   readonly modelSelection?: ModelSelection;
+  /** Adapter-owned native control mapping; product Runtime treats this as opaque input config. */
+  readonly control?: "goal";
 }
 
 const ZCODE_SUBMISSION_MODES = new Set<ZCodeSubmissionMode>(["build", "edit", "plan", "yolo"]);
@@ -141,7 +143,7 @@ function parseZCodeSubmissionConfig(
 ): { config: ZCodeSubmissionConfig } | { error: string } {
   if (value === undefined) return { config: {} };
   const unsupportedKey = Object.keys(value).find(
-    (key) => !["mode", "planEnabled", "modelSelection"].includes(key),
+    (key) => !["mode", "planEnabled", "modelSelection", "control"].includes(key),
   );
   if (unsupportedKey)
     return { error: `ZCode submission config field is unsupported: ${unsupportedKey}.` };
@@ -155,6 +157,9 @@ function parseZCodeSubmissionConfig(
   const planEnabled = value.planEnabled;
   if (planEnabled !== undefined && typeof planEnabled !== "boolean")
     return { error: "ZCode plan setting must be a boolean." };
+  const control = value.control;
+  if (control !== undefined && control !== "goal")
+    return { error: "ZCode submission control is unsupported." };
   let modelSelection: ModelSelection | undefined;
   if (value.modelSelection !== undefined) {
     const parsed = modelSelectionSchema.safeParse(value.modelSelection);
@@ -166,6 +171,7 @@ function parseZCodeSubmissionConfig(
       ...(mode ? { mode: mode as ZCodeSubmissionMode } : {}),
       ...(planEnabled !== undefined ? { planEnabled } : {}),
       ...(modelSelection ? { modelSelection } : {}),
+      ...(control ? { control } : {}),
     },
   };
 }
@@ -1541,7 +1547,32 @@ export function createZCodeAdapter(options: {
       const parsedConfig = parseZCodeSubmissionConfig(submissionConfig);
       if ("error" in parsedConfig)
         throw operationError(operation, parsedConfig.error, "protocol-error", "none");
-      const { mode, planEnabled, modelSelection } = parsedConfig.config;
+      const { mode, planEnabled, modelSelection, control } = parsedConfig.config;
+      if (control === "goal" && (revision || attachments?.length || planEnabled))
+        throw operationError(
+          operation,
+          "Goal control cannot revise, attach files, or run in Plan mode.",
+          "unsupported",
+          "none",
+        );
+      if (control === "goal" && pendingSharedContextBySession.has(session))
+        throw operationError(
+          operation,
+          "Goal control cannot silently discard a pending shared-context import.",
+          "unsupported",
+          "none",
+        );
+      const goalObjective =
+        control === "goal"
+          ? /^\/(?:goal|target)\s+([\s\S]+)$/u.exec(input.trim())?.[1]?.trim()
+          : undefined;
+      if (control === "goal" && !goalObjective)
+        throw operationError(
+          operation,
+          "Goal control requires /goal <objective>.",
+          "protocol-error",
+          "none",
+        );
       if (!modelSelection)
         throw operationError(
           operation,
@@ -1661,9 +1692,11 @@ export function createZCodeAdapter(options: {
               baseLogEpoch: nativeRevisionTarget.baseLogEpoch,
             }
           : {
-              ...command("sendText", session, {
-                text: input,
-                requestedDelivery: "startNow",
+              ...command(control === "goal" ? "sendGoalCommand" : "sendText", session, {
+                text: goalObjective ?? input,
+                ...(control === "goal"
+                  ? { displayText: input }
+                  : { requestedDelivery: "startNow" as const }),
                 ...(pendingSharedContextBySession.has(session)
                   ? {
                       context_refs: [
@@ -1690,6 +1723,30 @@ export function createZCodeAdapter(options: {
               }),
               ...(commandId ? { commandId } : {}),
             };
+      if (control === "goal") {
+        let nativeState;
+        try {
+          nativeState = await options.agent.readSession({ ...workspace, sessionId: session });
+        } catch (error) {
+          throw operationError(
+            operation,
+            error instanceof Error ? error.message : String(error),
+            "temporarily-unavailable",
+            "none",
+          );
+        }
+        if (
+          nativeState.runtime.activeTurnId ||
+          nativeState.runtime.pendingRequestIds.length > 0 ||
+          (nativeState.session.status !== "idle" && nativeState.session.status !== "completed")
+        )
+          throw operationError(
+            operation,
+            "Native Session is busy; Goal control must remain a product-queued Input until idle.",
+            "temporarily-unavailable",
+            "none",
+          );
+      }
       beforeDispatch?.();
       const executionId = envelope.commandId as EngineExecutionRef;
       let disposable: { dispose(): void } | undefined;
@@ -1775,6 +1832,7 @@ export function createZCodeAdapter(options: {
         !ack ||
         (ack.status !== "accepted" && !(revision && ack.status === "duplicate")) ||
         (!revision &&
+          control !== "goal" &&
           (ack.result?.type !== "inputAccepted" || ack.result.delivery !== "startNow")) ||
         (revision?.kind === "edit" &&
           (ack.result?.type !== "editUserQuery" || ack.result.disposition !== "rewind"))
