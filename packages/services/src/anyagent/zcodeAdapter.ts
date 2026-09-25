@@ -97,6 +97,12 @@ interface PendingRun {
   readonly streamId: string;
   readonly session: EngineSessionRef;
   readonly executionId: EngineExecutionRef;
+  readonly goalObjective: string | null;
+  goalTerminalCandidate: { readonly event: ZCodeSessionEvent } | null;
+  goalProbeTimer: ReturnType<typeof setTimeout> | null;
+  goalProbeInFlight: boolean;
+  goalProbeReadFailures: number;
+  goalStarted: boolean;
   inputId: string;
   acknowledged: boolean;
   readonly pendingEvents: ZCodeAgentServiceEvent[];
@@ -749,6 +755,73 @@ export function createZCodeAdapter(options: {
     }
   }
 
+  function scheduleGoalTerminalProbe(run: PendingRun, delayMs: number): void {
+    if (
+      !run.goalObjective ||
+      !run.goalTerminalCandidate ||
+      run.goalProbeTimer ||
+      run.goalProbeInFlight
+    )
+      return;
+    run.goalProbeTimer = setTimeout(() => {
+      run.goalProbeTimer = null;
+      if (run.finished || runs.get(run.session) !== run || !run.goalTerminalCandidate) return;
+      run.goalProbeInFlight = true;
+      const markUnknown = (reason: string) => {
+        publish(run, { type: "execution.unknown", reason });
+        run.goalTerminalCandidate = null;
+        run.finished = true;
+        if (runs.get(run.session) === run) runs.delete(run.session);
+        run.wake?.();
+      };
+      void options.agent
+        .readSession({ ...workspace, sessionId: run.session, runtimePolicy: "existing-only" })
+        .then((snapshot) => {
+          if (run.finished || runs.get(run.session) !== run || !run.goalTerminalCandidate) return;
+          run.goalProbeReadFailures = 0;
+          if (
+            snapshot.session.sessionId !== run.session ||
+            snapshot.session.target?.sessionId !== run.session ||
+            snapshot.session.target.objective !== run.goalObjective
+          ) {
+            markUnknown(
+              "Native Goal identity changed before its terminal state could be attributed.",
+            );
+            return;
+          }
+          const status = snapshot.session.target.status;
+          if (status === "complete") {
+            const candidate = run.goalTerminalCandidate;
+            publish(
+              run,
+              {
+                type: "execution.completed",
+                evidence: {
+                  source: "engine",
+                  evidenceId: candidate.event.eventId,
+                  detail: "Native Goal target is complete after its source turn terminal.",
+                },
+              },
+              candidate.event,
+            );
+          } else if (status === "paused" || status === "budget_limited") {
+            markUnknown(
+              `Native Goal target is ${status}; the submitted Input did not prove completion.`,
+            );
+          }
+        })
+        .catch(() => {
+          if (++run.goalProbeReadFailures >= 3)
+            markUnknown("Native Goal terminal could not be reconciled after three Session reads.");
+        })
+        .finally(() => {
+          run.goalProbeInFlight = false;
+          if (run.goalTerminalCandidate && runs.get(run.session) === run)
+            scheduleGoalTerminalProbe(run, 300);
+        });
+    }, delayMs);
+  }
+
   const lifecycle = options.agent.onAgentRuntimeLifecycle?.((event) => {
     if (event.workspaceKey !== nativeWorkspaceId || event.state !== "unavailable") return;
     availability = "temporarily-unavailable";
@@ -879,13 +952,20 @@ export function createZCodeAdapter(options: {
     const data = payloadRecord(event.payload);
     if (event.type === "turn.started") {
       if (data.inputId !== run.inputId) return;
+      if (run.goalObjective) {
+        run.goalTerminalCandidate = null;
+        if (run.goalProbeTimer) clearTimeout(run.goalProbeTimer);
+        run.goalProbeTimer = null;
+      }
       run.turnId = event.turnId ?? text(data.turnId) ?? null;
       run.nativeForegroundExecutionId = text(data.foregroundExecutionId) ?? null;
-      publish(
-        run,
-        { type: "execution.started", evidence: { source: "engine", evidenceId: event.eventId } },
-        event,
-      );
+      if (!run.goalObjective || !run.goalStarted)
+        publish(
+          run,
+          { type: "execution.started", evidence: { source: "engine", evidenceId: event.eventId } },
+          event,
+        );
+      run.goalStarted = true;
       for (const control of run.pendingTurnControls.splice(0)) receive(run, control);
       return;
     }
@@ -1058,7 +1138,10 @@ export function createZCodeAdapter(options: {
         const evidence = { source: "engine" as const, evidenceId: event.eventId };
         if (data.resultType === "cancelled")
           publish(run, { type: "execution.stopped", evidence }, event);
-        else if (data.resultType === "success")
+        else if (data.resultType === "success" && run.goalObjective) {
+          run.goalTerminalCandidate = { event };
+          scheduleGoalTerminalProbe(run, 0);
+        } else if (data.resultType === "success")
           publish(
             run,
             { type: "execution.completed", result: text(data.response), evidence },
@@ -1754,6 +1837,12 @@ export function createZCodeAdapter(options: {
         streamId: randomUUID(),
         session,
         executionId,
+        goalObjective: goalObjective ?? null,
+        goalTerminalCandidate: null,
+        goalProbeTimer: null,
+        goalProbeInFlight: false,
+        goalProbeReadFailures: 0,
+        goalStarted: false,
         inputId: envelope.commandId,
         acknowledged: false,
         pendingEvents: [],
@@ -1772,6 +1861,8 @@ export function createZCodeAdapter(options: {
         deliverySequence: 0,
         finished: false,
         dispose() {
+          if (this.goalProbeTimer) clearTimeout(this.goalProbeTimer);
+          this.goalProbeTimer = null;
           disposable?.dispose();
           disposable = undefined;
           allRuns.delete(run);
@@ -1784,7 +1875,9 @@ export function createZCodeAdapter(options: {
         ...workspace,
         sessionId: session,
         deliveryKind: "desktop-continuous",
-        ...(run.lastSequence !== null ? { afterSeq: run.lastSequence } : {}),
+        // A fresh subscription can establish after a fast first turn starts.
+        // Native session/subscribe replays only when afterSeq is present.
+        afterSeq: run.lastSequence ?? 0,
       })((event) => receive(run, event));
       if (!providerWasPinned) providerIdBySession.set(session, modelSelection.providerId);
       let ack;

@@ -62,6 +62,8 @@ function harness({
   nativeActiveTurnId = null,
   nativePendingRequestIds = [],
   nativeSessionStatus = "idle",
+  nativeGoalStatus,
+  nativeGoalReadFails,
   resumeSessionId = "native-session",
   validateModelSelection,
   beforeRows,
@@ -90,6 +92,8 @@ function harness({
   nativeActiveTurnId?: string | null;
   nativePendingRequestIds?: string[];
   nativeSessionStatus?: string;
+  nativeGoalStatus?: () => "active" | "complete";
+  nativeGoalReadFails?: () => boolean;
   resumeSessionId?: string;
   validateModelSelection?: NonNullable<
     Parameters<typeof createZCodeAdapter>[0]["validateModelSelection"]
@@ -113,6 +117,7 @@ function harness({
     baseLogEpoch?: string;
   }> = [];
   const resumeCalls: string[] = [];
+  const subscriptionCursors: Array<number | undefined> = [];
   const nativeCompactCalls: Parameters<AgentPort["compactSession"]>[0][] = [];
   const rowQueries: Array<{
     beforeRowId?: number;
@@ -122,22 +127,39 @@ function harness({
   const remainingWatermarks = [...pageWatermarks];
   const agent = {
     initialize: async () => ({ available: true, workspaceKey: "/tmp/workspace" }),
-    onDynamicSessionEvent: () => (receive: (event: unknown) => void) => {
-      listeners.add(receive);
-      return {
-        dispose() {
-          listeners.delete(receive);
-        },
-      };
-    },
+    onDynamicSessionEvent:
+      (params: { afterSeq?: number }) => (receive: (event: unknown) => void) => {
+        subscriptionCursors.push(params.afterSeq);
+        listeners.add(receive);
+        return {
+          dispose() {
+            listeners.delete(receive);
+          },
+        };
+      },
     onAgentRuntimeLifecycle: (receive: (event: unknown) => void) => {
       lifecycleListener = receive;
       return { dispose: () => (lifecycleListener = undefined) };
     },
-    readSession: async () => ({
-      runtime: { activeTurnId: nativeActiveTurnId, pendingRequestIds: nativePendingRequestIds },
-      session: { status: nativeSessionStatus },
-    }),
+    readSession: async () => {
+      if (nativeGoalReadFails?.()) throw new Error("native Session read unavailable");
+      return {
+        runtime: { activeTurnId: nativeActiveTurnId, pendingRequestIds: nativePendingRequestIds },
+        session: {
+          sessionId: "native-session",
+          status: nativeSessionStatus,
+          ...(nativeGoalStatus
+            ? {
+                target: {
+                  sessionId: "native-session",
+                  objective: "finish isolated goal",
+                  status: nativeGoalStatus(),
+                },
+              }
+            : {}),
+        },
+      };
+    },
     resumeSession: async ({ sessionId }: { sessionId: string }) => {
       resumeCalls.push(sessionId);
       await beforeResume?.();
@@ -426,6 +448,7 @@ function harness({
     nativeCompactCalls,
     rowQueries,
     resumeCalls,
+    subscriptionCursors,
     rows,
     createFreshAdapter: () =>
       createZCodeAdapter({
@@ -845,8 +868,8 @@ test("ZCode reconciliation stays unknown without an exact stable native projecti
   unstableAdapter.dispose();
 });
 
-async function waitUntil(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+async function waitUntil(predicate: () => boolean, attempts = 100): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
@@ -1286,6 +1309,112 @@ test("ZCode refuses Goal control when native Session became busy before dispatch
       /Goal control must remain a product-queued Input/,
     );
     assert.equal(fixture.commands.filter((entry) => entry.type === "sendGoalCommand").length, 0);
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("Goal remains running across native setup and continuation turns until the target is complete", async () => {
+  let goalStatus: "active" | "complete" = "active";
+  let goalReads = 0;
+  const fixture = harness({
+    nativeSessionStatus: "idle",
+    nativePendingRequestIds: [],
+    nativeGoalStatus: () => {
+      goalReads += 1;
+      return goalStatus;
+    },
+  });
+  const observed: string[] = [];
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({
+      session,
+      input: "/goal finish isolated goal",
+      commandId: "goal-two-turns",
+      submissionConfig: {
+        control: "goal",
+        modelSelection: { providerId: "provider-a", modelId: "model-a" },
+      },
+    });
+    assert.equal(fixture.subscriptionCursors.at(-1), 0);
+    void (async () => {
+      for await (const event of run.events) observed.push(event.type);
+    })();
+    const emit = (seq: number, turnId: string, type: "turn.started" | "turn.completed") =>
+      fixture.emit({
+        type: "session.event",
+        event: {
+          eventId: `goal-${seq}`,
+          seq,
+          sessionId: "native-session",
+          turnId,
+          timestamp: seq,
+          type,
+          payload:
+            type === "turn.started"
+              ? { inputId: "goal-two-turns", foregroundExecutionId: `work-${turnId}` }
+              : { inputId: "goal-two-turns", resultType: "success" },
+        },
+      });
+    emit(1, "setup", "turn.started");
+    emit(2, "setup", "turn.completed");
+    await waitUntil(() => goalReads > 0);
+    assert.equal(observed.includes("execution.completed"), false);
+    emit(3, "continuation", "turn.started");
+    goalStatus = "complete";
+    emit(4, "continuation", "turn.completed");
+    await waitUntil(() => observed.includes("execution.completed"));
+    assert.equal(observed.filter((type) => type === "execution.started").length, 1);
+    assert.equal(observed.filter((type) => type === "execution.completed").length, 1);
+  } finally {
+    fixture.adapter.dispose();
+  }
+});
+
+test("Goal terminal reconciliation becomes unknown after repeated native Session read failures", async () => {
+  let failReads = false;
+  const fixture = harness({
+    nativeGoalStatus: () => "active",
+    nativeGoalReadFails: () => failReads,
+  });
+  const observed: string[] = [];
+  try {
+    const session = await fixture.adapter.createSession();
+    const run = await fixture.adapter.run({
+      session,
+      input: "/goal finish isolated goal",
+      commandId: "goal-read-loss",
+      submissionConfig: {
+        control: "goal",
+        modelSelection: { providerId: "provider-a", modelId: "model-a" },
+      },
+    });
+    void (async () => {
+      for await (const event of run.events) observed.push(event.type);
+    })();
+    failReads = true;
+    for (const [seq, type] of [
+      [1, "turn.started"],
+      [2, "turn.completed"],
+    ] as const)
+      fixture.emit({
+        type: "session.event",
+        event: {
+          eventId: `goal-read-loss-${seq}`,
+          seq,
+          sessionId: "native-session",
+          turnId: "goal-read-loss-turn",
+          timestamp: seq,
+          type,
+          payload:
+            type === "turn.started"
+              ? { inputId: "goal-read-loss", foregroundExecutionId: "work-goal-read-loss" }
+              : { inputId: "goal-read-loss", resultType: "success" },
+        },
+      });
+    await waitUntil(() => observed.includes("execution.unknown"), 500);
+    assert.equal(observed.includes("execution.completed"), false);
   } finally {
     fixture.adapter.dispose();
   }
