@@ -530,6 +530,7 @@ export function createZCodeAdapter(options: {
     let baseRevision: number | undefined;
     let baseLogEpoch: string | undefined;
     const sourceTurnIds: string[] = [];
+    const turnsWithEffects = new Set<string>();
     const candidates: Array<{
       turnId: string;
       rowId: number;
@@ -564,6 +565,11 @@ export function createZCodeAdapter(options: {
         for (const row of page.rows) {
           if (row.kind === "turnHeader" && row.sourceCommandId === sourceExecutionId)
             sourceTurnIds.push(row.turnId);
+          if (
+            row.kind === "toolCall" ||
+            (row.kind === "turnHeader" && (row.fileChanges?.files ?? 0) > 0)
+          )
+            turnsWithEffects.add(row.turnId);
           if (
             row.entityId &&
             ((kind === "edit" && row.kind === "userInput" && row.actions?.canEdit) ||
@@ -602,6 +608,16 @@ export function createZCodeAdapter(options: {
     }
     const targets =
       sourceTurnIds.length === 1 ? candidates.filter((row) => row.turnId === sourceTurnIds[0]) : [];
+    // The product event stream may miss native tool updates. Retry rewinds and
+    // resubmits the original prompt, so the native projection must also show
+    // that this source turn did not run a tool or modify files.
+    if (kind === "retry" && sourceTurnIds.length === 1 && turnsWithEffects.has(sourceTurnIds[0]!))
+      throw operationError(
+        "execution.revise",
+        "Native source turn contains tool or file effects; retry could replay side effects.",
+        "unsupported",
+        "none",
+      );
     if (targets.length !== 1 || baseRevision === undefined || !baseLogEpoch)
       throw operationError(
         "execution.revise",

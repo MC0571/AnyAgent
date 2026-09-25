@@ -1794,6 +1794,130 @@ test("failed ZCode retry records a new attempt while a completed tool effect can
     assert.equal(runtime.getHistory(task.id)?.executions[1]?.status, "failed");
     assert.equal(runtime.getHistory(task.id)?.inputs[1]?.status, "failed");
     assert.equal(await readFile(effectPath, "utf8"), "written-once\n");
+
+    const unobservedToolInput = await runtime.submitInput({
+      ...identity,
+      text: "fail after a native tool effect omitted from the event stream",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    emit("unobserved-tool-start", 9, "unobserved-tool-turn", "turn.started", {
+      inputId: "native-input-3",
+    });
+    await appendFile(effectPath, "unobserved-native-effect\n");
+    emit("unobserved-tool-failure", 10, "unobserved-tool-turn", "turn.completed", {
+      inputId: "native-input-3",
+      resultType: "error",
+    });
+    await waitUntil(() =>
+      runtime
+        .getHistory(task.id)
+        ?.executions.some(
+          (execution) =>
+            execution.inputId === unobservedToolInput.id && execution.status === "failed",
+        ),
+    );
+    const unobservedToolExecution = runtime
+      .getHistory(task.id)!
+      .executions.find((execution) => execution.inputId === unobservedToolInput.id)!;
+    assert.equal(
+      runtime
+        .getHistory(task.id)!
+        .events.some(
+          (event) =>
+            event.executionId === unobservedToolExecution.id && event.type.startsWith("tool."),
+        ),
+      false,
+    );
+    const unobservedToolCommandId = fixture.commands.filter(
+      (command) => command.type === "sendText",
+    )[2]!.commandId;
+    rows.push(
+      {
+        rowId: 20,
+        kind: "turnHeader",
+        turnId: "unobserved-tool-turn",
+        sourceCommandId: unobservedToolCommandId,
+        state: "failed",
+      },
+      {
+        rowId: 21,
+        kind: "toolCall",
+        turnId: "unobserved-tool-turn",
+        entityId: "unobserved-write",
+      },
+      {
+        rowId: 22,
+        kind: "assistantText",
+        turnId: "unobserved-tool-turn",
+        entityId: "unobserved-tool-answer",
+        actions: { canRetry: true },
+      },
+    );
+    await assert.rejects(
+      runtime.reviseTurn({
+        ...identity,
+        kind: "retry",
+        sourceExecutionId: unobservedToolExecution.id,
+      }),
+      /native.*tool|tool.*native|side effect/i,
+    );
+    assert.equal(fixture.commands.filter((command) => command.type === "retryTurn").length, 1);
+    assert.equal(await readFile(effectPath, "utf8"), "written-once\nunobserved-native-effect\n");
+    assert.equal(unobservedToolExecution.status, "failed");
+
+    const unobservedFileInput = await runtime.submitInput({
+      ...identity,
+      text: "fail after a native file change omitted from the event stream",
+      submissionConfig: { modelSelection: DEFAULT_MODEL_SELECTION },
+    });
+    emit("unobserved-file-start", 11, "unobserved-file-turn", "turn.started", {
+      inputId: "native-input-4",
+    });
+    emit("unobserved-file-failure", 12, "unobserved-file-turn", "turn.completed", {
+      inputId: "native-input-4",
+      resultType: "error",
+    });
+    await waitUntil(() =>
+      runtime
+        .getHistory(task.id)
+        ?.executions.some(
+          (execution) =>
+            execution.inputId === unobservedFileInput.id && execution.status === "failed",
+        ),
+    );
+    const unobservedFileExecution = runtime
+      .getHistory(task.id)!
+      .executions.find((execution) => execution.inputId === unobservedFileInput.id)!;
+    const unobservedFileCommandId = fixture.commands.filter(
+      (command) => command.type === "sendText",
+    )[3]!.commandId;
+    rows.push(
+      {
+        rowId: 30,
+        kind: "turnHeader",
+        turnId: "unobserved-file-turn",
+        sourceCommandId: unobservedFileCommandId,
+        state: "failed",
+        fileChanges: { files: 1, additions: 1, deletions: 0 },
+      },
+      {
+        rowId: 31,
+        kind: "assistantText",
+        turnId: "unobserved-file-turn",
+        entityId: "unobserved-file-answer",
+        actions: { canRetry: true },
+      },
+    );
+    await assert.rejects(
+      runtime.reviseTurn({
+        ...identity,
+        kind: "retry",
+        sourceExecutionId: unobservedFileExecution.id,
+      }),
+      /native.*file|side effect/i,
+    );
+    assert.equal(fixture.commands.filter((command) => command.type === "retryTurn").length, 1);
+    assert.equal(runtime.getHistory(task.id)?.executions.at(-1)?.status, "failed");
   } finally {
     runtime.close();
     fixture.adapter.dispose();
