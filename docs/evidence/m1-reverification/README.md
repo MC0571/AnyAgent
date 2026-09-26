@@ -1,5 +1,7 @@
 # M1 修复集成候选复验（截至 2026-09-26）
 
+[Milestone #2 历史收口材料归档](closure-archive/README.md)保存当时独立 reviewer 的最终答复及本机检查日志脱敏副本，并逐项说明原始材料和核验边界；该补档没有重新测试产品或改变已接受的关闭范围。
+
 PR #37 已合并；最终被测产品 `main` 提交为 `9270714f827a4f4ddd01a0fe0051514dc32caabf`，PR #38 仅补证据后当前 `main` 为 `83d4f2f60e7fa20752e84e32569245b374f8569f`，合并前完整产品代码为 `d2c621e09693660a89e1fd290357ce5fa804c3f4`，比较基线为 `8732e7117666352e6252df3992a2cf25a2ccf478`；合并前最后一提交仅改证据，产品代码树相同。[合并后同一代码的真实 CLI 双轮与完成前流式](final-9270714/README.md)补齐 #21 的最终候选多轮场景。[本候选检查、正式桌面截图和双库存储核对](final-d2c621e/README.md)记录普通 Task 草稿、Fake A→B→A、真实 ZCode 旧 Session 显式恢复与新一轮、以及 M0 flag-off。`5b2a386` 发现的草稿丢失和 `ee88aa9` 独立复审发现的普通草稿／队列撤回稿竞态，均在 `d2c621e` 修复；前两提交仍作为历史缺陷证据，不充作最终候选通过。此前 [`3ca6872` 组合复验](final-3ca6872/README.md)及 [`2b06484` 原生能力复验](final-2b06484/README.md)保留各自产品提交归属；下方当前矩阵明确有限继承范围。
 
 截至 2026-09-26 最终收口，[PR #38](https://github.com/MC0571/AnyAgent/pull/38) 已合并，`main=83d4f2f60e7fa20752e84e32569245b374f8569f`；[#8](https://github.com/MC0571/AnyAgent/issues/8)、[#10](https://github.com/MC0571/AnyAgent/issues/10)、[#11](https://github.com/MC0571/AnyAgent/issues/11)、[#18](https://github.com/MC0571/AnyAgent/issues/18)、[#19](https://github.com/MC0571/AnyAgent/issues/19)、[#20](https://github.com/MC0571/AnyAgent/issues/20)、[#21](https://github.com/MC0571/AnyAgent/issues/21)、[#26](https://github.com/MC0571/AnyAgent/issues/26) 均附验收评论后关闭，[Milestone #2](https://github.com/MC0571/AnyAgent/milestone/2) 为 closed、0 open Issue。最终独立 reviewer 对该收口结论及 PR #38 证据复审通过，无未解决 P1/P2/P3 或 closure blocker。

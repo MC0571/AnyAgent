@@ -1,0 +1,20 @@
+结论：**No，当前已提交证据不足以关闭 Milestone #2。** 发现 1 项 P2 最终 RC 证据缺口；未确认新的产品功能或 M1 Contract 技术阻断。
+
+审查固定对象为 `9270714f827a4f4ddd01a0fe0051514dc32caabf`。直接核对 GitHub Milestone #2、#26/#21/#11/#8/#10/#18/#19/#20，以及 merged PR #25/#34/#35/#37；核对当前代码、测试、原始本机日志、当前及历史证据。没有修改代码或 GitHub。
+
+- **[P2] 最终候选真实 ZCode 多轮 gate 尚未满足。** [final-d2c621e/README.md:15](<HISTORICAL_REPO>/docs/evidence/m1-reverification/final-d2c621e/README.md:15) 与其 `crosscheck.json` 仅记录最终候选恢复旧 Session 后执行的一条 ZCode Input。截图里此前一轮为 `EE88` 候选内容，不能算作本候选执行的第二轮。#21 D 明确要求“真实 ZCode CLI 在同一最终候选上完成多轮”。`3ca6872` 的真实多轮、流式与双库证据可信，但后续修改了 Composer 初始化、onChange、普通草稿和队列草稿恢复、提交后清稿；不能以 Runtime／Adapter 未变代替这条最终集成 gate。最小补充是在当前产品代码上，同一真实 Session 连续执行至少两轮，核对各自 Input／Execution／native Input，记录提交清稿、顺序、不重复及正式 UI；可合并完成前流式和导航场景，避免重复造证据。
+
+其余判断：
+
+| 对象 | 判断 |
+|---|---|
+| M0 Verified Baseline | 历史定义准确，没有扩写为全部 M0 能力；当前 flag-off 原生回复及自动化往返有当前证据。 |
+| Required parity | 原 Root／侧栏／Composer、草稿、Fake 隔离已有当前证据；附件、编辑、审批、Stop、换模等有明确旧候选原生证据。未发现已确认未修功能缺陷。最终集成多轮证据仍缺。 |
+| Conditional parity | 固定 CLI 的 question、slash、Queue、compact、文件摘要已有真实触发与结构化证据。最终双 scope 队列恢复有 mounted DOM 回归；不要求机械重跑所有旧原生场景，但不能把旧窗口标作当前窗口。 |
+| M1 Contract | 归属、授权撤销、迟到能力结果、审批／question 过期、Stop ACK 与终态、unknown／reconcile、safe retry 均有针对性测试。抽查代码中的安全重试拒绝与原生安全证明、派发前授权复核，未见新的可成立阻断。 |
+| 架构 | 产品 Runtime 与原生存储职责、Adapter 边界、原组件复用有代码及架构检查依据；没有发现平行产品聊天路径重新出现。 |
+| 检查候选关联 | `d2c621e` 到合并 `9270714` 仅改 `docs/evidence`，产品检查可继承。直接重跑当前 mounted UI **38/38**；`git diff --check` 通过。另核对本机日志的 Service 90/90、mapper 3/3、架构 0 violation、lint 0 error。无适用远端 CI。 |
+
+范围限制：真实故障证据证明的是 Adapter 事件观察中断，**不证明物理 Host↔CLI stdio 断开**；现有自动化与原生对账可以支持其声明范围，不能扩大描述。Deferred 的完整反馈／Fork／Retry／rewind UI，以及第二真实 Engine、热切换、多参与者和完整共享工具平台不阻塞本次关闭。
+
+工作树后来出现未跟踪 `final-9270714/`，不属于本次固定候选审查；若补齐上述最终多轮证据，可只对新证据及候选一致性补审，无需重做全部历史场景。

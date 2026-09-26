@@ -1,0 +1,32 @@
+独立审查通过：**PR #38 可以合并；合并后，可按本次授权关闭已完成的 8 个 Issue 及 Milestone #2。未发现未解决的 P1/P2/P3 或 closure blocker。**
+
+固定审查对象：
+
+- PR #38 head：`2f8c4a4dc8f403d997bac3aa9ef370b850cc6a9e`
+- main：`9270714f827a4f4ddd01a0fe0051514dc32caabf`
+- 已重新读取 live Milestone #2、#26/#21/#11/#8/#10/#18/#19/#20，以及 merged PR #25/#34/#35/#37。
+- #38 完整差异仅 5 个证据文件；main 与 `d2c621e` 的产品代码一致。GitHub 显示 CLEAN、无远端 checks。
+
+新增证据经实际只读双库核验成立：
+
+- 同一 Task／Participant／产品 Session 对应同一原生 Session，两条 completed Input 和两条 completed Execution。
+- 原生恰有两条 promoted input，接纳及提升序号为 0、1，分别对应自己的 user／assistant message。
+- 两轮原生模型均为 `qwen3.8-flash`、reasoning `xhigh`。
+- 第一轮实际有 95 条 delta，时间 `1790367085164–1790367112488`；completed 为 `1790367112526`。原生正文 START／END 各一次。
+- 第二轮正文确为 `SECOND_MAIN_927_OK_926`，两条 delta，completed 为 `1790367144637`。
+- 已查看两张图片：完成前截图显示原消息组件中的增量正文和停止入口；完成截图显示第一轮结尾→第二轮输入→第二轮回复及空 Composer。配合双库与实际组件测试，原先最终候选真实多轮证据缺口已补齐。
+
+关闭范围判断：
+
+| 对象 | 结论 |
+|---|---|
+| Required parity | 原 Root／侧栏／Composer、导航与草稿、真实多轮流式、模型与请求配置、附件／编辑、工具／审批／Stop 均有对应证据；新双轮解决最后明确证据缺口。 |
+| Conditional parity | question、slash、Queue、compact、文件摘要已有固定 CLI 场景；当前自动化复验与限定的旧证据继承相容，无“未映射冒充不支持”。 |
+| Deferred | 反馈、完整 Fork／Retry／rewind UI、跨 Engine Browser context 继续延期；安全重试和 unknown 正确性仍受 Contract 约束，未被豁免。 |
+| M1 Contract | 身份归属、当前能力与历史快照、资格复核、过期／重复答复、迟到事件、Stop ACK／终态、unknown／对账与安全重试已有对应当前测试及真实场景支持。 |
+| M0 Verified history | 未被扩大成完整能力验收；`d2c621e` 等价产品树的 flag-off 原生一轮与导航回归可继承。 |
+| 架构边界 | Runtime 保有产品记录，原生状态留在 ZCode；正式 UI 复用原组件并经 Service／Runtime／Adapter 派发。Core 边界测试与架构检查支持本里程碑限定结论。 |
+
+我独立重跑 mounted UI：**38/38 通过**；受改证据 oxfmt、完整 PR diff check 通过，相对文件链接与引用矩阵标题存在。也查阅了最终 main 检查日志：Contract 12、Runtime 82、Service／Adapter 90、native mapper 3 全通过；type、lint、architecture、build、ADR 等记录与新文档一致。lint 仍有 65 条既有 warning，UI 有既有 React／Tooltip 警告，无测试失败。
+
+证据限制保持原声明：本轮未重新执行真实桌面交互；附件、审批、question、Queue、compact 等旧实机场景保留各自 SHA，仅结合代码影响和当前测试继承。Fake／协议夹具／DOM 不冒充真实 Provider；观测中断不冒充物理 stdio 断开；无适用远端 CI。上述限制不构成当前已冻结关闭范围的剩余 blocker。

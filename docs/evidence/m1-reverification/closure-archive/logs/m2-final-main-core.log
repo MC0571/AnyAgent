@@ -1,0 +1,144 @@
+
+> anyagent@0.1.0 verify:anyagent-core <HISTORICAL_REPO>
+> pnpm --filter @anyagent/engine-contract typecheck && pnpm --filter @anyagent/engine-contract test && pnpm --filter @anyagent/engine-contract lint && pnpm --filter @anyagent/runtime typecheck && pnpm --filter @anyagent/runtime test && pnpm --filter @anyagent/runtime lint
+
+
+> @anyagent/engine-contract@ typecheck <HISTORICAL_REPO>/packages/anyagent-engine
+> tsc -p tsconfig.json --noEmit
+
+
+> @anyagent/engine-contract@ test <HISTORICAL_REPO>/packages/anyagent-engine
+> tsx --test tests/*.test.ts
+
+✔ Engine Contract import boundary rejects bare packages and every package escape (0.362458ms)
+✔ Engine Contract has no production dependencies (0.46ms)
+✔ Engine Contract source imports stay within its package boundary (21.050334ms)
+✔ fake can delay automatic steps so a streamed partial answer is observable (16.482375ms)
+✔ default Fake replies distinguish consecutive rounds in one Session (0.50975ms)
+✔ fake streams accepted, started, public tool/file, and completed evidence in order (0.49325ms)
+✔ approval options are preserved, reject/expiry do not claim execution stopped (0.295916ms)
+✔ user input prompts are independent from approvals and are answered by request ID (0.144ms)
+✔ interrupt request is separate from engine stop evidence (0.131125ms)
+✔ disconnect is unknown; reconnect stream ID, duplicate IDs, and late source sequences remain injectable (0.169542ms)
+✔ capability support and current availability remain independent and refreshable (0.265792ms)
+✔ auto advance runs the script, waits for replies, and emits explicit stop evidence (0.243167ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 505.240208
+
+> @anyagent/engine-contract@ lint <HISTORICAL_REPO>/packages/anyagent-engine
+> oxlint src tests
+
+Found 0 warnings and 0 errors.
+Finished in 20ms on 11 files using 10 threads.
+
+> @anyagent/runtime@ typecheck <HISTORICAL_REPO>/packages/anyagent-runtime
+> tsc -p tsconfig.json --noEmit
+
+
+> @anyagent/runtime@ test <HISTORICAL_REPO>/packages/anyagent-runtime
+> tsx --test tests/*.test.ts
+
+✔ Runtime import boundary rejects other packages and every package escape (0.362958ms)
+✔ Runtime production dependencies contain only Engine Contract (0.3415ms)
+✔ Runtime source imports stay within its allowed package boundary (43.006458ms)
+(node:86761) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Runtime persists and forwards generic submission JSON without interpreting Engine keys (4.877125ms)
+✔ sidebar metadata stays product-owned across Engine revocation, Task closure, and Runtime restart (21.177333ms)
+✔ Runtime queues text as Input history and promotes FIFO only after terminal evidence (15.575ms)
+✔ Runtime serializes duplicate idempotency keys in SQLite before creating another Input (1.968042ms)
+✔ queued Input is rejected when its Task freezes or authorization expires before promotion (9.386125ms)
+✔ Runtime restart holds queued attachment until original reconciliation, native restore, and explicit resume (26.015834ms)
+✔ cold restored queue resumes compact-only work after the last Input is cancelled or withdrawn (41.01ms)
+✔ expired queued attachment is rejected before native promotion (4.813375ms)
+✔ cancelling queued attachment removes its stored dispatch locator (6.384792ms)
+✔ queued attachment edit keeps selected tickets, removes others, and adds a new Host-staged file (7.30375ms)
+✔ withdrawn queued attachment survives restart only within its original Session and TTL (18.06475ms)
+✔ Execution reconciliation rechecks authorization after a delayed native read (9.776ms)
+✔ Runtime cold restore reattaches the same Session for an active Task after multiple turns (16.057875ms)
+✔ Runtime restart records an interrupted native turn once (8.356167ms)
+✔ Runtime cold restore rejects expired authorization, stale configuration, and terminal Tasks (11.016792ms)
+✔ Runtime cold restore rechecks configuration after native resume before attaching the saved Session (5.692ms)
+✔ Runtime reconciles persisted unknown work from native evidence without resending its Input (8.900709ms)
+✔ unknown Input reconciliation queries its original command without dispatching again (3.24075ms)
+✔ cold-start reconciliation keeps running work queryable until terminal evidence, then restores the same Session (15.463ms)
+✔ queued Input rechecks the current Engine capability after the preceding turn ends (4.931834ms)
+✔ an unknown queued dispatch blocks later Inputs without resending the command (7.138833ms)
+✔ Runtime stages busy queued attachments, dispatches them once, and records queue cancellation (5.893542ms)
+✔ queued Inputs keep a persisted order and dispatch each exactly once (22.491125ms)
+✔ send-now requests a real stop and waits for terminal evidence before promoting its target (10.079583ms)
+✔ send-now restores queue order when stop qualification fails before delivery (6.045458ms)
+✔ Runtime adopts a Host-authorized native Session once under a new product Task (1.996042ms)
+✔ revocation during imported Session recovery blocks native resume and adoption (1.540208ms)
+✔ Session compaction requires Task ownership and scope, records native terminal outcomes only (8.905958ms)
+✔ Session compaction stays between the active Input and later queued Inputs (29.341125ms)
+✔ queued Inputs, plain compaction, and later Inputs keep their order and recheck eligibility (15.882583ms)
+✔ queued compaction rechecks authorization before promotion (23.608583ms)
+✔ Runtime restart marks a pending compaction unknown and never resends it (7.8355ms)
+✔ creates distinct Task ownership and persists serializable projections (5.203542ms)
+✔ Host-staged attachment tickets are Task-bound, one-use, and never persist local paths (5.79425ms)
+✔ Runtime rejects renderer-supplied attachment metadata without a Host-staged ticket (2.39675ms)
+✔ attachment staging rechecks Task eligibility after the capability probe (1.267417ms)
+✔ concurrent attachment staging shares a capability check and dispatches both tickets (2.231334ms)
+✔ an adapter change during shared attachment probing cannot stage stale tickets (1.10325ms)
+✔ fork rechecks its source Task after the final capability probe (8.1415ms)
+✔ Adapter dispatch rechecks an authorization that expires while it waits (1.645625ms)
+✔ Host grant revocation is migrated, persisted, Task-scoped, and preserves readable history (17.550042ms)
+✔ revocation while native dispatch is waiting blocks dispatch at the Host guard (2.344917ms)
+✔ revocation while Session creation waits prevents native create dispatch (1.251291ms)
+✔ only native input.accepted evidence creates a product Execution (21.498958ms)
+✔ late Engine events retain their original Task, Session, and Execution (13.403875ms)
+✔ fork reserves a new Task and native child without reusing the source Session (9.227541ms)
+✔ uncertain native fork leaves one frozen child instead of creating another Session (8.689708ms)
+✔ edit and retry create new product Input and Execution in the same Task and Session (20.85375ms)
+✔ retry preserves a failed source but rejects a turn that may have run tools (20.852667ms)
+✔ retry of a failed turn with possible side effects requires native safety proof (7.255458ms)
+✔ revoking authorization during retry safety verification prevents a new Input and dispatch (8.915625ms)
+✔ an edit appends a fresh Host-staged attachment without rewriting its source (9.186417ms)
+✔ unknown native revision leaves its product Input and stable command intent recorded (9.8565ms)
+✔ assistant feedback is bound to an Execution message and repeated updates are safe (14.19275ms)
+✔ file rewind is scoped to one terminal Execution and records native outcome (13.435042ms)
+✔ assistant feedback requires its own authorization and current Engine capability (8.323208ms)
+✔ assistant feedback requalifies Task state after asynchronous Adapter row lookup (4.936541ms)
+✔ rejects cross-Task session reuse and blocks a second input while one is unresolved (1.830542ms)
+✔ interruption request is not stop confirmation; only execution.stopped is terminal evidence (9.293125ms)
+✔ native stop evidence before interrupt ACK keeps one confirmed StopRequest (10.955042ms)
+✔ an interrupt receipt without native delivery evidence stays unknown and cannot erase a terminal execution (9.598125ms)
+✔ Execution completing during capability refresh is not interrupted (5.752666ms)
+✔ Stop rechecks Host authorization after capability refresh and dispatches nothing if revoked (5.831375ms)
+✔ Stop rechecks Host authorization after Adapter waits and dispatches nothing if revoked (7.449042ms)
+✔ unknown input delivery blocks retry without native acceptance evidence (3.643709ms)
+✔ rechecks current capability availability before dispatch (1.415875ms)
+✔ Task keeps its historical capability snapshot while current state changes and recovers (12.310709ms)
+✔ an Adapter without an active capability probe is never reported as current (0.482709ms)
+✔ failed newer capability refresh stays unknown when an older refresh completes late (1.774834ms)
+✔ Approval and UserInput responses stay within their originating Task and Session (9.103ms)
+✔ user-input attempts are not persisted without accepted receipt or native response evidence (21.107167ms)
+✔ native user-input response evidence survives a conflicting command receipt (9.886209ms)
+✔ engine-confirmed user input reconciles after terminal without crossing executions (30.82575ms)
+✔ expired or finished-Execution interactions never reach the Engine (15.413667ms)
+✔ failed and stopped Executions retire pending interactions without native replies (20.756417ms)
+✔ approval and question answers recheck expiry immediately before native dispatch (21.013375ms)
+✔ new stream generation does not invent a source-sequence gap without a cursor baseline (7.691333ms)
+✔ native denial before command receipt is not overwritten by forwarded ACK (9.891625ms)
+✔ Session-scoped reads reject expired or cross-Task authority and recheck after native reads (1.928834ms)
+ℹ tests 82
+ℹ suites 0
+ℹ pass 82
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 999.58675
+
+> @anyagent/runtime@ lint <HISTORICAL_REPO>/packages/anyagent-runtime
+> oxlint src tests
+
+Found 0 warnings and 0 errors.
+Finished in 9ms on 8 files using 10 threads.

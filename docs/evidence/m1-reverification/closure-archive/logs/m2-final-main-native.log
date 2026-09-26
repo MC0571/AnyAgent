@@ -1,0 +1,13 @@
+(node:86626) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ native text block boundaries reach the protocol stream (0.388416ms)
+✔ native full-access hint cannot discard the legacy permission gate (3.068083ms)
+✔ resumed Goal status survives strict native session event validation (0.527ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2648.881708

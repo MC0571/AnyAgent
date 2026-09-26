@@ -1,0 +1,9 @@
+PR #39 merge gate：**Yes**。审查候选 `adfaaada9527954a4d4840c063cd66c226eae86c`，基线 `83d4f2f60e7fa20752e84e32569245b374f8569f`；无 P1/P2/P3 finding。
+
+- 实时 GitHub 核对：PR #38 已合并；main SHA 准确；8 个指定 Issue 均先附验收评论后关闭；Milestone #2 已关闭且 open_issues=0。
+- PR #38 仅变更证据目录，支持产品代码仍归属被测 `9270714` 的表述。
+- 独立 reviewer 结论与 Milestone 关闭记录及 Issue 验收评论一致。PR #38 没有 GitHub review 记录，但本文没有声称获得 GitHub 平台 Approval，未发现夸大。
+- 旧场景证据仍明确限定提交归属，未改写为最终候选全部实机重跑。
+- `oxfmt --check`、`git diff --check` 通过；181 个本地链接目标均存在。
+
+范围限制：这是收口记录的独立事实审查；未重新执行产品测试，也未重新审查既有 reviewer 的完整产品判断。全程无修改或 GitHub mutation。
