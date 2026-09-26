@@ -1,0 +1,3604 @@
+
+> @zcode/ui@ test <HISTORICAL_REPO>/packages/ui
+> node --import tsx --import ./test/register-static-assets.mjs --test --test-concurrency=1 test/*.test.tsx
+
+[2026-09-26 04:16:25.952] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:25.953] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:25.954] [ui] [v4-toolbar] draft effectiveConfig changed {
+  provider: null,
+  model: null,
+  thought: null,
+  modelSelectionRevision: null
+}
+[2026-09-26 04:16:25.954] [ui] [purchaseTelemetry] 套餐入口查询状态 { status: 'loading', configuredSources: 0, generation: 0 }
+[2026-09-26 04:16:25.970] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 103,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-composer-test'
+}
+[2026-09-26 04:16:26.141] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:26.141] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:26.145] [ui] [v4-toolbar] draft effectiveConfig changed {
+  provider: 'opencode-go',
+  model: 'go-alpha',
+  thought: 'high',
+  modelSelectionRevision: 1
+}
+[2026-09-26 04:16:26.145] [ui] [purchaseTelemetry] 套餐入口查询状态 { status: 'loading', configuredSources: 0, generation: 0 }
+✔ ConversationComposer keeps the Harness toolbar stable from selection through first send (1988.002083ms)
+[2026-09-26 04:16:26.160] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 32,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-composer-test'
+}
+[2026-09-26 04:16:26.215] [ui] [v4-toolbar] model select onValueChange {
+  value: 'custom:opencode-go:go-beta',
+  decodedProviderId: 'opencode-go',
+  decodedModelName: 'go-beta',
+  draftMode: true
+}
+[2026-09-26 04:16:26.228] [ui] [v4-toolbar] draft effectiveConfig changed {
+  provider: 'opencode-go',
+  model: 'go-beta',
+  thought: 'high',
+  modelSelectionRevision: 1
+}
+Tooltip is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[2026-09-26 04:16:26.277] [ui] [v4-toolbar] draft effectiveConfig changed {
+  provider: 'opencode-go',
+  model: 'go-beta',
+  thought: 'high',
+  modelSelectionRevision: 1
+}
+Tooltip is changing from controlled to uncontrolled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[2026-09-26 04:16:26.325] [ui] [v4-toolbar] draft effectiveConfig changed {
+  provider: 'opencode-go',
+  model: 'go-beta',
+  thought: 'low',
+  modelSelectionRevision: 1
+}
+✔ a new ZCode Harness draft submits its selected model, mode, and reasoning level (218.972917ms)
+[2026-09-26 04:16:28.436] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.462] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 84,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:28.532] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:28.589] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.608] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.652] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.663] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.675] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.686] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.707] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.717] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.729] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.739] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.755] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.775] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.785] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.800] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.807] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.848] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.857] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.867] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.874] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.890] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.903] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.913] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.921] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.965] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.977] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.987] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:28.995] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.088] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.096] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.156] [ui] [ConversationRowView] 用户反馈 assistant 消息 { messageId: 'native-message-1', reaction: 'like' }
+[2026-09-26 04:16:29.167] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.176] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.208] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.218] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.268] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.292] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.404] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.430] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.510] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 16,
+  activeTaskProvider: 'glm',
+  disabled: true,
+  hasPromptHistory: false,
+  submitDisabled: true,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:29.520] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.544] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.558] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.573] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.579] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.590] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.609] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.625] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.632] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.661] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.683] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.710] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.718] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.730] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.738] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.758] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.786] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.792] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.803] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.815] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.825] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.839] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.847] [ui] [v4-composer-draft] 草稿持久化访问失败 {
+  error: 'storage unavailable',
+  key: 'zcode-v4-composer-drafts:v1:%2Ftmp%2Fanyagent-ui'
+}
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:29.858] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.866] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.880] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.886] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.888] [ui] [v4-composer-draft] 草稿持久化访问失败 {
+  error: 'draft read unavailable',
+  key: 'zcode-v4-composer-drafts:v1:%2Ftmp%2Fanyagent-ui'
+}
+[2026-09-26 04:16:29.900] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:29.911] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.922] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.924] [ui] [v4-composer-draft] 草稿持久化访问失败 {
+  error: 'draft write unavailable',
+  key: 'zcode-v4-composer-drafts:v1:%2Ftmp%2Fanyagent-ui'
+}
+[2026-09-26 04:16:29.934] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.940] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.952] [ui] [v4-composer-draft] 草稿持久化访问失败 {
+  error: 'draft clear unavailable',
+  key: 'zcode-v4-composer-drafts:v1:%2Ftmp%2Fanyagent-ui'
+}
+[2026-09-26 04:16:29.955] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.965] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.974] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:29.985] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 16,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:29.993] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.013] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 25,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:30.045] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.069] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.071] [ui] [v4-composer-draft] 草稿持久化访问失败 {
+  error: 'config write unavailable',
+  key: 'zcode-v4-composer-drafts:v1:%2Ftmp%2Fanyagent-ui'
+}
+[2026-09-26 04:16:30.080] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QueueEditWorkspace inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:30.093] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.108] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.115] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.126] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.144] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.152] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.164] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.196] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.211] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.221] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.221] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.238] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:30.256] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 22,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:30.267] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.280] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.287] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+✔ EngineConversation sends through the product composer and renders ordered streamed turns (3269.49625ms)
+`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+✔ Engine timeline reuses native find navigation and updates matches as Harness text streams (187.66ms)
+✔ mounted Engine timeline keeps delta, tool, delta order without guessing identical requests (25.0255ms)
+[2026-09-26 04:16:30.522] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.522] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.545] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 33,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: 'native-zcode-session-ui',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:30.714] [ui] [engine-composer] failed to read the current Task slash command catalog {
+  taskId: 'task-engine-ui',
+  error: 'native workspace runtime unavailable'
+}
+[2026-09-26 04:16:30.719] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.728] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.728] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.749] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.749] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.768] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 24,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: 'native-zcode-session-ui',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:30.953] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.968] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:30.991] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.011] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.027] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.028] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.050] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 27,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-b',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.057] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.057] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.076] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 24,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-zcode-session-ui',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.088] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.089] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.108] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 24,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-b',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.119] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.119] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.138] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 24,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-zcode-session-ui',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.168] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.178] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.191] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.203] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.211] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.222] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.230] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.243] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.255] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.268] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.277] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.293] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.302] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to PopperContent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to PopperContent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ForwardRef(ContentEditableElementImpl) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Popper inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Popper inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Popper inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Popover inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:31.315] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to PopperContent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Presence inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to FocusScope inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DismissableLayer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectContentImpl inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to PopperContent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ForwardRef(ContentEditableElementImpl) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Placeholder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Popper inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:31.324] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.338] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.353] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.361] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.375] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.388] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.439] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.457] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.495] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.517] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.535] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.543] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.557] [ui] [ConversationRowView] 用户反馈 assistant 消息 { messageId: 'native-feedback-message', reaction: 'like' }
+[2026-09-26 04:16:31.569] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.579] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.592] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.592] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.620] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.620] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.642] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 27,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-zcode-session-ui',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.645] [ui] [ConversationRowView] 用户反馈 assistant 消息 { messageId: 'native-feedback-message', reaction: 'none' }
+[2026-09-26 04:16:31.656] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.666] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.677] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.688] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.700] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.712] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.723] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.723] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.743] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 25,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-fork',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.752] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.760] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.779] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.789] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.801] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.809] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.820] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.828] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.881] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.881] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.902] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 26,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-zcode-session-ui',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.920] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.920] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.939] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 24,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-b',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.950] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.950] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:31.975] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 31,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: true,
+  submitDisabled: false,
+  taskId: 'native-zcode-session-ui',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:31.991] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.002] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.029] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.044] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.061] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.073] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.094] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.109] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+✔ an active ZCode Harness task switches models within its Session and submits the chosen model (1611.626166ms)
+✔ shared queue panel keeps native M0 compact deletion (6.3825ms)
+✔ Engine file rewind uses the native summary and preview dialog through mounted controls (18.713917ms)
+[2026-09-26 04:16:32.174] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 29,
+  activeTaskProvider: 'glm',
+  disabled: true,
+  hasPromptHistory: false,
+  submitDisabled: true,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EngineConversation inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Select inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItemText inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectItem inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Tooltip inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:32.217] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.217] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:32.219] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 74,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: 'native-session-after-restart',
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:32.244] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 99,
+  activeTaskProvider: 'glm',
+  disabled: true,
+  hasPromptHistory: false,
+  submitDisabled: true,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+✔ unknown native Session and Execution require explicit identity-bound recovery actions (112.272875ms)
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastMessage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ send-now queue history follows native dispatch order in the mounted conversation (1303.801708ms)
+✔ Engine completed answers reuse native bubble and message actions (34.755583ms)
+✔ fork action uses the completed product Execution and inherited source stays read-only (16.69025ms)
+[2026-09-26 04:16:37.391] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 50,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: false,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:37.403] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 62,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:37.424] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 8,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: false,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:37.424] [ui] [v4-sessions-index] workspace subscription set unchanged { activeCount: 0 }
+[2026-09-26 04:16:37.427] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 11,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: '/tmp/anyagent-ui'
+}
+[2026-09-26 04:16:37.577] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 6,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: true,
+  taskId: null,
+  triggerPanelReady: false,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+[2026-09-26 04:16:37.579] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 8,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: true,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+✔ product conversation forks into a fresh Task and displays only its verified source prefix (315.737334ms)
+(node:86812) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2026-09-26 04:16:39.871] [ui] [LexicalChatInput] 输入编辑器首帧完成 {
+  durationMs: 76,
+  activeTaskProvider: 'glm',
+  disabled: false,
+  hasPromptHistory: false,
+  submitDisabled: false,
+  taskId: null,
+  triggerPanelReady: true,
+  workspaceIdentity: null,
+  workspacePath: ''
+}
+✔ mounted conversation forwards a real FakeEngine rejection decision and keeps the execution active (1371.912ms)
+✔ mounted conversation shows approval expiry without forwarding an answer (94.663375ms)
+✔ mounted ZCode permission request uses PermissionDialog and replies through Runtime scope (99.022917ms)
+✔ mounted workflow Refine uses PermissionDialog and sends feedback through Runtime (85.89675ms)
+✔ mounted timeline renders native choice options and forwards the selected value (81.639458ms)
+✔ mounted timeline reuses ElicitationDialog for native multi-question and multi-select input (95.423125ms)
+✔ mounted conversation distinguishes interrupt request, confirmation, and disconnect unknown (140.492833ms)
+✔ mounted conversation blocks changed capabilities and recovers after refresh (75.13275ms)
+✔ mounted conversation refuses new business after Task reaches a terminal state (27.086917ms)
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+[2026-09-26 04:16:44.704] [ui] [WorkspaceTimelineTasksSection] scopedWorkspaceTabs {
+  workspaceTabs: [
+    {
+      workspacePath: '/tmp/m1-sidebar',
+      workspaceIdentity: undefined,
+      remoteSessionId: undefined,
+      hasRemoteTarget: false
+    }
+  ],
+  scopedWorkspaceTabs: [
+    {
+      workspacePath: '/tmp/m1-sidebar',
+      workspaceIdentity: undefined,
+      remoteSessionId: undefined,
+      hasRemoteTarget: false
+    }
+  ],
+  remoteItemCount: 0
+}
+✔ timeline interleaves native and Engine sessions in one ordered list (567.976958ms)
+Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[2026-09-26 04:16:44.880] [ui] [TaskRenameDialog] rename confirm via button { valueLength: 17, trimmedLength: 17 }
+✔ Engine Task menu actions use the persisted product Task identity and clear only the unread version opened (92.088125ms)
+✔ project TaskList renders native and Harness sessions in the same list (19.404834ms)
+✔ project TaskList sorts active Engine Tasks and keeps pinned or archived Tasks in their own views (9.798333ms)
+✔ pinned section renders and lets an Engine Task be unpinned when native pinned Tasks are empty (30.49ms)
+✔ archived view renders archived Engine Tasks and exposes the matching restore action (35.747334ms)
+✔ project TaskList applies created and updated sorting with running tasks first (15.640875ms)
+✔ grouped view mounts Engine rows among ungrouped native rows (111.389708ms)
+✔ shared context dialog sends a parsed share URL and keeps the dialog open on failure (423.962083ms)
+✔ the native composer model menu selects Harness and keeps Provider selection distinct (596.542042ms)
+✔ Harness grouping keeps the native draft picker usable without Provider state (31.591042ms)
+An update to ToastContainer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ web element picker accepts a direct click without a prior mousemove (79.710792ms)
+✔ web element picker cancels when a click has no element target (5.985083ms)
+✔ web element picker preserves body selection (8.123375ms)
+✔ workspace shell panel buttons reflect open state after user clicks (768.154667ms)
+✔ Root draft starts from Engine view return to the M0 composer while shell New Task does so directly (45.433542ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 29183.8515
